@@ -1,10 +1,10 @@
 # AI Ad Engine
 
-**1 workflows · 38 nodes · ~283 lines of JavaScript**
+**1 workflows. 38 nodes. ~283 lines of JavaScript.**
 
-A weekly scheduled batch that researches current market angles, generates ad copy variants — hook, body, incentive, CTA — and builds structured image-generation prompts, exporting everything to Google Sheets for human review.
+A weekly batch that researches current market angles, writes ad copy variants (hook, body, incentive, CTA), builds structured image prompts, and drops everything into Google Sheets for review.
 
-Deliberately a **review queue, not an auto-publisher**. No creative reaches a live campaign without a person approving it.
+It is a review queue, not an auto-publisher. No creative reaches a live campaign without a person approving it.
 
 ---
 
@@ -26,7 +26,7 @@ classDef d fill:#e6f7ee,stroke:#0f9d58,color:#04331f
 classDef t fill:#eef2f7,stroke:#5c6370,color:#20242b
 ```
 
-The human gate is the design, not a limitation. Ad spend is irreversible and brand damage is expensive, so the pipeline's output is a *queue of candidates* — the generation is automated, the decision is not.
+The human gate is the design rather than a limitation. Ad spend is irreversible and brand damage is expensive, so the pipeline produces a queue of candidates. Generation is automated. The decision isn't.
 
 ---
 
@@ -40,18 +40,18 @@ The human gate is the design, not a limitation. Ad spend is irreversible and bra
 
 ### Weekly Batch
 
-A single 38-node scheduled workflow: research the current landscape, select angles, generate copy variants and layered image prompts, and export the whole batch to Sheets for review.
+A single 38-node scheduled workflow: research the landscape, pick angles, generate copy variants and layered image prompts, export the batch to Sheets for review.
 
-It is the **oldest workflow in the repository** — 7 March 2026 — and it shows. It predates every convention in [`build-standards.md`](../engineering/build-standards.md), and it is included partly as a baseline: the contrast between this and the voice agent's dispatcher is the clearest available measure of what eight months of audit passes actually changed.
+It is the oldest workflow in the repository, built on 7 March 2026, and it shows. It predates every convention in [`build-standards.md`](../engineering/build-standards.md). It is included partly as a baseline, because the gap between this and the voice agent's dispatcher is the clearest measure of what eight months of audit passes actually changed.
 
 ![Weekly Batch](../assets/diagrams/ad-engine-weekly-batch.svg)
 
-**38 nodes** — 17× `code` · 7× `httpRequest` · 5× `googleDrive` · 5× `googleSheets` · 1× `scheduleTrigger` · 1× `manualTrigger`  
-**Trigger** — Scheduled (cron)  
-**Code** — 283 lines of ES5 JavaScript  
-**Export** — [`ad-engine-weekly-batch.json`](../workflows/05-ad-engine/ad-engine-weekly-batch.json)
+**38 nodes:** 17x `code`, 7x `httpRequest`, 5x `googleDrive`, 5x `googleSheets`, 1x `scheduleTrigger`, 1x `manualTrigger`  
+**Trigger:** Scheduled (cron)  
+**Code:** 283 lines of ES5 JavaScript  
+**Export:** [`ad-engine-weekly-batch.json`](../workflows/05-ad-engine/ad-engine-weekly-batch.json)
 
-> During sanitization of this repository, this workflow was found to contain **two live API keys hardcoded in plaintext inside a Set node** — an OpenAI project key and a Perplexity key. That is precisely the defect the 'no credentials in node parameters' rule exists to prevent. It is documented here rather than quietly cleaned up, because it demonstrates two things worth demonstrating: why secrets belong in a credential store, and why a sanitization pass before publishing any workflow export is mandatory. The exported JSON carries `*_REDACTED` placeholders.
+> While sanitizing this repository for publication, this workflow turned out to contain two live API keys hardcoded in plaintext in a Set node: an OpenAI project key and a Perplexity key. That is exactly the mistake the "no credentials in node parameters" rule exists to prevent. It is written up here rather than quietly cleaned up, because it makes two points worth making: secrets belong in a credential store, and sanitizing exports before publishing them is not optional. The JSON in this repo carries `*_REDACTED` placeholders.
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -75,12 +75,12 @@ Runs every Monday 8AM → 5 solar ad variants (copy + 4:5 image) → Google Driv
 
 ## Engineering notes
 
-**Included deliberately, flaws and all.** A portfolio of only the best work tells a reviewer less than one that shows a starting point and a trajectory. This workflow is what the project looked like before the build standards existed; the voice agent is what it looked like after.
+**Included on purpose, flaws and all.** A portfolio containing only the good work tells you less than one that shows a starting point and a direction. This is what the project looked like before the build standards existed. The voice agent is what it looked like after.
 
-**The human gate is a product decision.** Generation is cheap and reversible; ad spend is neither.
+**The human gate is a product decision.** Generation is cheap and reversible. Ad spend is neither.
 
 ---
 
 ## Run it
 
-Import any of the JSON exports from [`workflows/05-ad-engine/`](../workflows/05-ad-engine/). Credentials are stubbed as `CREDENTIAL_ID` and account identifiers as `YOUR_*` placeholders; re-map them after import.
+Import any of the JSON exports from [`workflows/05-ad-engine/`](../workflows/05-ad-engine/). Credentials are stubbed as `CREDENTIAL_ID` and account identifiers as `YOUR_*` placeholders, so you will need to re-map them after import.

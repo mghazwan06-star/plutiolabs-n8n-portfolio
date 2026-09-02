@@ -1,18 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-110 -50 1300 574" width="1300" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
-<rect x="-110" y="-50" width="1300" height="574" fill="#f7f7f8"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-64 -4.0 1208 482.0" width="1208" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect x="-64" y="-4.0" width="1208" height="482.0" fill="#f7f7f8"/>
 <defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#dcdce0"/></pattern></defs>
-<rect x="-110" y="-50" width="1300" height="574" fill="url(#g)"/>
-<rect x="-20" y="40" width="1120" height="200" rx="8" fill="#fff8b8" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
-<text x="-8" y="64" font-size="13.5" font-weight="700" fill="#5f5930">Route Recompute (free lead-quality upgrade)</text>
-<text x="-8" y="81" font-size="11.5" fill="#6f6840">POST /webhook/route-recompute - dry run, reports what would change, writes nothing</text>
-<text x="-8" y="95" font-size="11.5" fill="#6f6840">POST /webhook/route-recompute {&quot;apply&quot;:true} - commits</text>
-<text x="-8" y="109" font-size="11.5" fill="#6f6840">Why it exists: Template Route is derived ONLY from columns already in the sheet (Priority,</text>
-<text x="-8" y="123" font-size="11.5" fill="#6f6840">Competitor Reviews, Review Count, Top Complaint, Best Review Quote). So when the routing RULE</text>
-<text x="-8" y="137" font-size="11.5" fill="#6f6840">changes - as it did with Lever 3 (P2 + gap=30 qualifies for A-lite) and Lever 4 (wider complaint</text>
-<text x="-8" y="151" font-size="11.5" fill="#6f6840">keywords) - existing rows can be upgraded with no Apify and no Claude spend.</text>
-<text x="-8" y="165" font-size="11.5" fill="#6f6840">Safety: writes ONLY the two adjacent route columns (T:U), so it cannot touch the Claude fields</text>
-<text x="-8" y="179" font-size="11.5" fill="#6f6840">and is immune to HAZARD-1. Aborts if those two columns are ever not adjacent.</text>
-<text x="-8" y="193" font-size="11.5" fill="#6f6840">Keep the rule in this node in lockstep with computeTemplateRoute() in the CHILD&#x27;s Build CRM Row.</text>
+<rect x="-64" y="-4.0" width="1208" height="482.0" fill="url(#g)"/>
+<rect x="-20" y="40.0" width="1120" height="186" rx="8" fill="#fff8b8" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="-8" y="64.0" font-size="13.5" font-weight="700" fill="#5f5930">Route Recompute (free lead-quality upgrade)</text>
+<text x="-8" y="81.0" font-size="11.5" fill="#6f6840">POST /webhook/route-recompute - dry run, reports what would change, writes nothing</text>
+<text x="-8" y="95.0" font-size="11.5" fill="#6f6840">POST /webhook/route-recompute {&quot;apply&quot;:true} - commits</text>
+<text x="-8" y="109.0" font-size="11.5" fill="#6f6840">Why it exists: Template Route is derived ONLY from columns already in the sheet (Priority,</text>
+<text x="-8" y="123.0" font-size="11.5" fill="#6f6840">Competitor Reviews, Review Count, Top Complaint, Best Review Quote). So when the routing RULE</text>
+<text x="-8" y="137.0" font-size="11.5" fill="#6f6840">changes - as it did with Lever 3 (P2 + gap=30 qualifies for A-lite) and Lever 4 (wider complaint</text>
+<text x="-8" y="151.0" font-size="11.5" fill="#6f6840">keywords) - existing rows can be upgraded with no Apify and no Claude spend.</text>
+<text x="-8" y="165.0" font-size="11.5" fill="#6f6840">Safety: writes ONLY the two adjacent route columns (T:U), so it cannot touch the Claude fields</text>
+<text x="-8" y="179.0" font-size="11.5" fill="#6f6840">and is immune to HAZARD-1. Aborts if those two columns are ever not adjacent.</text>
+<text x="-8" y="193.0" font-size="11.5" fill="#6f6840">Keep the rule in this node in lockstep with computeTemplateRoute() in the CHILD&#x27;s Build CRM Row.</text>
 <g fill="none" stroke="#9aa0a6" stroke-width="2.5">
 <path d="M100,350 C145,350 155,350 193,350"/>
 <path d="M193,345 L200,350 L193,355" fill="#9aa0a6" stroke="none"/>
@@ -27,28 +27,28 @@
 <path d="M900,250 C945,250 955,350 993,350"/>
 <path d="M993,345 L1000,350 L993,355" fill="#9aa0a6" stroke="none"/>
 </g>
-<rect x="0" y="300" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
-<rect x="0" y="300" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
+<rect x="0" y="300.0" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="0" y="300.0" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
 <text x="50.0" y="346.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">webhook</text>
-<text x="50.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">Run</text>
-<rect x="200" y="300" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
-<rect x="200" y="300" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="50.0" y="415.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Run</text>
+<rect x="200" y="300.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="200" y="300.0" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
 <text x="250.0" y="346.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
-<text x="250.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">Read Sheet</text>
-<rect x="400" y="300" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
-<rect x="400" y="300" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="250.0" y="415.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Read Sheet</text>
+<rect x="400" y="300.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="400" y="300.0" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
 <text x="450.0" y="346.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
-<text x="450.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">Compute Routes</text>
-<rect x="600" y="300" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
-<rect x="600" y="300" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="450.0" y="415.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Compute Routes</text>
+<rect x="600" y="300.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="600" y="300.0" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
 <text x="650.0" y="346.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
-<text x="650.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">Apply?</text>
-<rect x="800" y="200" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
-<rect x="800" y="200" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="650.0" y="415.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Apply?</text>
+<rect x="800" y="200.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="800" y="200.0" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
 <text x="850.0" y="246.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
-<text x="850.0" y="315" font-size="11.5" text-anchor="middle" fill="#2b2f36">Write Routes</text>
-<rect x="1000" y="300" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
-<rect x="1000" y="300" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="850.0" y="315.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Write Routes</text>
+<rect x="1000" y="300.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1000" y="300.0" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
 <text x="1050.0" y="346.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
-<text x="1050.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">Report</text>
+<text x="1050.0" y="415.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Report</text>
 </svg>

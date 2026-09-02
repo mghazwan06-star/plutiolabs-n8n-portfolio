@@ -1,10 +1,10 @@
-# AI Voice Agent — Inbound + Outbound Calling
+# AI Voice Agent (Inbound and Outbound Calling)
 
-**10 workflows · 262 nodes · ~1542 lines of JavaScript**
+**10 workflows. 262 nodes. ~1542 lines of JavaScript.**
 
-An AI phone agent that answers every inbound call 24/7 and calls new leads back within minutes of a form submission. VAPI handles speech; **n8n owns every business decision** — qualification, calendar availability, booking, SMS follow-up, missed-call recovery and reminders.
+An AI phone agent that answers inbound calls around the clock and rings new leads back within minutes of a form submission. VAPI handles the speech. n8n makes every business decision: qualification, calendar availability, booking, SMS follow-up, missed-call recovery and reminders.
 
-The constraint that shaped the architecture: a form submitted at 11pm gets a call, and a caller at 3am gets a real conversation. No human in the loop for routine operations.
+One constraint drove the architecture. A form submitted at 11pm still gets a call, and someone who rings at 3am still gets a real conversation. Nothing routine waits for a human.
 
 ---
 
@@ -36,9 +36,15 @@ classDef v fill:#ffe9e9,stroke:#e02d3c,color:#4d0b12
 classDef t fill:#fdeaec,stroke:#e02d3c,color:#4d0b12
 ```
 
-**Read it as three loops.** A *call loop* (WF1 or WF-IN2 → VAPI → WF3 for tools → WF2/WF-IN2 for events → WF4/WF-IN4 to record the outcome), a *recovery loop* on a schedule (WF5 retries the unreachable, WF7 reminds the booked), and a *reply loop* for anything the customer sends back by text (WF6).
+There are three loops here.
 
-The dotted edges are the interesting ones: they are live HTTP calls *made during a phone conversation*, while a human waits on the line. That latency budget is what makes WF3 the most constrained workflow in the project.
+The **call loop** runs left to right: WF1 or WF-IN2 starts a call, VAPI talks to the customer, WF3 answers any tool requests mid-call, WF2 and WF-IN2 catch the lifecycle events, and WF4 or WF-IN4 records what happened.
+
+The **recovery loop** runs on a schedule. WF5 retries leads nobody reached. WF7 reminds the ones who booked.
+
+The **reply loop** is WF6, which handles anything the customer texts back.
+
+Pay attention to the dotted edges. Those are live HTTP calls made during a phone conversation, with a person waiting on the line. That latency budget is what makes WF3 the tightest workflow in the project.
 
 ---
 
@@ -46,45 +52,45 @@ The dotted edges are the interesting ones: they are live HTTP calls *made during
 
 | # | Workflow | Nodes | Trigger | Does |
 |---|---|---:|---|---|
-| 1 | [WF1 · Lead Intake & Outbound Trigger](#wf1--lead-intake--outbound-trigger) | 22 | `POST /lead-intake` · authenticated | Receives a form lead and places the call |
-| 2 | [WF2 · VAPI Event Router](#wf2--vapi-event-router) | 9 | `POST /vapi-events` · authenticated | Routes call lifecycle events |
+| 1 | [WF1 · Lead Intake & Outbound Trigger](#wf1--lead-intake--outbound-trigger) | 22 | `POST /lead-intake`, authenticated | Receives a form lead and places the call |
+| 2 | [WF2 · VAPI Event Router](#wf2--vapi-event-router) | 9 | `POST /vapi-events`, authenticated | Routes call lifecycle events |
 | 3 | [WF3 · Tool Dispatcher](#wf3--tool-dispatcher) | 56 | Called by another workflow | Serves all 8 voice-agent tools · shared by 3 systems |
 | 4 | [WF4 · Post-Call Processing](#wf4--post-call-processing) | 26 | Called by another workflow | Parses the outcome, updates CRM, sends follow-up |
 | 5 | [WF5 · Missed Call Recovery](#wf5--missed-call-recovery) | 28 | Scheduled (cron) | Retries unreachable leads on a cadence |
-| 6 | [WF6 · Inbound SMS Handler](#wf6--inbound-sms-handler) | 49 | `POST /wf6-sms-inbound` · authenticated | Classifies and acts on replies by text |
+| 6 | [WF6 · Inbound SMS Handler](#wf6--inbound-sms-handler) | 49 | `POST /wf6-sms-inbound`, authenticated | Classifies and acts on replies by text |
 | 7 | [WF7 · Appointment Reminders](#wf7--appointment-reminders) | 20 | Scheduled (cron) | Scheduled reminders, shared with reactivation |
 | 8 | [WF8 · Inbound Lead Lookup](#wf8--inbound-lead-lookup) | 7 | Called by another workflow | Tells the agent who is calling, mid-call |
-| 9 | [WF-IN2 · Inbound Event Router](#wf-in2--inbound-event-router) | 12 | `POST /vapi-inbound` · authenticated | WF2's equivalent for inbound calls |
+| 9 | [WF-IN2 · Inbound Event Router](#wf-in2--inbound-event-router) | 12 | `POST /vapi-inbound`, authenticated | WF2's equivalent for inbound calls |
 | 10 | [WF-IN4 · Inbound Post-Call Processing](#wf-in4--inbound-post-call-processing) | 33 | Called by another workflow | WF4's equivalent for inbound calls |
 
 ---
 
 ### WF1 · Lead Intake & Outbound Trigger
 
-The front door for outbound. A form submission arrives, gets normalised, and is checked against the CRM for a duplicate before anything happens — without that guard, a customer who submits twice gets called twice. Out-of-hours submissions are queued rather than dialled, and picked up by WF5's next scheduled sweep instead.
+The front door for outbound calling. A form submission arrives, gets normalised, and is checked against the CRM before anything else happens. Without that duplicate guard, a customer who submits the form twice gets phoned twice.
 
-If VAPI rejects the call, a dedicated failure branch records why. That branch matters more than it looks: a call that never connects and is recorded as connected is a lead that silently disappears.
+Submissions outside business hours are queued instead of dialled, and WF5 picks them up on its next sweep. If VAPI refuses the call, a separate branch records why. That branch matters more than it looks: a call that never connected but got logged as connected is a lead that quietly vanishes.
 
 ![WF1 · Lead Intake & Outbound Trigger](../assets/diagrams/wf01-lead-intake.svg)
 
-**22 nodes** — 5× `if` · 5× `respondToWebhook` · 4× `googleSheets` · 3× `code` · 2× `twilio` · 1× `webhook`  
-**Trigger** — `POST /lead-intake` · authenticated  
-**Code** — 38 lines of ES5 JavaScript  
-**Export** — [`wf01-lead-intake.json`](../workflows/01-voice-agent/wf01-lead-intake.json)
+**22 nodes:** 5x `if`, 5x `respondToWebhook`, 4x `googleSheets`, 3x `code`, 2x `twilio`, 1x `webhook`  
+**Trigger:** `POST /lead-intake`, authenticated  
+**Code:** 38 lines of ES5 JavaScript  
+**Export:** [`wf01-lead-intake.json`](../workflows/01-voice-agent/wf01-lead-intake.json)
 
-> This webhook was **publicly unauthenticated** until a late security pass. It places real phone calls — anyone with the URL could make the system dial arbitrary numbers on the client's account and caller ID. Now header-authenticated. See [Class 9](../engineering/bug-taxonomy.md).
+> This webhook had no authentication until a late security pass. It places real phone calls, so anyone with the URL could have made the system dial arbitrary numbers on the client's account and caller ID. It now requires a header secret. See [Class 9](../engineering/bug-taxonomy.md).
 
 
 ### WF2 · VAPI Event Router
 
-A deliberately thin router. VAPI emits events across a call's lifecycle — started, ended, failed — and this workflow's only job is to identify which one arrived and hand it to the right processor. Keeping it thin means the routing logic stays readable and the processing logic stays testable in isolation.
+A thin router by design. VAPI fires events across a call's life (started, ended, failed) and this workflow only decides which one arrived and who should handle it. Keeping it thin means the routing stays readable and the processing stays testable on its own.
 
 ![WF2 · VAPI Event Router](../assets/diagrams/wf02-vapi-event-router.svg)
 
-**9 nodes** — 3× `respondToWebhook` · 2× `executeWorkflow` · 1× `webhook` · 1× `set` · 1× `switch` · 1× `code`  
-**Trigger** — `POST /vapi-events` · authenticated  
-**Code** — 32 lines of ES5 JavaScript  
-**Export** — [`wf02-vapi-event-router.json`](../workflows/01-voice-agent/wf02-vapi-event-router.json)
+**9 nodes:** 3x `respondToWebhook`, 2x `executeWorkflow`, 1x `webhook`, 1x `set`, 1x `switch`, 1x `code`  
+**Trigger:** `POST /vapi-events`, authenticated  
+**Code:** 32 lines of ES5 JavaScript  
+**Export:** [`wf02-vapi-event-router.json`](../workflows/01-voice-agent/wf02-vapi-event-router.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -111,20 +117,20 @@ Single webhook URL given to VAPI. Receives ALL events and routes them.
 
 ### WF3 · Tool Dispatcher
 
-The most important workflow in the repository, and the most constrained. Every tool the voice agent can call routes through here: check availability, book, reschedule, cancel, look up a customer, log a message, handle an opt-out.
+The most important workflow here, and the most constrained. Every tool the voice agent can reach runs through it: check availability, book, reschedule, cancel, look up a customer, log a message, handle an opt-out.
 
-It is **shared by three separate systems** — the outbound agent, the inbound agent, and the lead reactivation engine all book through this one dispatcher rather than each carrying its own calendar logic. One implementation of "is this slot free," one of "write the appointment," one of "cancel it."
+Three systems share it. The outbound agent, the inbound agent and the reactivation engine all book through this one dispatcher instead of each carrying its own calendar code. There is one implementation of "is this slot free", one of "write the appointment", one of "cancel it".
 
-Everything here runs while a human is waiting on the phone, so every branch must return a speakable string — never a raw error, never a stack trace, never silence.
+All of it runs while someone waits on the phone, so every branch has to return a sentence the agent can say out loud. No raw errors, no stack traces, no silence.
 
 ![WF3 · Tool Dispatcher](../assets/diagrams/wf03-tool-dispatcher.svg)
 
-**56 nodes** — 15× `code` · 12× `set` · 11× `googleSheets` · 7× `if` · 4× `googleCalendar` · 4× `httpRequest`  
-**Trigger** — Called by another workflow  
-**Code** — 637 lines of ES5 JavaScript  
-**Export** — [`wf03-tool-dispatcher.json`](../workflows/01-voice-agent/wf03-tool-dispatcher.json)
+**56 nodes:** 15x `code`, 12x `set`, 11x `googleSheets`, 7x `if`, 4x `googleCalendar`, 4x `httpRequest`  
+**Trigger:** Called by another workflow  
+**Code:** 637 lines of ES5 JavaScript  
+**Export:** [`wf03-tool-dispatcher.json`](../workflows/01-voice-agent/wf03-tool-dispatcher.json)
 
-> Sharing cuts both ways. A single reference-integrity defect here — five nodes storing the config node's name as an escaped literal — killed booking across **all three systems at once**, while the strict validator reported 0 errors. It is the best example in the project of why structural validity is not correctness: [Class 8](../engineering/bug-taxonomy.md).
+> Sharing cuts both ways. One reference bug in here, five nodes storing the config node's name as an escaped literal, killed booking in all three systems at once while the strict validator reported zero errors. It is the clearest example in the project of valid structure hiding broken behaviour: [Class 8](../engineering/bug-taxonomy.md).
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -154,16 +160,16 @@ Must respond within 5 seconds.
 
 ### WF4 · Post-Call Processing
 
-Where a finished call becomes structured data. VAPI returns a structured summary of what happened; this workflow parses it into an outcome — booked, not interested, opted out, voicemail — writes the result to the CRM, and sends the appropriate follow-up SMS.
+Where a finished call turns into data. VAPI returns a structured summary, and this workflow reads it into an outcome (booked, not interested, opted out, voicemail), writes that to the CRM, and sends whatever follow-up SMS fits.
 
-The outcome schema is deliberately *not* unified between the inbound and outbound assistants. Each matches the parser that consumes it, and unifying the field names without changing both parsers would silently break outcome recording.
+The outcome schema is not shared between the inbound and outbound assistants. Each one matches the parser that reads it. Unifying the field names without changing both parsers would break outcome recording silently, which is why they stay separate and documented.
 
 ![WF4 · Post-Call Processing](../assets/diagrams/wf04-post-call-processing.svg)
 
-**26 nodes** — 8× `twilio` · 4× `googleSheets` · 4× `if` · 3× `code` · 2× `httpRequest` · 1× `executeWorkflowTrigger`  
-**Trigger** — Called by another workflow  
-**Code** — 290 lines of ES5 JavaScript  
-**Export** — [`wf04-post-call-processing.json`](../workflows/01-voice-agent/wf04-post-call-processing.json)
+**26 nodes:** 8x `twilio`, 4x `googleSheets`, 4x `if`, 3x `code`, 2x `httpRequest`, 1x `executeWorkflowTrigger`  
+**Trigger:** Called by another workflow  
+**Code:** 290 lines of ES5 JavaScript  
+**Export:** [`wf04-post-call-processing.json`](../workflows/01-voice-agent/wf04-post-call-processing.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -201,14 +207,16 @@ No response required — fire and forget.
 
 ### WF5 · Missed Call Recovery
 
-Runs on a schedule and re-attempts leads that were never reached, with attempt-count-aware cadence so a lead is followed up persistently but not harassed. It also picks up the out-of-hours leads WF1 queued rather than dialling at midnight — the two workflows form a single loop that is easy to mistake for a dead end when reading WF1 alone.
+Runs on a schedule and retries leads nobody reached, using the attempt count to space things out so a lead gets chased properly without being harassed.
+
+It also collects the out-of-hours leads WF1 parked rather than dialling at midnight. Read WF1 on its own and that queue looks like a dead end. It isn't. The two workflows are one loop.
 
 ![WF5 · Missed Call Recovery](../assets/diagrams/wf05-missed-call-recovery.svg)
 
-**28 nodes** — 8× `googleSheets` · 7× `twilio` · 5× `if` · 4× `httpRequest` · 1× `scheduleTrigger` · 1× `set`  
-**Trigger** — Scheduled (cron)  
-**Code** — 47 lines of ES5 JavaScript  
-**Export** — [`wf05-missed-call-recovery.json`](../workflows/01-voice-agent/wf05-missed-call-recovery.json)
+**28 nodes:** 8x `googleSheets`, 7x `twilio`, 5x `if`, 4x `httpRequest`, 1x `scheduleTrigger`, 1x `set`  
+**Trigger:** Scheduled (cron)  
+**Code:** 47 lines of ES5 JavaScript  
+**Export:** [`wf05-missed-call-recovery.json`](../workflows/01-voice-agent/wf05-missed-call-recovery.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -234,18 +242,18 @@ Activate AFTER WF3, WF4, WF2, WF1 are active.
 
 ### WF6 · Inbound SMS Handler
 
-49 nodes of intent routing. A customer replying by text may be confirming an appointment, cancelling one, asking a question, or opting out — and the correct action differs completely for each. The workflow classifies the message, then executes the matching branch, including calendar changes and CRM updates.
+Forty-nine nodes of intent routing. Someone texting back might be confirming an appointment, cancelling one, asking a question or opting out, and the right action is completely different for each. The workflow classifies the message, then runs the matching branch, including calendar changes and CRM updates.
 
-Opt-out is the branch that gets the most defensive treatment: under UK PECR it is a legal obligation, not a preference, and an opt-out that is confirmed to the customer but not actually written is a compliance failure.
+Opt-out gets the most defensive treatment. Under UK PECR it is a legal obligation rather than a preference, and confirming an opt-out you never actually wrote is a compliance failure.
 
 ![WF6 · Inbound SMS Handler](../assets/diagrams/wf06-inbound-sms-handler.svg)
 
-**49 nodes** — 17× `twilio` · 11× `googleSheets` · 11× `if` · 3× `code` · 3× `httpRequest` · 1× `webhook`  
-**Trigger** — `POST /wf6-sms-inbound` · authenticated  
-**Code** — 94 lines of ES5 JavaScript  
-**Export** — [`wf06-inbound-sms-handler.json`](../workflows/01-voice-agent/wf06-inbound-sms-handler.json)
+**49 nodes:** 17x `twilio`, 11x `googleSheets`, 11x `if`, 3x `code`, 3x `httpRequest`, 1x `webhook`  
+**Trigger:** `POST /wf6-sms-inbound`, authenticated  
+**Code:** 94 lines of ES5 JavaScript  
+**Export:** [`wf06-inbound-sms-handler.json`](../workflows/01-voice-agent/wf06-inbound-sms-handler.json)
 
-> Five phantom-success sites were found and closed here — branches that told the customer an action had succeeded without checking whether it had. Two were the opt-out and do-not-contact paths.
+> Five places here told the customer an action had succeeded without checking whether it had. Two of them were the opt-out and do-not-contact paths.
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -273,16 +281,16 @@ Handles all inbound SMS replies on the Twilio business number.
 
 ### WF7 · Appointment Reminders
 
-Scans upcoming appointments on a schedule and sends reminders. It serves bookings from the voice agent *and* from the reactivation system transparently, because both write to the same appointment log in the same shape — a small payoff from committing to one canonical schema across systems.
+Scans upcoming appointments on a schedule and sends reminders. It covers bookings from the voice agent and from the reactivation system without knowing the difference, because both write to the same appointment log in the same shape. That is the payoff from committing to one schema across systems.
 
-A failed reminder is retried rather than marked sent. That sounds obvious; the original implementation marked it sent regardless, so any reminder that failed was never retried and the customer simply didn't get one.
+A reminder that fails to send gets retried. Obvious in hindsight, but the first version marked it sent regardless, so any failed reminder was never retried and the customer simply never heard from us.
 
 ![WF7 · Appointment Reminders](../assets/diagrams/wf07-appointment-reminders.svg)
 
-**20 nodes** — 4× `set` · 4× `googleSheets` · 4× `twilio` · 3× `if` · 1× `scheduleTrigger` · 1× `code`  
-**Trigger** — Scheduled (cron)  
-**Code** — 38 lines of ES5 JavaScript  
-**Export** — [`wf07-appointment-reminders.json`](../workflows/01-voice-agent/wf07-appointment-reminders.json)
+**20 nodes:** 4x `set`, 4x `googleSheets`, 4x `twilio`, 3x `if`, 1x `scheduleTrigger`, 1x `code`  
+**Trigger:** Scheduled (cron)  
+**Code:** 38 lines of ES5 JavaScript  
+**Export:** [`wf07-appointment-reminders.json`](../workflows/01-voice-agent/wf07-appointment-reminders.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -313,14 +321,14 @@ AppointmentTimeISO | Reminder1Sent | Reminder2Sent | ConfirmedAt | CancelledAt
 
 ### WF8 · Inbound Lead Lookup
 
-Called by the assistant at the start of an inbound call to look up the caller in the CRM, so the agent can greet a known customer by name and skip questions it already has answers to. It returns the last channel used, which lets the agent reference a previous WhatsApp or SMS conversation — the seam where the voice and messaging systems meet.
+The assistant calls this at the start of an inbound call to find the caller in the CRM, so it can greet a known customer by name and skip questions it already has answers to. It also returns the last channel they used, which lets the agent refer back to an earlier WhatsApp or SMS thread. This is where the voice and messaging systems meet.
 
 ![WF8 · Inbound Lead Lookup](../assets/diagrams/wf08-inbound-lead-lookup.svg)
 
-**7 nodes** — 3× `code` · 1× `executeWorkflowTrigger` · 1× `set` · 1× `if` · 1× `googleSheets`  
-**Trigger** — Called by another workflow  
-**Code** — 53 lines of ES5 JavaScript  
-**Export** — [`wf08-inbound-lead-lookup.json`](../workflows/01-voice-agent/wf08-inbound-lead-lookup.json)
+**7 nodes:** 3x `code`, 1x `executeWorkflowTrigger`, 1x `set`, 1x `if`, 1x `googleSheets`  
+**Trigger:** Called by another workflow  
+**Code:** 53 lines of ES5 JavaScript  
+**Export:** [`wf08-inbound-lead-lookup.json`](../workflows/01-voice-agent/wf08-inbound-lead-lookup.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -349,14 +357,14 @@ VAPI injects these into the AI system prompt before first speech.
 
 ### WF-IN2 · Inbound Event Router
 
-The inbound counterpart to WF2. Kept separate rather than merged because inbound and outbound calls differ in what is known at the start — an outbound call knows exactly who it is calling, an inbound call knows only a phone number — and merging them produced branching complexity worse than the duplication.
+The inbound version of WF2. It stayed separate rather than merging because the two cases know different things at the start: an outbound call knows exactly who it is ringing, an inbound call only has a phone number. Merging them produced branching that was harder to follow than the duplication.
 
 ![WF-IN2 · Inbound Event Router](../assets/diagrams/wf-in2-inbound-event-router.svg)
 
-**12 nodes** — 4× `respondToWebhook` · 3× `executeWorkflow` · 2× `code` · 1× `webhook` · 1× `set` · 1× `switch`  
-**Trigger** — `POST /vapi-inbound` · authenticated  
-**Code** — 34 lines of ES5 JavaScript  
-**Export** — [`wf-in2-inbound-event-router.json`](../workflows/01-voice-agent/wf-in2-inbound-event-router.json)
+**12 nodes:** 4x `respondToWebhook`, 3x `executeWorkflow`, 2x `code`, 1x `webhook`, 1x `set`, 1x `switch`  
+**Trigger:** `POST /vapi-inbound`, authenticated  
+**Code:** 34 lines of ES5 JavaScript  
+**Export:** [`wf-in2-inbound-event-router.json`](../workflows/01-voice-agent/wf-in2-inbound-event-router.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -385,14 +393,14 @@ Mirrors WF2 but adds assistant-request routing and calls WF8.
 
 ### WF-IN4 · Inbound Post-Call Processing
 
-Records inbound call outcomes, tagging call direction so inbound and outbound performance can be told apart later. Same shape as WF4, different outcome schema, matching the inbound assistant's structured output.
+Records inbound call outcomes and tags the call direction so inbound and outbound performance can be separated later. Same shape as WF4, different outcome schema, matching what the inbound assistant produces.
 
 ![WF-IN4 · Inbound Post-Call Processing](../assets/diagrams/wf-in4-inbound-post-call.svg)
 
-**33 nodes** — 6× `googleSheets` · 6× `twilio` · 6× `httpRequest` · 5× `code` · 5× `if` · 1× `executeWorkflowTrigger`  
-**Trigger** — Called by another workflow  
-**Code** — 279 lines of ES5 JavaScript  
-**Export** — [`wf-in4-inbound-post-call.json`](../workflows/01-voice-agent/wf-in4-inbound-post-call.json)
+**33 nodes:** 6x `googleSheets`, 6x `twilio`, 6x `httpRequest`, 5x `code`, 5x `if`, 1x `executeWorkflowTrigger`  
+**Trigger:** Called by another workflow  
+**Code:** 279 lines of ES5 JavaScript  
+**Export:** [`wf-in4-inbound-post-call.json`](../workflows/01-voice-agent/wf-in4-inbound-post-call.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -429,16 +437,16 @@ No time constraint — fire and forget.
 
 ## Engineering notes
 
-**One dispatcher, three consumers.** The single most consequential design decision here. It removed three copies of calendar logic and gave every booking path identical behaviour — and it concentrated risk, which showed up exactly once, catastrophically.
+**One dispatcher, three consumers.** The biggest design decision in this system. It removed three copies of calendar logic and gave every booking path identical behaviour. It also concentrated the risk, which showed up once and badly.
 
-**Retry is deliberately disabled on call placement.** VAPI's `POST /call` is not idempotent: a retry places a *second real phone call* to a customer. This is the one place in the codebase where `retryOnFail: false` is correct, and it is documented at the node so a future consistency sweep doesn't helpfully "fix" it.
+**Retry is switched off on call placement, on purpose.** VAPI's `POST /call` is not idempotent, so a retry means a second real phone call to the customer. This is the only place in the codebase where `retryOnFail: false` is the correct setting, and it is documented at the node so a later consistency sweep doesn't helpfully turn it back on.
 
-**Timezone is explicit everywhere.** The n8n instance runs UTC; the business runs Europe/London. A `setHours()` call in the booking path shifted **every appointment one hour late for an entire summer** before it was caught. Every date construction now applies an explicit BST offset. See [Class 2](../engineering/bug-taxonomy.md).
+**Timezone handling is explicit everywhere.** The n8n instance runs on UTC and the business runs on Europe/London. A `setHours()` call in the booking path put every appointment an hour late for a whole summer before anyone noticed. Every date is now built with an explicit BST offset. See [Class 2](../engineering/bug-taxonomy.md).
 
-**All four webhooks are now authenticated.** They were not, for months. The worst was `/lead-intake` — an open endpoint that places outbound calls.
+**All four webhooks are authenticated now.** They weren't for months. The worst was `/lead-intake`, an open endpoint that places outbound calls.
 
 ---
 
 ## Run it
 
-Import any of the JSON exports from [`workflows/01-voice-agent/`](../workflows/01-voice-agent/). Credentials are stubbed as `CREDENTIAL_ID` and account identifiers as `YOUR_*` placeholders; re-map them after import.
+Import any of the JSON exports from [`workflows/01-voice-agent/`](../workflows/01-voice-agent/). Credentials are stubbed as `CREDENTIAL_ID` and account identifiers as `YOUR_*` placeholders, so you will need to re-map them after import.

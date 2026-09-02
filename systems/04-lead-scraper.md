@@ -1,8 +1,8 @@
 # B2B Lead Scraper v4
 
-**3 workflows · 58 nodes · ~2595 lines of JavaScript**
+**3 workflows. 58 nodes. ~2595 lines of JavaScript.**
 
-A parent/child batch pipeline that discovers, enriches, scores and routes B2B prospects into a 34-column CRM. The parent orchestrates batches; the child does the heavy enrichment per batch — which bounds memory and makes partial failure recoverable.
+A parent/child batch pipeline that finds, enriches, scores and routes B2B prospects into a 34-column CRM. The parent handles batching. The child does the heavy enrichment work per batch, which keeps memory bounded and makes partial failure recoverable.
 
 These three workflows are active on the live instance and this is the pipeline that has run most consistently in real use.
 
@@ -29,9 +29,9 @@ classDef v fill:#ffe9e9,stroke:#e02d3c,color:#4d0b12
 classDef t fill:#eef2f7,stroke:#5c6370,color:#20242b
 ```
 
-**Parent/child exists for memory and recoverability.** A single-workflow version held every prospect in memory and failed on large runs. Batching bounds memory, and a failed batch is retried alone instead of restarting the whole run.
+Parent and child are split for memory and recoverability. A single-workflow version held every prospect in memory and fell over on large runs. Batching bounds the memory, and a failed batch can be retried on its own instead of restarting everything.
 
-The Apify runner is factored out and shared because actor runs are *asynchronous* — they can take minutes. It starts the run and polls for completion rather than holding a blocking HTTP request open past the gateway timeout.
+The Apify runner is factored out and shared because actor runs are asynchronous and can take minutes. It starts the run and polls for completion rather than holding a blocking HTTP request open past the gateway timeout.
 
 ---
 
@@ -39,7 +39,7 @@ The Apify runner is factored out and shared because actor runs are *asynchronous
 
 | # | Workflow | Nodes | Trigger | Does |
 |---|---|---:|---|---|
-| 1 | [Scraper v4 · PARENT](#scraper-v4--parent) | 14 | `POST /scraper-v4-run` · **unauthenticated** | Splits a run into batches |
+| 1 | [Scraper v4 · PARENT](#scraper-v4--parent) | 14 | `POST /scraper-v4-run`, **unauthenticated** | Splits a run into batches |
 | 2 | [Scraper v4 · CHILD](#scraper-v4--child) | 37 | Called by another workflow | Enrichment, scoring, routing, CRM write |
 | 3 | [Apify Runner (shared)](#apify-runner-shared) | 7 | Called by another workflow | Starts an actor run and polls it |
 
@@ -47,16 +47,16 @@ The Apify runner is factored out and shared because actor runs are *asynchronous
 
 ### Scraper v4 · PARENT
 
-Takes a run request, splits it into batches, and invokes the child once per batch. Keeping orchestration separate from processing means the expensive part can fail and be retried without re-running discovery.
+Takes a run request, splits it into batches, and calls the child once per batch. Keeping orchestration separate from processing means the expensive part can fail and be retried without re-running discovery.
 
 ![Scraper v4 · PARENT](../assets/diagrams/scraper-v4-parent-orchestrator.svg)
 
-**14 nodes** — 7× `code` · 3× `httpRequest` · 1× `webhook` · 1× `respondToWebhook` · 1× `splitInBatches` · 1× `executeWorkflow`  
-**Trigger** — `POST /scraper-v4-run` · **unauthenticated**  
-**Code** — 656 lines of ES5 JavaScript  
-**Export** — [`scraper-v4-parent-orchestrator.json`](../workflows/04-lead-scraper/scraper-v4-parent-orchestrator.json)
+**14 nodes:** 7x `code`, 3x `httpRequest`, 1x `webhook`, 1x `respondToWebhook`, 1x `splitInBatches`, 1x `executeWorkflow`  
+**Trigger:** `POST /scraper-v4-run`, **unauthenticated**  
+**Code:** 656 lines of ES5 JavaScript  
+**Export:** [`scraper-v4-parent-orchestrator.json`](../workflows/04-lead-scraper/scraper-v4-parent-orchestrator.json)
 
-> This webhook is **unauthenticated**. It triggers paid Apify actor runs, so an unauthenticated caller can spend money. Lower severity than the voice-agent endpoint — it cannot contact customers — but a known gap.
+> This webhook is unauthenticated. It triggers paid Apify runs, so an unauthenticated caller can spend money. Less severe than the voice agent endpoint because it cannot contact customers, but still a gap.
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -81,16 +81,16 @@ The child (`dpgZ964TabmgSJ0k`) returns **counts only**. Returning records would 
 
 ### Scraper v4 · CHILD
 
-The pipeline core, and the largest single workflow outside the voice agent's dispatcher. Per batch it enriches raw scrape results, verifies contact details, scores each prospect against the ICP definition, decides a routing outcome, and writes to the CRM.
+The core of the pipeline and the largest workflow outside the voice agent's dispatcher. For each batch it enriches raw scrape results, verifies contact details, scores every prospect against the ICP definition, decides a routing outcome and writes to the CRM.
 
-With 34 columns, positional writes are fragile — inserting one column silently shifts every subsequent field. Writes read the live header row and map by column name.
+With 34 columns, positional writes are fragile: insert one column and every value after it shifts. Writes read the live header row and map by column name.
 
 ![Scraper v4 · CHILD](../assets/diagrams/scraper-v4-child-enrich.svg)
 
-**37 nodes** — 21× `code` · 5× `httpRequest` · 5× `if` · 2× `merge` · 2× `executeWorkflow` · 1× `googleSheets`  
-**Trigger** — Called by another workflow  
-**Code** — 1915 lines of ES5 JavaScript  
-**Export** — [`scraper-v4-child-enrich.json`](../workflows/04-lead-scraper/scraper-v4-child-enrich.json)
+**37 nodes:** 21x `code`, 5x `httpRequest`, 5x `if`, 2x `merge`, 2x `executeWorkflow`, 1x `googleSheets`  
+**Trigger:** Called by another workflow  
+**Code:** 1915 lines of ES5 JavaScript  
+**Export:** [`scraper-v4-child-enrich.json`](../workflows/04-lead-scraper/scraper-v4-child-enrich.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -121,14 +121,14 @@ Neither alone can fill the CRM. MCS-only routes 100% to Template D.
 
 ### Apify Runner (shared)
 
-A small shared workflow that starts an Apify actor run and polls until it completes. Factored out because both discovery paths need it and because async-run polling is the kind of logic you want implemented exactly once.
+A small shared workflow that starts an Apify actor run and polls until it finishes. Factored out because both discovery paths need it, and because async polling is the sort of logic worth writing exactly once.
 
 ![Apify Runner (shared)](../assets/diagrams/apify-runner-shared.svg)
 
-**7 nodes** — 3× `httpRequest` · 1× `executeWorkflowTrigger` · 1× `if` · 1× `wait` · 1× `code`  
-**Trigger** — Called by another workflow  
-**Code** — 24 lines of ES5 JavaScript  
-**Export** — [`apify-runner-shared.json`](../workflows/04-lead-scraper/apify-runner-shared.json)
+**7 nodes:** 3x `httpRequest`, 1x `executeWorkflowTrigger`, 1x `if`, 1x `wait`, 1x `code`  
+**Trigger:** Called by another workflow  
+**Code:** 24 lines of ES5 JavaScript  
+**Export:** [`apify-runner-shared.json`](../workflows/04-lead-scraper/apify-runner-shared.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -153,9 +153,9 @@ Poll loop: start with `waitForFinish=60`, then Wait 20s → status → repeat. B
 
 ## Engineering notes
 
-**This is the operationally busiest system**, which is why it has ten maintenance workflows attached to it — see below. That is the honest shape of a spreadsheet-backed CRM written to concurrently by five systems: the automation needs its own maintenance automation.
+**This is the busiest system operationally**, which is why it has ten maintenance workflows hanging off it. That is the real shape of a spreadsheet-backed CRM being written to by five systems at once: the automation needs its own maintenance automation.
 
-A dedicated database would remove most of them. That trade-off was made deliberately in favour of a store the client can open and read.
+A proper database would remove most of them. That trade-off was made on purpose, in favour of a store the client can open and read.
 
 ### CRM utilities
 
@@ -165,14 +165,14 @@ A dedicated database would remove most of them. That trade-off was made delibera
 | CRM Integrity Check | Schema and referential integrity |
 | Dedupe CRM | Duplicate detection and merge |
 | CRM Status | Status distribution snapshot |
-| Routing Audit | Verifies routing against ICP rules |
+| Routing Audit | Checks routing against ICP rules |
 | Route Recompute | Backfills routing after a rule change |
 | Contact Quality | Scores completeness and deliverability |
 | Add Row Key + Size Tier | Backfills keys and size tiers |
 | Write CRM Headers | Repairs the header row |
 | CRM to Instantly Push | Pushes qualified leads to outreach |
 
-Several exist *because of* defects — the header repair, the deduper, and the route backfill all clean up after something that went wrong earlier. All ten webhooks are unauthenticated; they are internal tools on an obscure host, which is an explanation rather than a defence.
+Several of these exist because something went wrong earlier. The header repair, the deduper and the route backfill are all cleaning up after a bug. All ten webhooks are unauthenticated. They are internal tools on an obscure host, which is an explanation rather than a defence.
 
 Exports: [`workflows/06-utilities/`](../workflows/06-utilities/)
 
@@ -180,4 +180,4 @@ Exports: [`workflows/06-utilities/`](../workflows/06-utilities/)
 
 ## Run it
 
-Import any of the JSON exports from [`workflows/04-lead-scraper/`](../workflows/04-lead-scraper/). Credentials are stubbed as `CREDENTIAL_ID` and account identifiers as `YOUR_*` placeholders; re-map them after import.
+Import any of the JSON exports from [`workflows/04-lead-scraper/`](../workflows/04-lead-scraper/). Credentials are stubbed as `CREDENTIAL_ID` and account identifiers as `YOUR_*` placeholders, so you will need to re-map them after import.

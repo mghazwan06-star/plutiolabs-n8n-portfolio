@@ -1,10 +1,10 @@
 # Old Lead Reactivation
 
-**7 workflows · 94 nodes · ~543 lines of JavaScript**
+**7 workflows. 94 nodes. ~543 lines of JavaScript.**
 
-Every installer sits on hundreds of dead leads — quoted, never closed, never followed up. This system scans that database on a schedule and runs AI voice re-engagement campaigns against it, with per-attempt cadence control and strict opt-out handling.
+Every installer is sitting on hundreds of dead leads: quoted once, never closed, never followed up. This system scans that database on a schedule and runs AI voice campaigns against it, with cadence control per attempt and strict opt-out handling.
 
-It **reuses the voice agent's booking dispatcher** rather than reimplementing it, so a reactivated lead books into the same calendar through the same code path as a fresh one.
+It reuses the voice agent's booking dispatcher instead of reimplementing it, so a reactivated lead books into the same calendar through the same code path as a fresh one.
 
 ---
 
@@ -33,9 +33,9 @@ classDef v fill:#ffe9e9,stroke:#e02d3c,color:#4d0b12
 classDef t fill:#eef2f7,stroke:#5c6370,color:#20242b
 ```
 
-**The loop closes through the CRM.** The scanner reads dormant leads, the engine calls them, the post-call processors write outcomes back, and tomorrow's scan reads those outcomes to decide who is still eligible. Cadence is state in the CRM, not state in the workflow.
+The loop closes through the CRM. The scanner reads dormant leads, the engine calls them, the post-call processors write the outcomes back, and tomorrow's scan reads those outcomes to work out who is still eligible. Cadence lives in the CRM, not in workflow state.
 
-The edge worth noticing is the bottom one: reactivation bookings are tagged `Booked By = d5-reactivation` and land in the **same appointment log** as voice-agent bookings — so the voice agent's reminder workflow picks them up with no knowledge that this system exists.
+The edge worth noticing is the bottom one. Reactivation bookings get tagged `Booked By = d5-reactivation` and land in the same appointment log as voice agent bookings, so the voice agent's reminder workflow picks them up without knowing this system exists.
 
 ---
 
@@ -45,7 +45,7 @@ The edge worth noticing is the bottom one: reactivation bookings are tagged `Boo
 |---|---|---:|---|---|
 | 1 | [WF1 · Lead Scanner & Enqueue](#wf1--lead-scanner--enqueue) | 7 | Scheduled (cron) | Finds eligible dormant leads daily |
 | 2 | [WF2 · Voice Reactivation Engine](#wf2--voice-reactivation-engine) | 21 | Scheduled (cron) | Places the call with per-attempt context |
-| 3 | [WF2b · VAPI Event Router](#wf2b--vapi-event-router) | 18 | `POST /d5-vapi-events` · authenticated | Routes events to the four handlers |
+| 3 | [WF2b · VAPI Event Router](#wf2b--vapi-event-router) | 18 | `POST /d5-vapi-events`, authenticated | Routes events to the four handlers |
 | 4 | [WF2c-avail · checkAvailability](#wf2c-avail--checkavailability) | 7 | Called by another workflow | Availability tool for the campaign assistant |
 | 5 | [WF2c-book · bookAppointment](#wf2c-book--bookappointment) | 15 | Called by another workflow | Books, tagged by campaign |
 | 6 | [WF2d · Post-Call Processor](#wf2d--post-call-processor) | 21 | Called by another workflow | Branches on outcome |
@@ -55,14 +55,16 @@ The edge worth noticing is the bottom one: reactivation bookings are tagged `Boo
 
 ### WF1 · Lead Scanner & Enqueue
 
-Runs daily, reads the CRM, and decides who is eligible for contact — factoring in how long a lead has been dormant, how many attempts have already been made, and whether they have opted out. Everything downstream depends on this filter being conservative; the cost of a false positive here is an unwanted call to someone who asked not to be contacted.
+Runs daily, reads the CRM, and works out who is eligible for contact based on how long they have been dormant, how many attempts have already been made, and whether they have opted out.
+
+Everything downstream depends on this filter being conservative. A false positive here means phoning someone who asked not to be contacted.
 
 ![WF1 · Lead Scanner & Enqueue](../assets/diagrams/d5-wf01-lead-scanner.svg)
 
-**7 nodes** — 3× `googleSheets` · 1× `scheduleTrigger` · 1× `set` · 1× `code` · 1× `if`  
-**Trigger** — Scheduled (cron)  
-**Code** — 90 lines of ES5 JavaScript  
-**Export** — [`d5-wf01-lead-scanner.json`](../workflows/03-lead-reactivation/d5-wf01-lead-scanner.json)
+**7 nodes:** 3x `googleSheets`, 1x `scheduleTrigger`, 1x `set`, 1x `code`, 1x `if`  
+**Trigger:** Scheduled (cron)  
+**Code:** 90 lines of ES5 JavaScript  
+**Export:** [`d5-wf01-lead-scanner.json`](../workflows/03-lead-reactivation/d5-wf01-lead-scanner.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -83,14 +85,14 @@ Downstream: D5-WF2 (Voice Engine) polls Reactivation Log for queued leads.
 
 ### WF2 · Voice Reactivation Engine
 
-Places the outbound call, passing per-attempt variables into the assistant so a third attempt does not open with the same script as a first. Campaign type — promotion, seasonal offer, subsidy update — is passed the same way, which is what makes one assistant serve many campaigns.
+Places the call, passing per-attempt variables into the assistant so a third attempt doesn't open with the same script as the first. Campaign type (a promotion, a seasonal offer, a subsidy update) is passed the same way, which is how one assistant covers many campaigns.
 
 ![WF2 · Voice Reactivation Engine](../assets/diagrams/d5-wf02-voice-reactivation-engine.svg)
 
-**21 nodes** — 8× `googleSheets` · 3× `code` · 2× `set` · 2× `httpRequest` · 2× `if` · 2× `twilio`  
-**Trigger** — Scheduled (cron)  
-**Code** — 130 lines of ES5 JavaScript  
-**Export** — [`d5-wf02-voice-reactivation-engine.json`](../workflows/03-lead-reactivation/d5-wf02-voice-reactivation-engine.json)
+**21 nodes:** 8x `googleSheets`, 3x `code`, 2x `set`, 2x `httpRequest`, 2x `if`, 2x `twilio`  
+**Trigger:** Scheduled (cron)  
+**Code:** 130 lines of ES5 JavaScript  
+**Export:** [`d5-wf02-voice-reactivation-engine.json`](../workflows/03-lead-reactivation/d5-wf02-voice-reactivation-engine.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -117,10 +119,10 @@ A thin router, and the only authenticated webhook in this system. It fans call l
 
 ![WF2b · VAPI Event Router](../assets/diagrams/d5-wf02b-vapi-event-router.svg)
 
-**18 nodes** — 6× `respondToWebhook` · 4× `code` · 4× `executeWorkflow` · 2× `switch` · 1× `webhook` · 1× `set`  
-**Trigger** — `POST /d5-vapi-events` · authenticated  
-**Code** — 59 lines of ES5 JavaScript  
-**Export** — [`d5-wf02b-vapi-event-router.json`](../workflows/03-lead-reactivation/d5-wf02b-vapi-event-router.json)
+**18 nodes:** 6x `respondToWebhook`, 4x `code`, 4x `executeWorkflow`, 2x `switch`, 1x `webhook`, 1x `set`  
+**Trigger:** `POST /d5-vapi-events`, authenticated  
+**Code:** 59 lines of ES5 JavaScript  
+**Export:** [`d5-wf02b-vapi-event-router.json`](../workflows/03-lead-reactivation/d5-wf02b-vapi-event-router.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -151,14 +153,14 @@ VAPI always receives a valid { results: [{ toolCallId, result }] } response — 
 
 ### WF2c-avail · checkAvailability
 
-The availability tool for this assistant. Structurally parallel to the voice agent's and chatbot's equivalents — the third implementation of the same idea, which is the honest cost of having three assistants with slightly different context needs.
+The availability tool for this assistant. Structurally the same idea as the voice agent's and the chatbot's versions. It is the third implementation of one concept, which is the honest cost of running three assistants that need slightly different context.
 
 ![WF2c-avail · checkAvailability](../assets/diagrams/d5-wf02c-avail-check-availability.svg)
 
-**7 nodes** — 2× `set` · 2× `code` · 1× `executeWorkflowTrigger` · 1× `if` · 1× `googleCalendar`  
-**Trigger** — Called by another workflow  
-**Code** — 103 lines of ES5 JavaScript  
-**Export** — [`d5-wf02c-avail-check-availability.json`](../workflows/03-lead-reactivation/d5-wf02c-avail-check-availability.json)
+**7 nodes:** 2x `set`, 2x `code`, 1x `executeWorkflowTrigger`, 1x `if`, 1x `googleCalendar`  
+**Trigger:** Called by another workflow  
+**Code:** 103 lines of ES5 JavaScript  
+**Export:** [`d5-wf02c-avail-check-availability.json`](../workflows/03-lead-reactivation/d5-wf02c-avail-check-availability.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -179,14 +181,14 @@ Queries Google Calendar 09:00–17:00 BST. Returns up to 3 open slots as a singl
 
 ### WF2c-book · bookAppointment
 
-Books the appointment against a composite key of phone number **and** campaign ID, so the same lead can be booked across different campaigns without collisions, and writes `Booked By = d5-reactivation` for attribution.
+Books against a composite key of phone number and campaign ID, so the same lead can be booked across different campaigns without colliding, and writes `Booked By = d5-reactivation` for attribution.
 
 ![WF2c-book · bookAppointment](../assets/diagrams/d5-wf02c-book-appointment.svg)
 
-**15 nodes** — 4× `set` · 4× `googleSheets` · 3× `if` · 2× `code` · 1× `executeWorkflowTrigger` · 1× `googleCalendar`  
-**Trigger** — Called by another workflow  
-**Code** — 68 lines of ES5 JavaScript  
-**Export** — [`d5-wf02c-book-appointment.json`](../workflows/03-lead-reactivation/d5-wf02c-book-appointment.json)
+**15 nodes:** 4x `set`, 4x `googleSheets`, 3x `if`, 2x `code`, 1x `executeWorkflowTrigger`, 1x `googleCalendar`  
+**Trigger:** Called by another workflow  
+**Code:** 68 lines of ES5 JavaScript  
+**Export:** [`d5-wf02c-book-appointment.json`](../workflows/03-lead-reactivation/d5-wf02c-book-appointment.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -208,14 +210,14 @@ Called **synchronously** by D5-WF2b. Must respond within 5 seconds.
 
 ### WF2d · Post-Call Processor
 
-Parses the call outcome and branches four ways: interested with a callback request, not interested, a strong do-not-contact, or no answer. Each writes different CRM state, and that state is what tomorrow's scanner reads to decide whether this lead is contacted again.
+Reads the outcome and branches four ways: interested with a callback request, not interested, a firm do-not-contact, or no answer. Each writes different CRM state, and that state is what tomorrow's scanner reads to decide whether this lead gets contacted again.
 
 ![WF2d · Post-Call Processor](../assets/diagrams/d5-wf02d-post-call-processor.svg)
 
-**21 nodes** — 8× `googleSheets` · 4× `code` · 2× `if` · 2× `twilio` · 2× `httpRequest` · 1× `executeWorkflowTrigger`  
-**Trigger** — Called by another workflow  
-**Code** — 80 lines of ES5 JavaScript  
-**Export** — [`d5-wf02d-post-call-processor.json`](../workflows/03-lead-reactivation/d5-wf02d-post-call-processor.json)
+**21 nodes:** 8x `googleSheets`, 4x `code`, 2x `if`, 2x `twilio`, 2x `httpRequest`, 1x `executeWorkflowTrigger`  
+**Trigger:** Called by another workflow  
+**Code:** 80 lines of ES5 JavaScript  
+**Export:** [`d5-wf02d-post-call-processor.json`](../workflows/03-lead-reactivation/d5-wf02d-post-call-processor.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -239,14 +241,14 @@ Called **asynchronously** by D5-WF2b after VAPI fires end-of-call-report. No VAP
 
 ### WF2e · Call-Failed Handler
 
-Separates 'the call failed to connect' from 'the call happened and went badly'. Conflating those two corrupts the cadence logic — a network failure is not a customer signal, and should not count as an attempt in the same way.
+Keeps "the call failed to connect" separate from "the call happened and went badly". Merging those two corrupts the cadence logic, because a network failure is not a signal from the customer and shouldn't count as an attempt the same way.
 
 ![WF2e · Call-Failed Handler](../assets/diagrams/d5-wf02e-call-failed-handler.svg)
 
-**5 nodes** — 1× `executeWorkflowTrigger` · 1× `set` · 1× `code` · 1× `googleSheets` · 1× `twilio`  
-**Trigger** — Called by another workflow  
-**Code** — 13 lines of ES5 JavaScript  
-**Export** — [`d5-wf02e-call-failed-handler.json`](../workflows/03-lead-reactivation/d5-wf02e-call-failed-handler.json)
+**5 nodes:** 1x `executeWorkflowTrigger`, 1x `set`, 1x `code`, 1x `googleSheets`, 1x `twilio`  
+**Trigger:** Called by another workflow  
+**Code:** 13 lines of ES5 JavaScript  
+**Export:** [`d5-wf02e-call-failed-handler.json`](../workflows/03-lead-reactivation/d5-wf02e-call-failed-handler.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -268,16 +270,16 @@ Called **asynchronously** by D5-WF2b on VAPI call-failed events. No VAPI respons
 
 ## Engineering notes
 
-**Consent is the hard constraint.** UK PECR governs unsolicited marketing calls. Opt-out sets do-not-contact across the CRM and every campaign checks it before dialling.
+**Consent is the hard constraint.** UK PECR governs unsolicited marketing calls. Opting out sets do-not-contact across the CRM and every campaign checks it before dialling.
 
-That is why a *formatting* defect was treated as compliance-critical: the opt-out check is an exact phone-string match, and 36 Sheets writes were storing values with `cellFormat: RAW`, which can coerce a phone number into numeric form and strip its leading `+`. A reformatted number silently stops matching its own opt-out record.
+That is why a formatting bug counted as a compliance problem. The opt-out check is an exact phone-string match, and 36 Sheets writes were using `cellFormat: RAW`, which can turn a phone number into a numeric value and drop the leading `+`. A reformatted number stops matching its own opt-out record.
 
-**Four critical defects were found in a single audit pass**, all the same root cause — Code nodes reading `$input` after a config Set node, and config nodes missing `includeOtherFields`. Before the fix both booking tools returned validation errors *permanently*, post-call processing ran on empty fields, and the call-failed handler wrote garbage rows. Nothing in this system worked, and it validated clean. See [Class 5](../engineering/bug-taxonomy.md).
+**Four critical bugs came out of one audit pass**, all with the same root cause: Code nodes reading `$input` after a config Set node, and config nodes missing `includeOtherFields`. Before the fix, both booking tools returned validation errors permanently, post-call processing ran on empty fields, and the call-failed handler wrote garbage rows. Nothing in this system worked, and it validated clean. See [Class 5](../engineering/bug-taxonomy.md).
 
-**Reuse across systems is deliberate.** The shared appointment log means reminders, cancellation and rescheduling all work for reactivation bookings without a line of reactivation-specific code.
+**Reuse across systems is deliberate.** Because bookings land in the shared appointment log, reminders, cancellation and rescheduling all work for reactivation bookings without a line of reactivation-specific code.
 
 ---
 
 ## Run it
 
-Import any of the JSON exports from [`workflows/03-lead-reactivation/`](../workflows/03-lead-reactivation/). Credentials are stubbed as `CREDENTIAL_ID` and account identifiers as `YOUR_*` placeholders; re-map them after import.
+Import any of the JSON exports from [`workflows/03-lead-reactivation/`](../workflows/03-lead-reactivation/). Credentials are stubbed as `CREDENTIAL_ID` and account identifiers as `YOUR_*` placeholders, so you will need to re-map them after import.

@@ -1,60 +1,60 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-110 -30 1480 754" width="1480" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
-<rect x="-110" y="-30" width="1480" height="754" fill="#f7f7f8"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-64 16.0 1388 624.0" width="1388" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect x="-64" y="16.0" width="1388" height="624.0" fill="#f7f7f8"/>
 <defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#dcdce0"/></pattern></defs>
-<rect x="-110" y="-30" width="1480" height="754" fill="url(#g)"/>
-<rect x="-20" y="60" width="1300" height="180" rx="8" fill="#fff8b8" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
-<text x="-8" y="84" font-size="13.5" font-weight="700" fill="#5f5930">Apify Runner (shared sub-workflow)</text>
-<text x="-8" y="101" font-size="11.5" fill="#6f6840">Called by the CHILD enrich workflow for BOTH the place lookup and the review scrape.</text>
-<text x="-8" y="115" font-size="11.5" fill="#6f6840">Why it exists: Code nodes on this n8n version have no $helpers.httpRequest (bug F-R15), so every Apify call must go through an HTTP Request node. Rather than duplicate</text>
-<text x="-8" y="129" font-size="11.5" fill="#6f6840">start/poll/fetch twice, both callers share this.</text>
-<text x="-8" y="143" font-size="11.5" fill="#6f6840">Input: { actorInput: { ...Google Places actor input... } }</text>
-<text x="-8" y="157" font-size="11.5" fill="#6f6840">Output: { status, runId, count, items: [ ...dataset rows... ] }</text>
-<text x="-8" y="171" font-size="11.5" fill="#6f6840">Auth is the Apify API credential (httpHeaderAuth, locked to api.apify.com). The key is NOT in any workflow config.</text>
-<text x="-8" y="185" font-size="11.5" fill="#6f6840">Poll loop: start with waitForFinish=60, then Wait 20s → status → repeat. Bounded by the workflow execution timeout (30 min).</text>
+<rect x="-64" y="16.0" width="1388" height="624.0" fill="url(#g)"/>
+<rect x="-20" y="60.0" width="1300" height="156" rx="8" fill="#fff8b8" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="-8" y="84.0" font-size="13.5" font-weight="700" fill="#5f5930">Apify Runner (shared sub-workflow)</text>
+<text x="-8" y="101.0" font-size="11.5" fill="#6f6840">Called by the CHILD enrich workflow for BOTH the place lookup and the review scrape.</text>
+<text x="-8" y="115.0" font-size="11.5" fill="#6f6840">Why it exists: Code nodes on this n8n version have no $helpers.httpRequest (bug F-R15), so every Apify call must go through an HTTP Request node. Rather than duplicate</text>
+<text x="-8" y="129.0" font-size="11.5" fill="#6f6840">start/poll/fetch twice, both callers share this.</text>
+<text x="-8" y="143.0" font-size="11.5" fill="#6f6840">Input: { actorInput: { ...Google Places actor input... } }</text>
+<text x="-8" y="157.0" font-size="11.5" fill="#6f6840">Output: { status, runId, count, items: [ ...dataset rows... ] }</text>
+<text x="-8" y="171.0" font-size="11.5" fill="#6f6840">Auth is the Apify API credential (httpHeaderAuth, locked to api.apify.com). The key is NOT in any workflow config.</text>
+<text x="-8" y="185.0" font-size="11.5" fill="#6f6840">Poll loop: start with waitForFinish=60, then Wait 20s → status → repeat. Bounded by the workflow execution timeout (30 min).</text>
 <g fill="none" stroke="#9aa0a6" stroke-width="2.5">
-<path d="M100,350 C154,350 166,350 213,350"/>
-<path d="M213,345 L220,350 L213,355" fill="#9aa0a6" stroke="none"/>
-<path d="M320,350 C374,350 386,350 433,350"/>
-<path d="M433,345 L440,350 L433,355" fill="#9aa0a6" stroke="none"/>
-<path d="M540,333 C693,333 727,350 873,350"/>
-<path d="M873,345 L880,350 L873,355" fill="#9aa0a6" stroke="none"/>
-<path d="M540,367 C585,367 395,550 433,550"/>
-<path d="M433,545 L440,550 L433,555" fill="#9aa0a6" stroke="none"/>
-<path d="M540,550 C594,550 606,550 653,550"/>
-<path d="M653,545 L660,550 L653,555" fill="#9aa0a6" stroke="none"/>
-<path d="M760,550 C904,550 296,350 433,350"/>
-<path d="M433,345 L440,350 L433,355" fill="#9aa0a6" stroke="none"/>
-<path d="M980,350 C1034,350 1046,350 1093,350"/>
-<path d="M1093,345 L1100,350 L1093,355" fill="#9aa0a6" stroke="none"/>
+<path d="M100,322 C154,322 166,322 213,322"/>
+<path d="M213,317 L220,322 L213,327" fill="#9aa0a6" stroke="none"/>
+<path d="M320,322 C374,322 386,322 433,322"/>
+<path d="M433,317 L440,322 L433,327" fill="#9aa0a6" stroke="none"/>
+<path d="M540,305 C693,305 727,322 873,322"/>
+<path d="M873,317 L880,322 L873,327" fill="#9aa0a6" stroke="none"/>
+<path d="M540,339 C585,339 395,512 433,512"/>
+<path d="M433,507 L440,512 L433,517" fill="#9aa0a6" stroke="none"/>
+<path d="M540,512 C594,512 606,512 653,512"/>
+<path d="M653,507 L660,512 L653,517" fill="#9aa0a6" stroke="none"/>
+<path d="M760,512 C904,512 296,322 433,322"/>
+<path d="M433,317 L440,322 L433,327" fill="#9aa0a6" stroke="none"/>
+<path d="M980,322 C1034,322 1046,322 1093,322"/>
+<path d="M1093,317 L1100,322 L1093,327" fill="#9aa0a6" stroke="none"/>
 </g>
-<rect x="0" y="300" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
-<rect x="0" y="300" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
-<text x="50.0" y="346.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">sub-flow</text>
-<text x="50.0" y="360.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">in</text>
-<text x="50.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">🧩 Runner Input</text>
-<rect x="220" y="300" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
-<rect x="220" y="300" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
-<text x="270.0" y="346.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
-<text x="270.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">🚀 Start Apify Run</text>
-<rect x="440" y="300" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
-<rect x="440" y="300" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
-<text x="490.0" y="346.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
-<text x="490.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔀 Run Finished?</text>
-<rect x="440" y="500" width="100" height="100" rx="10" fill="#ffffff" stroke="#909298" stroke-width="3"/>
-<rect x="440" y="500" width="100" height="100" rx="10" fill="#909298" fill-opacity="0.10"/>
-<text x="490.0" y="546.0" font-size="11" text-anchor="middle" fill="#909298" font-weight="700">wait</text>
-<text x="490.0" y="615" font-size="11.5" text-anchor="middle" fill="#2b2f36">⏳ Wait 20s</text>
-<rect x="660" y="500" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
-<rect x="660" y="500" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
-<text x="710.0" y="546.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
-<text x="710.0" y="615" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔎 Check Run Status</text>
-<rect x="880" y="300" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
-<rect x="880" y="300" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
-<text x="930.0" y="346.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
-<text x="930.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">📦 Fetch Dataset</text>
-<text x="930.0" y="428" font-size="11.5" text-anchor="middle" fill="#2b2f36">Items</text>
-<rect x="1100" y="300" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
-<rect x="1100" y="300" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
-<text x="1150.0" y="346.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
-<text x="1150.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">📤 Return Items</text>
+<rect x="0" y="272.0" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="0" y="272.0" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="50.0" y="318.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">sub-flow</text>
+<text x="50.0" y="332.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">in</text>
+<text x="50.0" y="387.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">🧩 Runner Input</text>
+<rect x="220" y="272.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="220" y="272.0" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="270.0" y="318.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="270.0" y="387.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">🚀 Start Apify Run</text>
+<rect x="440" y="272.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="440" y="272.0" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="490.0" y="318.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="490.0" y="387.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔀 Run Finished?</text>
+<rect x="440" y="462.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#909298" stroke-width="3"/>
+<rect x="440" y="462.0" width="100" height="100" rx="10" fill="#909298" fill-opacity="0.10"/>
+<text x="490.0" y="508.0" font-size="11" text-anchor="middle" fill="#909298" font-weight="700">wait</text>
+<text x="490.0" y="577.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">⏳ Wait 20s</text>
+<rect x="660" y="462.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="660" y="462.0" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="710.0" y="508.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="710.0" y="577.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔎 Check Run Status</text>
+<rect x="880" y="272.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="880" y="272.0" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="930.0" y="318.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="930.0" y="387.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">📦 Fetch Dataset</text>
+<text x="930.0" y="400.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Items</text>
+<rect x="1100" y="272.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1100" y="272.0" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1150.0" y="318.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1150.0" y="387.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">📤 Return Items</text>
 </svg>

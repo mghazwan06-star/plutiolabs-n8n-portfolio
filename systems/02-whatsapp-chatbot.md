@@ -1,10 +1,10 @@
-# AI Messaging Assistant — WhatsApp Chatbot
+# AI Messaging Assistant (WhatsApp Chatbot)
 
-**10 workflows · 121 nodes · ~1641 lines of JavaScript**
+**10 workflows. 121 nodes. ~1641 lines of JavaScript.**
 
-A 24/7 receptionist on WhatsApp powered by Claude with tool-calling. It answers questions from a knowledge base, qualifies prospects, and books, reschedules or cancels house visits **inside the conversation** — no handoff, no form, no callback.
+A round-the-clock receptionist on WhatsApp, running on Claude with tool calling. It answers questions from a knowledge base, qualifies prospects, and books, reschedules or cancels house visits inside the conversation. No handoff, no form, no callback.
 
-Session state lives in Supabase, so a conversation survives across messages, days, and workflow restarts.
+Session state lives in Supabase, so a conversation survives across messages, days and workflow restarts.
 
 ---
 
@@ -37,9 +37,9 @@ classDef v fill:#ffe9e9,stroke:#e02d3c,color:#4d0b12
 classDef t fill:#eef2f7,stroke:#5c6370,color:#20242b
 ```
 
-**The loop is the whole design.** C1 accepts and returns immediately so Twilio never times out. C2 loads the session, asks Claude, and either replies directly or calls exactly one tool, feeds the result back, and asks Claude again. C4 sends whatever came out.
+The loop is the whole design. C1 accepts the message and replies to Twilio immediately so the webhook never times out. C2 loads the session, asks Claude, and either answers directly or calls one tool, feeds the result back, and asks Claude again. C4 sends whatever comes out.
 
-Each of the seven tools is **its own workflow**, not a branch. That is what makes them independently testable and independently importable — and it is a direct reaction to the earlier single-workflow version, which reached 75 nodes and became unmaintainable.
+Each of the seven tools is a separate workflow rather than a branch. That is what makes them testable and importable on their own, and it is a direct reaction to the first version, which put everything in one workflow, reached 75 nodes, and became impossible to work on.
 
 ---
 
@@ -47,8 +47,8 @@ Each of the seven tools is **its own workflow**, not a branch. That is what make
 
 | # | Workflow | Nodes | Trigger | Does |
 |---|---|---:|---|---|
-| 1 | [C1 · WhatsApp Receiver](#c1--whatsapp-receiver) | 8 | `POST /whatsapp-in` · **unauthenticated** | Accepts the message, responds instantly |
-| 2 | [C2 · Claude Core](#c2--claude-core) | 34 | `POST /whatsapp-core` · authenticated | Session, Claude rounds 1 and 2, tool dispatch |
+| 1 | [C1 · WhatsApp Receiver](#c1--whatsapp-receiver) | 8 | `POST /whatsapp-in`, **unauthenticated** | Accepts the message, responds instantly |
+| 2 | [C2 · Claude Core](#c2--claude-core) | 34 | `POST /whatsapp-core`, authenticated | Session, Claude rounds 1 and 2, tool dispatch |
 | 3 | [C3a · check_availability](#c3a--check_availability) | 6 | Called by another workflow | Finds free slots, BST-aware |
 | 4 | [C3b · book_house_visit](#c3b--book_house_visit) | 26 | Called by another workflow | Books the visit and writes the lead atomically |
 | 5 | [C3c · cancel_booking](#c3c--cancel_booking) | 12 | Called by another workflow | Cancels and clears the record |
@@ -62,18 +62,18 @@ Each of the seven tools is **its own workflow**, not a branch. That is what make
 
 ### C1 · WhatsApp Receiver
 
-The entry point. Strips Twilio's `whatsapp:` prefix from the phone number, normalises the payload, fires an asynchronous HTTP call to C2, and returns immediately.
+The entry point. It strips Twilio's `whatsapp:` prefix off the phone number, normalises the payload, fires an async HTTP call to C2 and returns straight away.
 
-The async handoff is the point: generating a reply takes 5–16 seconds, and Twilio's webhook will time out long before that. Accepting fast and processing behind it is what keeps the channel healthy.
+That async handoff is the whole reason it exists. Generating a reply takes 5 to 16 seconds and Twilio's webhook times out well before that.
 
 ![C1 · WhatsApp Receiver](../assets/diagrams/wf-c1-whatsapp-receiver.svg)
 
-**8 nodes** — 2× `code` · 2× `if` · 1× `webhook` · 1× `set` · 1× `httpRequest` · 1× `executeWorkflow`  
-**Trigger** — `POST /whatsapp-in` · **unauthenticated**  
-**Code** — 27 lines of ES5 JavaScript  
-**Export** — [`wf-c1-whatsapp-receiver.json`](../workflows/02-whatsapp-chatbot/wf-c1-whatsapp-receiver.json)
+**8 nodes:** 2x `code`, 2x `if`, 1x `webhook`, 1x `set`, 1x `httpRequest`, 1x `executeWorkflow`  
+**Trigger:** `POST /whatsapp-in`, **unauthenticated**  
+**Code:** 27 lines of ES5 JavaScript  
+**Export:** [`wf-c1-whatsapp-receiver.json`](../workflows/02-whatsapp-chatbot/wf-c1-whatsapp-receiver.json)
 
-> Still **unauthenticated** — the one remaining open webhook in the messaging system, and a known gap rather than an oversight. Anyone who found the URL could forge an inbound message as any customer.
+> Still unauthenticated. It is the last open webhook in the messaging system, and a known gap rather than an oversight. Anyone who found the URL could forge a message as any customer.
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -99,18 +99,18 @@ Receives inbound WhatsApp messages from Twilio, responds 200 immediately (onRece
 
 ### C2 · Claude Core
 
-The orchestrator. Loads session history from Supabase, builds the Claude payload, calls Claude, and inspects the response: a direct answer goes straight to reply assembly; a `tool_use` response is dispatched to one of seven tool workflows, the result is appended, and Claude is called a second time to phrase the answer.
+The orchestrator. It loads session history from Supabase, builds the Claude payload, calls Claude, and looks at what comes back. A plain answer goes straight to the reply. A `tool_use` response gets dispatched to one of seven tool workflows, the result is appended to the conversation, and Claude is called a second time to word the answer.
 
-Measured round-trip: **4.6–9.6s** for a direct reply, **7.8–15.8s** when a tool runs.
+Measured round trip: 4.6 to 9.6 seconds for a direct reply, 7.8 to 15.8 seconds when a tool runs.
 
 ![C2 · Claude Core](../assets/diagrams/wf-c2-claude-core.svg)
 
-**34 nodes** — 12× `code` · 9× `executeWorkflow` · 7× `httpRequest` · 3× `set` · 1× `webhook` · 1× `if`  
-**Trigger** — `POST /whatsapp-core` · authenticated  
-**Code** — 315 lines of ES5 JavaScript  
-**Export** — [`wf-c2-claude-core.json`](../workflows/02-whatsapp-chatbot/wf-c2-claude-core.json)
+**34 nodes:** 12x `code`, 9x `executeWorkflow`, 7x `httpRequest`, 3x `set`, 1x `webhook`, 1x `if`  
+**Trigger:** `POST /whatsapp-core`, authenticated  
+**Code:** 315 lines of ES5 JavaScript  
+**Export:** [`wf-c2-claude-core.json`](../workflows/02-whatsapp-chatbot/wf-c2-claude-core.json)
 
-> That measured window *is* the session race window. Three messages a second apart lost the first two — every time — because each reply was writing session state built from a stale read. That is exactly how people open a chat: "hi" / "how are you" / the actual question. Fixed by reloading and merging immediately before each save. See [Class 6](../engineering/bug-taxonomy.md).
+> That measured window is also the session race window. Three messages a second apart lost the first two every single time, because each reply was saving session state built from a stale read. That is exactly how people open a chat: "hi", "how are you", then the actual question. Fixed by reloading and merging right before each save. See [Class 6](../engineering/bug-taxonomy.md).
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -133,14 +133,14 @@ Called by: WF-C1 (WhatsApp Receiver) via async HTTP POST
 
 ### C3a · check_availability
 
-Reads Google Calendar and the appointment log, and returns genuinely free slots inside business hours. Naming enough options matters: an earlier version returned only three slots, which meant times that were actually free were reported as unavailable to the customer.
+Reads Google Calendar and the appointment log and returns slots that are genuinely free inside business hours. Offering enough options matters more than it sounds: an earlier version returned only three, so times that were actually free came back to the customer as unavailable.
 
 ![C3a · check_availability](../assets/diagrams/wf-c3a-check-availability.svg)
 
-**6 nodes** — 2× `code` · 1× `executeWorkflowTrigger` · 1× `set` · 1× `googleCalendar` · 1× `googleSheets`  
-**Trigger** — Called by another workflow  
-**Code** — 219 lines of ES5 JavaScript  
-**Export** — [`wf-c3a-check-availability.json`](../workflows/02-whatsapp-chatbot/wf-c3a-check-availability.json)
+**6 nodes:** 2x `code`, 1x `executeWorkflowTrigger`, 1x `set`, 1x `googleCalendar`, 1x `googleSheets`  
+**Trigger:** Called by another workflow  
+**Code:** 219 lines of ES5 JavaScript  
+**Export:** [`wf-c3a-check-availability.json`](../workflows/02-whatsapp-chatbot/wf-c3a-check-availability.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -158,18 +158,18 @@ Queries Google Calendar for the requested date. Returns available slots at 9am, 
 
 ### C3b · book_house_visit
 
-Re-checks for a duplicate booking and whether the lead is new, creates the calendar event, and writes the customer record.
+Re-checks for a duplicate booking and whether the lead is new, creates the calendar event, then writes the customer record.
 
-The write is the hard part. It POSTs to Google's `values:append` so the row is allocated *server-side*, and it reads the live header row to map fields **by column name** — so reordering a column cannot misalign a write. Proven under load: two simultaneous bookings produced 2/2 complete rows.
+The write is the hard part. It POSTs to Google's `values:append` so the row gets allocated server side, and it reads the live header row to map fields by column name, so reordering a column cannot push a value into the wrong field. Tested under load: two simultaneous bookings produced two complete rows.
 
 ![C3b · book_house_visit](../assets/diagrams/wf-c3b-book-house-visit.svg)
 
-**26 nodes** — 10× `code` · 5× `if` · 5× `httpRequest` · 2× `googleSheets` · 2× `googleCalendar` · 1× `executeWorkflowTrigger`  
-**Trigger** — Called by another workflow  
-**Code** — 479 lines of ES5 JavaScript  
-**Export** — [`wf-c3b-book-house-visit.json`](../workflows/02-whatsapp-chatbot/wf-c3b-book-house-visit.json)
+**26 nodes:** 10x `code`, 5x `if`, 5x `httpRequest`, 2x `googleSheets`, 2x `googleCalendar`, 1x `executeWorkflowTrigger`  
+**Trigger:** Called by another workflow  
+**Code:** 479 lines of ES5 JavaScript  
+**Export:** [`wf-c3b-book-house-visit.json`](../workflows/02-whatsapp-chatbot/wf-c3b-book-house-visit.json)
 
-> Fixing the append race exposed something worse. A two-step write — core fields, then first-touch fields — produced a *hollow* row when two new leads booked together: phone number present, no name, no email, no status. Worse than losing the row, because it looks like a real record. Collapsed to one read → merge → single atomic write.
+> Fixing the append race uncovered something worse. Writing in two steps (core fields, then first-touch fields) produced a half-empty row when two new leads booked at the same time: phone number present, no name, no email, no status. That is worse than losing the row, because it looks like a real record. Collapsed into one read, one merge, one write.
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -197,14 +197,14 @@ Called by: WF-C2 (Claude Core) via Execute Workflow node
 
 ### C3c · cancel_booking
 
-Reads the appointment log, deletes the calendar event, and updates the CRM. Rows are matched on the calendar event ID rather than phone number — matching on phone updates the wrong row whenever a customer has more than one record.
+Reads the appointment log, deletes the calendar event, updates the CRM. Rows are matched on calendar event ID rather than phone number, because matching on phone updates the wrong row as soon as a customer has more than one record.
 
 ![C3c · cancel_booking](../assets/diagrams/wf-c3c-cancel-booking.svg)
 
-**12 nodes** — 4× `code` · 3× `googleSheets` · 2× `if` · 1× `executeWorkflowTrigger` · 1× `set` · 1× `googleCalendar`  
-**Trigger** — Called by another workflow  
-**Code** — 102 lines of ES5 JavaScript  
-**Export** — [`wf-c3c-cancel-booking.json`](../workflows/02-whatsapp-chatbot/wf-c3c-cancel-booking.json)
+**12 nodes:** 4x `code`, 3x `googleSheets`, 2x `if`, 1x `executeWorkflowTrigger`, 1x `set`, 1x `googleCalendar`  
+**Trigger:** Called by another workflow  
+**Code:** 102 lines of ES5 JavaScript  
+**Export:** [`wf-c3c-cancel-booking.json`](../workflows/02-whatsapp-chatbot/wf-c3c-cancel-booking.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -227,14 +227,14 @@ Called by: WF-C2 (Claude Core) via Execute Workflow node
 
 ### C3d · reschedule_booking
 
-Moves an existing appointment. Critically, it **re-validates the target slot** before moving anything — the original implementation trusted the slot the customer named, which meant a reschedule could double-book a time that had been taken since the options were offered.
+Moves an existing appointment, and re-checks that the new slot is still free before moving anything. The first version trusted whatever slot the customer named, which meant a reschedule could double-book a time that had been taken since the options were offered.
 
 ![C3d · reschedule_booking](../assets/diagrams/wf-c3d-reschedule-booking.svg)
 
-**19 nodes** — 8× `code` · 4× `if` · 3× `googleSheets` · 2× `googleCalendar` · 1× `executeWorkflowTrigger` · 1× `set`  
-**Trigger** — Called by another workflow  
-**Code** — 321 lines of ES5 JavaScript  
-**Export** — [`wf-c3d-reschedule-booking.json`](../workflows/02-whatsapp-chatbot/wf-c3d-reschedule-booking.json)
+**19 nodes:** 8x `code`, 4x `if`, 3x `googleSheets`, 2x `googleCalendar`, 1x `executeWorkflowTrigger`, 1x `set`  
+**Trigger:** Called by another workflow  
+**Code:** 321 lines of ES5 JavaScript  
+**Export:** [`wf-c3d-reschedule-booking.json`](../workflows/02-whatsapp-chatbot/wf-c3d-reschedule-booking.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -258,16 +258,16 @@ Called by: WF-C2 (Claude Core) via Execute Workflow node
 
 ### C3e · get_business_info
 
-A small static knowledge base for pricing, service area, warranty and finance questions. Deliberately a *rare fallback* — the system prompt is the primary source of truth, and this tool exists for the long tail.
+A small static knowledge base for questions about pricing, service area, warranty and finance. It is meant to be a rare fallback. The system prompt is the source of truth and this tool covers the long tail.
 
-It once contradicted the prompt on four separate facts, which reads like a two-competing-knowledge-bases architecture problem but wasn't: the prompt was always designated as truth, and the tool had simply drifted. Rewritten to match.
+It once disagreed with the prompt on four separate facts. That reads like a two-competing-knowledge-bases problem but wasn't: the prompt was always the designated truth and the tool had simply drifted. Rewritten to match.
 
 ![C3e · get_business_info](../assets/diagrams/wf-c3e-get-business-info.svg)
 
-**2 nodes** — 1× `executeWorkflowTrigger` · 1× `code`  
-**Trigger** — Called by another workflow  
-**Code** — 47 lines of ES5 JavaScript  
-**Export** — [`wf-c3e-get-business-info.json`](../workflows/02-whatsapp-chatbot/wf-c3e-get-business-info.json)
+**2 nodes:** 1x `executeWorkflowTrigger`, 1x `code`  
+**Trigger:** Called by another workflow  
+**Code:** 47 lines of ES5 JavaScript  
+**Export:** [`wf-c3e-get-business-info.json`](../workflows/02-whatsapp-chatbot/wf-c3e-get-business-info.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -295,14 +295,14 @@ Upgrade to Supabase RAG post-MVP by replacing the Code node.
 
 ### C3f · handle_dnc
 
-Sets do-not-contact across the CRM when a customer opts out. A compliance node, not a convenience one — and one that must never report success it hasn't verified, because telling someone they've been opted out when they haven't is a UK GDPR/PECR failure.
+Sets do-not-contact across the CRM when a customer opts out. This is a compliance node, not a convenience one. It must never report success it hasn't verified, because telling someone they have been opted out when they haven't is a UK GDPR and PECR failure.
 
 ![C3f · handle_dnc](../assets/diagrams/wf-c3f-handle-dnc.svg)
 
-**4 nodes** — 1× `executeWorkflowTrigger` · 1× `set` · 1× `googleSheets` · 1× `code`  
-**Trigger** — Called by another workflow  
-**Code** — 17 lines of ES5 JavaScript  
-**Export** — [`wf-c3f-handle-dnc.json`](../workflows/02-whatsapp-chatbot/wf-c3f-handle-dnc.json)
+**4 nodes:** 1x `executeWorkflowTrigger`, 1x `set`, 1x `googleSheets`, 1x `code`  
+**Trigger:** Called by another workflow  
+**Code:** 17 lines of ES5 JavaScript  
+**Export:** [`wf-c3f-handle-dnc.json`](../workflows/02-whatsapp-chatbot/wf-c3f-handle-dnc.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -329,14 +329,14 @@ Last Channel=chatbot (D3 pattern vs voice in D2/D5).
 
 ### C3g · take_message
 
-The escape hatch. When the bot can't or shouldn't answer, it takes a message and writes a row for the owner. Uses the same atomic append pattern as C3b — verified with eight simultaneous escalations producing 8/8 rows.
+The escape hatch. When the bot can't or shouldn't answer, it takes a message and writes a row for the owner. Uses the same atomic append as C3b, tested with eight simultaneous escalations producing eight rows.
 
 ![C3g · take_message](../assets/diagrams/wf-c3g-take-message.svg)
 
-**7 nodes** — 3× `code` · 2× `httpRequest` · 1× `executeWorkflowTrigger` · 1× `set`  
-**Trigger** — Called by another workflow  
-**Code** — 114 lines of ES5 JavaScript  
-**Export** — [`wf-c3g-take-message.json`](../workflows/02-whatsapp-chatbot/wf-c3g-take-message.json)
+**7 nodes:** 3x `code`, 2x `httpRequest`, 1x `executeWorkflowTrigger`, 1x `set`  
+**Trigger:** Called by another workflow  
+**Code:** 114 lines of ES5 JavaScript  
+**Export:** [`wf-c3g-take-message.json`](../workflows/02-whatsapp-chatbot/wf-c3g-take-message.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -358,15 +358,15 @@ Called by WF-C2 when the customer needs a human: complaint, technical fault, com
 
 ### C4 · Send Reply
 
-Sends via Twilio, splitting long replies at paragraph boundaries under 1,500 characters and capping at three messages.
+Sends through Twilio, splitting long replies at paragraph boundaries under 1,500 characters and stopping at three messages.
 
-The cap exists because Twilio rejects anything over 1,600 characters outright with error `21617` — and the customer receives **nothing at all**, not a truncated message. A verbose answer meant total silence.
+The cap exists because Twilio rejects anything over 1,600 characters outright with error `21617`, and the customer gets nothing at all. Not a truncated message. Nothing. A long answer meant total silence.
 
 ![C4 · Send Reply](../assets/diagrams/wf-c4-send-reply.svg)
 
-**3 nodes** — 1× `executeWorkflowTrigger` · 1× `set` · 1× `httpRequest`  
-**Trigger** — Called by another workflow  
-**Export** — [`wf-c4-send-reply.json`](../workflows/02-whatsapp-chatbot/wf-c4-send-reply.json)
+**3 nodes:** 1x `executeWorkflowTrigger`, 1x `set`, 1x `httpRequest`  
+**Trigger:** Called by another workflow  
+**Export:** [`wf-c4-send-reply.json`](../workflows/02-whatsapp-chatbot/wf-c4-send-reply.json)
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -395,16 +395,16 @@ Sends the reply to the customer via Twilio WhatsApp API.
 
 ## Engineering notes
 
-**Seven tools, seven workflows.** Each independently testable, importable and debuggable. The monolithic predecessor is preserved in the instance as an archived 75-node workflow and was abandoned for exactly this reason.
+**Seven tools, seven workflows.** Each one can be tested, imported and debugged on its own. The monolithic first version is still on the instance, archived at 75 nodes, and it is the reason for the split.
 
-**Every concurrency defect in this project was found here**, and none of them by sequential testing. They required deliberately simultaneous load — and in the session-race case, required simulating how a human actually opens a conversation rather than how a test script does.
+**Every concurrency bug in this project was found here**, and none of them by sequential testing. They needed deliberately simultaneous load. The session race needed something more specific than that: simulating how a person actually opens a conversation rather than how a test script does.
 
-**Nine adversarial test phases** were run against the live system with evidence captured per phase: opening-hours gates, general Q&A, vague and contradictory input, booking, reschedule, cancel, message-taking, prompt-injection attempts, and opt-out. Five new defects came out of that run.
+**Nine adversarial test phases** were run against the live system with evidence saved for each one: opening hours, general Q&A, vague and contradictory input, booking, reschedule, cancel, message taking, prompt injection attempts, and opt-out. Five new bugs came out of that run.
 
-**The prompt is the source of truth, not the tool.** Worth stating because it is a genuine architectural choice in a RAG-shaped system: the knowledge tool is a fallback, and when the two disagreed the tool was wrong by definition.
+**The prompt is the source of truth, not the tool.** Worth stating because it is a real architectural choice in a system shaped like RAG. The knowledge tool is a fallback, and when the two disagreed the tool was wrong by definition.
 
 ---
 
 ## Run it
 
-Import any of the JSON exports from [`workflows/02-whatsapp-chatbot/`](../workflows/02-whatsapp-chatbot/). Credentials are stubbed as `CREDENTIAL_ID` and account identifiers as `YOUR_*` placeholders; re-map them after import.
+Import any of the JSON exports from [`workflows/02-whatsapp-chatbot/`](../workflows/02-whatsapp-chatbot/). Credentials are stubbed as `CREDENTIAL_ID` and account identifiers as `YOUR_*` placeholders, so you will need to re-map them after import.

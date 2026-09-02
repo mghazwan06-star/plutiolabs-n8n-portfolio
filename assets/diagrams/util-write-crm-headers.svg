@@ -1,31 +1,31 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-450 -130 760 654" width="760" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
-<rect x="-450" y="-130" width="760" height="654" fill="#f7f7f8"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-404 -84.0 668 419.0" width="668" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect x="-404" y="-84.0" width="668" height="419.0" fill="#f7f7f8"/>
 <defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#dcdce0"/></pattern></defs>
-<rect x="-450" y="-130" width="760" height="654" fill="url(#g)"/>
-<rect x="-360" y="-40" width="520" height="260" rx="8" fill="#fff8b8" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
-<text x="-348" y="-16" font-size="13.5" font-weight="700" fill="#5f5930">One-off utility — writes the CRM header row</text>
-<text x="-348" y="1" font-size="11.5" fill="#6f6840">Writes all 57 headers to row 1 of the Outreach CRM tab via the</text>
-<text x="-348" y="15" font-size="11.5" fill="#6f6840">Google Sheets API, using the existing Google Sheets account OAuth…</text>
-<text x="-348" y="29" font-size="11.5" fill="#6f6840">38 existing headers keep their original positions; 19 new ones are</text>
-<text x="-348" y="43" font-size="11.5" fill="#6f6840">appended (incl. Email Verify Status, which v2 emitted but the sheet…</text>
-<text x="-348" y="57" font-size="11.5" fill="#6f6840">Safe to re-run — it overwrites row 1 only, never touches data rows.</text>
-<text x="-348" y="71" font-size="11.5" fill="#6f6840">Trigger: POST to the webhook path write-crm-headers.</text>
+<rect x="-404" y="-84.0" width="668" height="419.0" fill="url(#g)"/>
+<rect x="-360" y="-40.0" width="520" height="141" rx="8" fill="#fff8b8" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="-348" y="-16.0" font-size="13.5" font-weight="700" fill="#5f5930">One-off utility — writes the CRM header row</text>
+<text x="-348" y="1.0" font-size="11.5" fill="#6f6840">Writes all 57 headers to row 1 of the Outreach CRM tab via the</text>
+<text x="-348" y="15.0" font-size="11.5" fill="#6f6840">Google Sheets API, using the existing Google Sheets account OAuth…</text>
+<text x="-348" y="29.0" font-size="11.5" fill="#6f6840">38 existing headers keep their original positions; 19 new ones are</text>
+<text x="-348" y="43.0" font-size="11.5" fill="#6f6840">appended (incl. Email Verify Status, which v2 emitted but the sheet…</text>
+<text x="-348" y="57.0" font-size="11.5" fill="#6f6840">Safe to re-run — it overwrites row 1 only, never touches data rows.</text>
+<text x="-348" y="71.0" font-size="11.5" fill="#6f6840">Trigger: POST to the webhook path write-crm-headers.</text>
 <g fill="none" stroke="#9aa0a6" stroke-width="2.5">
-<path d="M-260,350 C-197,350 -183,350 -127,350"/>
-<path d="M-127,345 L-120,350 L-127,355" fill="#9aa0a6" stroke="none"/>
-<path d="M-20,350 C43,350 57,350 113,350"/>
-<path d="M113,345 L120,350 L113,355" fill="#9aa0a6" stroke="none"/>
+<path d="M-260,207 C-197,207 -183,207 -127,207"/>
+<path d="M-127,202 L-120,207 L-127,212" fill="#9aa0a6" stroke="none"/>
+<path d="M-20,207 C43,207 57,207 113,207"/>
+<path d="M113,202 L120,207 L113,212" fill="#9aa0a6" stroke="none"/>
 </g>
-<rect x="-360" y="300" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
-<rect x="-360" y="300" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
-<text x="-310.0" y="346.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">webhook</text>
-<text x="-310.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">📥 Run Webhook</text>
-<rect x="-120" y="300" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
-<rect x="-120" y="300" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
-<text x="-70.0" y="346.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
-<text x="-70.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">🧱 Build Header Row</text>
-<rect x="120" y="300" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
-<rect x="120" y="300" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
-<text x="170.0" y="346.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
-<text x="170.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">📝 Write Row 1</text>
+<rect x="-360" y="157.0" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="-360" y="157.0" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="-310.0" y="203.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">webhook</text>
+<text x="-310.0" y="272.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">📥 Run Webhook</text>
+<rect x="-120" y="157.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="-120" y="157.0" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="-70.0" y="203.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="-70.0" y="272.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">🧱 Build Header Row</text>
+<rect x="120" y="157.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="120" y="157.0" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="170.0" y="203.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="170.0" y="272.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">📝 Write Row 1</text>
 </svg>

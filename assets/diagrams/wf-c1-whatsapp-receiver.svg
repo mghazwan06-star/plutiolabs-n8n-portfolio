@@ -1,68 +1,68 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="190 -50 1500 854" width="1500" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
-<rect x="190" y="-50" width="1500" height="854" fill="#f7f7f8"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="236 -4.0 1408 634.0" width="1408" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect x="236" y="-4.0" width="1408" height="634.0" fill="#f7f7f8"/>
 <defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#dcdce0"/></pattern></defs>
-<rect x="190" y="-50" width="1500" height="854" fill="url(#g)"/>
-<rect x="280" y="40" width="940" height="280" rx="8" fill="#fff8b8" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
-<text x="292" y="64" font-size="13.5" font-weight="700" fill="#5f5930">WF-C1: WhatsApp Receiver — Twilio Inbound Gateway</text>
-<text x="292" y="81" font-size="11.5" fill="#6f6840">Receives inbound WhatsApp messages from Twilio, responds 200 immediately (onReceived), then async-fires message to WF-C2</text>
-<text x="292" y="95" font-size="11.5" fill="#6f6840">(Claude Core).</text>
-<text x="292" y="109" font-size="11.5" fill="#6f6840">Twilio POST body fields:</text>
-<text x="292" y="123" font-size="11.5" fill="#6f6840">- From: &quot;whatsapp:+44XXXXXXXXXX&quot; → stripped to &quot;+44XXXXXXXXXX&quot; (E.164)</text>
-<text x="292" y="137" font-size="11.5" fill="#6f6840">- Body: raw message text</text>
-<text x="292" y="151" font-size="11.5" fill="#6f6840">- To: business WhatsApp number</text>
-<text x="292" y="165" font-size="11.5" fill="#6f6840">Flow: Twilio POST → Webhook (200 immediately) → ⚙️ Config → Normalize Phone → Forward to Claude Core</text>
-<text x="292" y="179" font-size="11.5" fill="#6f6840">⚠️ BEFORE ACTIVATION:</text>
-<text x="292" y="193" font-size="11.5" fill="#6f6840">1. Set wfC2WebhookUrl in ⚙️ Client Config to your n8n webhook URL (e.g. https://your-n8n.cloud/webhook/whatsapp-core)</text>
-<text x="292" y="207" font-size="11.5" fill="#6f6840">2. Point Twilio WhatsApp sandbox/number inbound webhook to this workflow&#x27;s URL</text>
-<text x="292" y="221" font-size="11.5" fill="#6f6840">3. Twilio credentials needed in WF-C4 (Send Reply) — not this workflow</text>
+<rect x="236" y="-4.0" width="1408" height="634.0" fill="url(#g)"/>
+<rect x="280" y="40.0" width="940" height="216" rx="8" fill="#fff8b8" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="292" y="64.0" font-size="13.5" font-weight="700" fill="#5f5930">WF-C1: WhatsApp Receiver — Twilio Inbound Gateway</text>
+<text x="292" y="81.0" font-size="11.5" fill="#6f6840">Receives inbound WhatsApp messages from Twilio, responds 200 immediately (onReceived), then async-fires message to WF-C2</text>
+<text x="292" y="95.0" font-size="11.5" fill="#6f6840">(Claude Core).</text>
+<text x="292" y="109.0" font-size="11.5" fill="#6f6840">Twilio POST body fields:</text>
+<text x="292" y="123.0" font-size="11.5" fill="#6f6840">- From: &quot;whatsapp:+44XXXXXXXXXX&quot; → stripped to &quot;+44XXXXXXXXXX&quot; (E.164)</text>
+<text x="292" y="137.0" font-size="11.5" fill="#6f6840">- Body: raw message text</text>
+<text x="292" y="151.0" font-size="11.5" fill="#6f6840">- To: business WhatsApp number</text>
+<text x="292" y="165.0" font-size="11.5" fill="#6f6840">Flow: Twilio POST → Webhook (200 immediately) → ⚙️ Config → Normalize Phone → Forward to Claude Core</text>
+<text x="292" y="179.0" font-size="11.5" fill="#6f6840">⚠️ BEFORE ACTIVATION:</text>
+<text x="292" y="193.0" font-size="11.5" fill="#6f6840">1. Set wfC2WebhookUrl in ⚙️ Client Config to your n8n webhook URL (e.g. https://your-n8n.cloud/webhook/whatsapp-core)</text>
+<text x="292" y="207.0" font-size="11.5" fill="#6f6840">2. Point Twilio WhatsApp sandbox/number inbound webhook to this workflow&#x27;s URL</text>
+<text x="292" y="221.0" font-size="11.5" fill="#6f6840">3. Twilio credentials needed in WF-C4 (Send Reply) — not this workflow</text>
 <g fill="none" stroke="#9aa0a6" stroke-width="2.5">
-<path d="M400,490 C463,490 477,490 533,490"/>
-<path d="M533,485 L540,490 L533,495" fill="#9aa0a6" stroke="none"/>
-<path d="M640,490 C703,490 717,490 773,490"/>
-<path d="M773,485 L780,490 L773,495" fill="#9aa0a6" stroke="none"/>
-<path d="M1120,473 C1183,473 1197,490 1253,490"/>
-<path d="M1253,485 L1260,490 L1253,495" fill="#9aa0a6" stroke="none"/>
-<path d="M1120,507 C1183,507 1197,630 1253,630"/>
-<path d="M1253,625 L1260,630 L1253,635" fill="#9aa0a6" stroke="none"/>
-<path d="M1360,630 C1423,630 1437,630 1493,630"/>
-<path d="M1493,625 L1500,630 L1493,635" fill="#9aa0a6" stroke="none"/>
-<path d="M880,490 C920,490 860,490 893,490"/>
-<path d="M893,485 L900,490 L893,495" fill="#9aa0a6" stroke="none"/>
-<path d="M1000,490 C1040,490 980,490 1013,490"/>
-<path d="M1013,485 L1020,490 L1013,495" fill="#9aa0a6" stroke="none"/>
+<path d="M400,362 C463,362 477,362 533,362"/>
+<path d="M533,357 L540,362 L533,367" fill="#9aa0a6" stroke="none"/>
+<path d="M640,362 C703,362 717,362 773,362"/>
+<path d="M773,357 L780,362 L773,367" fill="#9aa0a6" stroke="none"/>
+<path d="M1120,345 C1183,345 1197,362 1253,362"/>
+<path d="M1253,357 L1260,362 L1253,367" fill="#9aa0a6" stroke="none"/>
+<path d="M1120,379 C1183,379 1197,502 1253,502"/>
+<path d="M1253,497 L1260,502 L1253,507" fill="#9aa0a6" stroke="none"/>
+<path d="M1360,502 C1423,502 1437,502 1493,502"/>
+<path d="M1493,497 L1500,502 L1493,507" fill="#9aa0a6" stroke="none"/>
+<path d="M880,362 C920,362 860,362 893,362"/>
+<path d="M893,357 L900,362 L893,367" fill="#9aa0a6" stroke="none"/>
+<path d="M1000,362 C1040,362 980,362 1013,362"/>
+<path d="M1013,357 L1020,362 L1013,367" fill="#9aa0a6" stroke="none"/>
 </g>
-<rect x="300" y="440" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
-<rect x="300" y="440" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
-<text x="350.0" y="486.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">webhook</text>
-<text x="350.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">Webhook</text>
-<rect x="540" y="440" width="100" height="100" rx="10" fill="#ffffff" stroke="#0aa8a7" stroke-width="3"/>
-<rect x="540" y="440" width="100" height="100" rx="10" fill="#0aa8a7" fill-opacity="0.10"/>
-<text x="590.0" y="486.0" font-size="11" text-anchor="middle" fill="#0aa8a7" font-weight="700">set</text>
-<text x="590.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">⚙️ Client Config</text>
-<rect x="780" y="440" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
-<rect x="780" y="440" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
-<text x="830.0" y="486.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
-<text x="830.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">Normalize Phone</text>
-<rect x="1020" y="440" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
-<rect x="1020" y="440" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
-<text x="1070.0" y="486.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
-<text x="1070.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">Has Text Content?</text>
-<rect x="1260" y="440" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
-<rect x="1260" y="440" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
-<text x="1310.0" y="486.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
-<text x="1310.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">Forward to Claude</text>
-<text x="1310.0" y="568" font-size="11.5" text-anchor="middle" fill="#2b2f36">Core</text>
-<rect x="1260" y="580" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
-<rect x="1260" y="580" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
-<text x="1310.0" y="626.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
-<text x="1310.0" y="695" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build Media Fallback</text>
-<rect x="1500" y="580" width="100" height="100" rx="10" fill="#ffffff" stroke="#ff6d5a" stroke-width="3"/>
-<rect x="1500" y="580" width="100" height="100" rx="10" fill="#ff6d5a" fill-opacity="0.10"/>
-<text x="1550.0" y="626.0" font-size="11" text-anchor="middle" fill="#ff6d5a" font-weight="700">sub-flow</text>
-<text x="1550.0" y="695" font-size="11.5" text-anchor="middle" fill="#2b2f36">Call Send Reply -</text>
-<text x="1550.0" y="708" font-size="11.5" text-anchor="middle" fill="#2b2f36">Media</text>
-<rect x="900" y="440" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
-<rect x="900" y="440" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
-<text x="950.0" y="486.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
-<text x="950.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">Valid Sender?</text>
+<rect x="300" y="312.0" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="300" y="312.0" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="350.0" y="358.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">webhook</text>
+<text x="350.0" y="427.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Webhook</text>
+<rect x="540" y="312.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#0aa8a7" stroke-width="3"/>
+<rect x="540" y="312.0" width="100" height="100" rx="10" fill="#0aa8a7" fill-opacity="0.10"/>
+<text x="590.0" y="358.0" font-size="11" text-anchor="middle" fill="#0aa8a7" font-weight="700">set</text>
+<text x="590.0" y="427.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">⚙️ Client Config</text>
+<rect x="780" y="312.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="780" y="312.0" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="830.0" y="358.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="830.0" y="427.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Normalize Phone</text>
+<rect x="1020" y="312.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="1020" y="312.0" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="1070.0" y="358.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="1070.0" y="427.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Has Text Content?</text>
+<rect x="1260" y="312.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="1260" y="312.0" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="1310.0" y="358.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="1310.0" y="427.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Forward to Claude</text>
+<text x="1310.0" y="440.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Core</text>
+<rect x="1260" y="452.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1260" y="452.0" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1310.0" y="498.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1310.0" y="567.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build Media Fallback</text>
+<rect x="1500" y="452.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#ff6d5a" stroke-width="3"/>
+<rect x="1500" y="452.0" width="100" height="100" rx="10" fill="#ff6d5a" fill-opacity="0.10"/>
+<text x="1550.0" y="498.0" font-size="11" text-anchor="middle" fill="#ff6d5a" font-weight="700">sub-flow</text>
+<text x="1550.0" y="567.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Call Send Reply -</text>
+<text x="1550.0" y="580.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Media</text>
+<rect x="900" y="312.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="900" y="312.0" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="950.0" y="358.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="950.0" y="427.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Valid Sender?</text>
 </svg>

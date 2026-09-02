@@ -1,152 +1,152 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-426 -330 3256 1258" width="1600" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
-<rect x="-426" y="-330" width="3256" height="1258" fill="#f7f7f8"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-380 -284.0 3164 1146.0" width="1600" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect x="-380" y="-284.0" width="3164" height="1146.0" fill="#f7f7f8"/>
 <defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#dcdce0"/></pattern></defs>
-<rect x="-426" y="-330" width="3256" height="1258" fill="url(#g)"/>
-<rect x="-336" y="-240" width="340" height="420" rx="8" fill="#d9f2f2" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
-<text x="-324" y="-216" font-size="13.5" font-weight="700" fill="#5f5930">WF1 Overview</text>
-<rect x="544" y="-112" width="280" height="200" rx="8" fill="#e8d9ff" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
-<text x="556" y="-88" font-size="13.5" font-weight="700" fill="#5f5930">Lead Validation + Duplicate Guard</text>
-<rect x="1504" y="48" width="280" height="200" rx="8" fill="#ffe0b2" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
-<text x="1516" y="72" font-size="13.5" font-weight="700" fill="#5f5930">VAPI Call + Status Tracking</text>
+<rect x="-380" y="-284.0" width="3164" height="1146.0" fill="url(#g)"/>
+<rect x="-336" y="-240.0" width="340" height="70" rx="8" fill="#d9f2f2" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="-324" y="-216.0" font-size="13.5" font-weight="700" fill="#5f5930">WF1 Overview</text>
+<rect x="544" y="-114.0" width="280" height="70" rx="8" fill="#e8d9ff" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="556" y="-90.0" font-size="13.5" font-weight="700" fill="#5f5930">Lead Validation + Duplicate Guard</text>
+<rect x="1504" y="28.0" width="280" height="70" rx="8" fill="#ffe0b2" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="1516" y="52.0" font-size="13.5" font-weight="700" fill="#5f5930">VAPI Call + Status Tracking</text>
 <g fill="none" stroke="#9aa0a6" stroke-width="2.5">
-<path d="M100,354 C163,354 177,354 233,354"/>
-<path d="M233,349 L240,354 L233,359" fill="#9aa0a6" stroke="none"/>
-<path d="M340,354 C403,354 417,354 473,354"/>
-<path d="M473,349 L480,354 L473,359" fill="#9aa0a6" stroke="none"/>
-<path d="M580,354 C643,354 657,354 713,354"/>
-<path d="M713,349 L720,354 L713,359" fill="#9aa0a6" stroke="none"/>
-<path d="M820,337 C883,337 897,354 953,354"/>
-<path d="M953,349 L960,354 L953,359" fill="#9aa0a6" stroke="none"/>
-<path d="M820,371 C883,371 897,562 953,562"/>
-<path d="M953,557 L960,562 L953,567" fill="#9aa0a6" stroke="none"/>
-<path d="M1060,354 C1123,354 1137,354 1193,354"/>
-<path d="M1193,349 L1200,354 L1193,359" fill="#9aa0a6" stroke="none"/>
-<path d="M1300,337 C1363,337 1377,242 1433,242"/>
-<path d="M1433,237 L1440,242 L1433,247" fill="#9aa0a6" stroke="none"/>
-<path d="M1300,371 C1363,371 1377,354 1433,354"/>
-<path d="M1433,349 L1440,354 L1433,359" fill="#9aa0a6" stroke="none"/>
-<path d="M1780,354 C1843,354 1857,354 1913,354"/>
-<path d="M1913,349 L1920,354 L1913,359" fill="#9aa0a6" stroke="none"/>
-<path d="M2020,354 C2083,354 2097,354 2153,354"/>
-<path d="M2153,349 L2160,354 L2153,359" fill="#9aa0a6" stroke="none"/>
-<path d="M2260,337 C2323,337 2337,242 2393,242"/>
-<path d="M2393,237 L2400,242 L2393,247" fill="#9aa0a6" stroke="none"/>
-<path d="M2260,371 C2323,371 2337,482 2393,482"/>
-<path d="M2393,477 L2400,482 L2393,487" fill="#9aa0a6" stroke="none"/>
-<path d="M2260,371 C2323,371 2337,754 2393,754"/>
-<path d="M2393,749 L2400,754 L2393,759" fill="#9aa0a6" stroke="none"/>
-<path d="M2500,242 C2563,242 2577,242 2633,242"/>
-<path d="M2633,237 L2640,242 L2633,247" fill="#9aa0a6" stroke="none"/>
-<path d="M2500,482 C2563,482 2577,482 2633,482"/>
-<path d="M2633,477 L2640,482 L2633,487" fill="#9aa0a6" stroke="none"/>
-<path d="M1540,354 C1580,354 1528,194 1561,194"/>
-<path d="M1561,189 L1568,194 L1561,199" fill="#9aa0a6" stroke="none"/>
-<path d="M1540,354 C1585,354 1395,610 1433,610"/>
-<path d="M1433,605 L1440,610 L1433,615" fill="#9aa0a6" stroke="none"/>
-<path d="M1668,194 C1709,194 1719,194 1753,194"/>
-<path d="M1753,189 L1760,194 L1753,199" fill="#9aa0a6" stroke="none"/>
-<path d="M1860,177 C1941,177 1599,354 1673,354"/>
-<path d="M1673,349 L1680,354 L1673,359" fill="#9aa0a6" stroke="none"/>
-<path d="M1860,211 C1909,211 1919,82 1961,82"/>
-<path d="M1961,77 L1968,82 L1961,87" fill="#9aa0a6" stroke="none"/>
-<path d="M1540,627 C1603,627 1617,750 1673,750"/>
-<path d="M1673,745 L1680,750 L1673,755" fill="#9aa0a6" stroke="none"/>
+<path d="M100,334 C163,334 177,334 233,334"/>
+<path d="M233,329 L240,334 L233,339" fill="#9aa0a6" stroke="none"/>
+<path d="M340,334 C403,334 417,334 473,334"/>
+<path d="M473,329 L480,334 L473,339" fill="#9aa0a6" stroke="none"/>
+<path d="M580,334 C643,334 657,334 713,334"/>
+<path d="M713,329 L720,334 L713,339" fill="#9aa0a6" stroke="none"/>
+<path d="M820,317 C883,317 897,334 953,334"/>
+<path d="M953,329 L960,334 L953,339" fill="#9aa0a6" stroke="none"/>
+<path d="M820,351 C883,351 897,542 953,542"/>
+<path d="M953,537 L960,542 L953,547" fill="#9aa0a6" stroke="none"/>
+<path d="M1060,334 C1123,334 1137,334 1193,334"/>
+<path d="M1193,329 L1200,334 L1193,339" fill="#9aa0a6" stroke="none"/>
+<path d="M1300,317 C1363,317 1377,222 1433,222"/>
+<path d="M1433,217 L1440,222 L1433,227" fill="#9aa0a6" stroke="none"/>
+<path d="M1300,351 C1363,351 1377,334 1433,334"/>
+<path d="M1433,329 L1440,334 L1433,339" fill="#9aa0a6" stroke="none"/>
+<path d="M1780,334 C1843,334 1857,334 1913,334"/>
+<path d="M1913,329 L1920,334 L1913,339" fill="#9aa0a6" stroke="none"/>
+<path d="M2020,334 C2083,334 2097,334 2153,334"/>
+<path d="M2153,329 L2160,334 L2153,339" fill="#9aa0a6" stroke="none"/>
+<path d="M2260,317 C2323,317 2337,222 2393,222"/>
+<path d="M2393,217 L2400,222 L2393,227" fill="#9aa0a6" stroke="none"/>
+<path d="M2260,351 C2323,351 2337,462 2393,462"/>
+<path d="M2393,457 L2400,462 L2393,467" fill="#9aa0a6" stroke="none"/>
+<path d="M2260,351 C2323,351 2337,734 2393,734"/>
+<path d="M2393,729 L2400,734 L2393,739" fill="#9aa0a6" stroke="none"/>
+<path d="M2500,222 C2563,222 2577,222 2633,222"/>
+<path d="M2633,217 L2640,222 L2633,227" fill="#9aa0a6" stroke="none"/>
+<path d="M2500,462 C2563,462 2577,462 2633,462"/>
+<path d="M2633,457 L2640,462 L2633,467" fill="#9aa0a6" stroke="none"/>
+<path d="M1540,334 C1580,334 1528,174 1561,174"/>
+<path d="M1561,169 L1568,174 L1561,179" fill="#9aa0a6" stroke="none"/>
+<path d="M1540,334 C1585,334 1395,590 1433,590"/>
+<path d="M1433,585 L1440,590 L1433,595" fill="#9aa0a6" stroke="none"/>
+<path d="M1668,174 C1709,174 1719,174 1753,174"/>
+<path d="M1753,169 L1760,174 L1753,179" fill="#9aa0a6" stroke="none"/>
+<path d="M1860,157 C1941,157 1599,334 1673,334"/>
+<path d="M1673,329 L1680,334 L1673,339" fill="#9aa0a6" stroke="none"/>
+<path d="M1860,191 C1909,191 1919,62 1961,62"/>
+<path d="M1961,57 L1968,62 L1961,67" fill="#9aa0a6" stroke="none"/>
+<path d="M1540,607 C1603,607 1617,730 1673,730"/>
+<path d="M1673,725 L1680,730 L1673,735" fill="#9aa0a6" stroke="none"/>
 </g>
-<rect x="0" y="304" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
-<rect x="0" y="304" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
-<text x="50.0" y="350.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">webhook</text>
-<text x="50.0" y="419" font-size="11.5" text-anchor="middle" fill="#2b2f36">Webhook Lead Intake</text>
-<rect x="240" y="304" width="100" height="100" rx="10" fill="#ffffff" stroke="#0aa8a7" stroke-width="3"/>
-<rect x="240" y="304" width="100" height="100" rx="10" fill="#0aa8a7" fill-opacity="0.10"/>
-<text x="290.0" y="350.0" font-size="11" text-anchor="middle" fill="#0aa8a7" font-weight="700">set</text>
-<text x="290.0" y="419" font-size="11.5" text-anchor="middle" fill="#2b2f36">Client Config</text>
-<rect x="480" y="304" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
-<rect x="480" y="304" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
-<text x="530.0" y="350.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
-<text x="530.0" y="419" font-size="11.5" text-anchor="middle" fill="#2b2f36">Parse Lead Data</text>
-<rect x="720" y="304" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
-<rect x="720" y="304" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
-<text x="770.0" y="350.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
-<text x="770.0" y="419" font-size="11.5" text-anchor="middle" fill="#2b2f36">Phone Valid</text>
-<rect x="960" y="512" width="100" height="100" rx="10" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
-<rect x="960" y="512" width="100" height="100" rx="10" fill="#f0a30a" fill-opacity="0.10"/>
-<text x="1010.0" y="558.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">respond</text>
-<text x="1010.0" y="627" font-size="11.5" text-anchor="middle" fill="#2b2f36">Respond 400</text>
-<rect x="960" y="304" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
-<rect x="960" y="304" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
-<text x="1010.0" y="350.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
-<text x="1010.0" y="419" font-size="11.5" text-anchor="middle" fill="#2b2f36">Check Existing Lead</text>
-<rect x="1200" y="304" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
-<rect x="1200" y="304" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
-<text x="1250.0" y="350.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
-<text x="1250.0" y="419" font-size="11.5" text-anchor="middle" fill="#2b2f36">Lead Already</text>
-<text x="1250.0" y="432" font-size="11.5" text-anchor="middle" fill="#2b2f36">Processed</text>
-<rect x="1440" y="192" width="100" height="100" rx="10" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
-<rect x="1440" y="192" width="100" height="100" rx="10" fill="#f0a30a" fill-opacity="0.10"/>
-<text x="1490.0" y="238.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">respond</text>
-<text x="1490.0" y="307" font-size="11.5" text-anchor="middle" fill="#2b2f36">Respond 200 Already</text>
-<text x="1490.0" y="320" font-size="11.5" text-anchor="middle" fill="#2b2f36">Handled</text>
-<rect x="1440" y="304" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
-<rect x="1440" y="304" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
-<text x="1490.0" y="350.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
-<text x="1490.0" y="419" font-size="11.5" text-anchor="middle" fill="#2b2f36">Write Client Row</text>
-<rect x="1680" y="304" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
-<rect x="1680" y="304" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
-<text x="1730.0" y="350.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
-<text x="1730.0" y="419" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build VAPI Payload</text>
-<rect x="1920" y="304" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
-<rect x="1920" y="304" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
-<text x="1970.0" y="350.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
-<text x="1970.0" y="419" font-size="11.5" text-anchor="middle" fill="#2b2f36">Fire Outbound Call</text>
-<rect x="2160" y="304" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
-<rect x="2160" y="304" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
-<text x="2210.0" y="350.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
-<text x="2210.0" y="419" font-size="11.5" text-anchor="middle" fill="#2b2f36">Call Fired</text>
-<rect x="2400" y="192" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
-<rect x="2400" y="192" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
-<text x="2450.0" y="238.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
-<text x="2450.0" y="307" font-size="11.5" text-anchor="middle" fill="#2b2f36">Update Status Call</text>
-<text x="2450.0" y="320" font-size="11.5" text-anchor="middle" fill="#2b2f36">Initiated</text>
-<rect x="2640" y="192" width="100" height="100" rx="10" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
-<rect x="2640" y="192" width="100" height="100" rx="10" fill="#f0a30a" fill-opacity="0.10"/>
-<text x="2690.0" y="238.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">respond</text>
-<text x="2690.0" y="307" font-size="11.5" text-anchor="middle" fill="#2b2f36">Respond 200 Call</text>
-<text x="2690.0" y="320" font-size="11.5" text-anchor="middle" fill="#2b2f36">Initiated</text>
-<rect x="2400" y="432" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
-<rect x="2400" y="432" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
-<text x="2450.0" y="478.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
-<text x="2450.0" y="547" font-size="11.5" text-anchor="middle" fill="#2b2f36">Reset Status VAPI</text>
-<text x="2450.0" y="560" font-size="11.5" text-anchor="middle" fill="#2b2f36">Failed</text>
-<rect x="2400" y="704" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
-<rect x="2400" y="704" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
-<text x="2450.0" y="750.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
-<text x="2450.0" y="819" font-size="11.5" text-anchor="middle" fill="#2b2f36">Alert Owner VAPI</text>
-<text x="2450.0" y="832" font-size="11.5" text-anchor="middle" fill="#2b2f36">Failed</text>
-<rect x="2640" y="432" width="100" height="100" rx="10" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
-<rect x="2640" y="432" width="100" height="100" rx="10" fill="#f0a30a" fill-opacity="0.10"/>
-<text x="2690.0" y="478.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">respond</text>
-<text x="2690.0" y="547" font-size="11.5" text-anchor="middle" fill="#2b2f36">Respond 200 VAPI</text>
-<text x="2690.0" y="560" font-size="11.5" text-anchor="middle" fill="#2b2f36">Failed</text>
-<rect x="1568" y="144" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
-<rect x="1568" y="144" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
-<text x="1618.0" y="190.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
-<text x="1618.0" y="259" font-size="11.5" text-anchor="middle" fill="#2b2f36">Business Hours Check</text>
-<rect x="1760" y="144" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
-<rect x="1760" y="144" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
-<text x="1810.0" y="190.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
-<text x="1810.0" y="259" font-size="11.5" text-anchor="middle" fill="#2b2f36">Within Business</text>
-<text x="1810.0" y="272" font-size="11.5" text-anchor="middle" fill="#2b2f36">Hours?</text>
-<rect x="1968" y="32" width="100" height="100" rx="10" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
-<rect x="1968" y="32" width="100" height="100" rx="10" fill="#f0a30a" fill-opacity="0.10"/>
-<text x="2018.0" y="78.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">respond</text>
-<text x="2018.0" y="147" font-size="11.5" text-anchor="middle" fill="#2b2f36">Respond 200 Queued</text>
-<rect x="1440" y="560" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
-<rect x="1440" y="560" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
-<text x="1490.0" y="606.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
-<text x="1490.0" y="675" font-size="11.5" text-anchor="middle" fill="#2b2f36">Lead Row Written?</text>
-<rect x="1680" y="700" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
-<rect x="1680" y="700" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
-<text x="1730.0" y="746.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
-<text x="1730.0" y="815" font-size="11.5" text-anchor="middle" fill="#2b2f36">Alert Owner — Lead</text>
-<text x="1730.0" y="828" font-size="11.5" text-anchor="middle" fill="#2b2f36">Row NOT Saved</text>
+<rect x="0" y="284.0" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="0" y="284.0" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="50.0" y="330.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">webhook</text>
+<text x="50.0" y="399.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Webhook Lead Intake</text>
+<rect x="240" y="284.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#0aa8a7" stroke-width="3"/>
+<rect x="240" y="284.0" width="100" height="100" rx="10" fill="#0aa8a7" fill-opacity="0.10"/>
+<text x="290.0" y="330.0" font-size="11" text-anchor="middle" fill="#0aa8a7" font-weight="700">set</text>
+<text x="290.0" y="399.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Client Config</text>
+<rect x="480" y="284.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="480" y="284.0" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="530.0" y="330.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="530.0" y="399.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Parse Lead Data</text>
+<rect x="720" y="284.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="720" y="284.0" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="770.0" y="330.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="770.0" y="399.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Phone Valid</text>
+<rect x="960" y="492.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="960" y="492.0" width="100" height="100" rx="10" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="1010.0" y="538.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">respond</text>
+<text x="1010.0" y="607.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Respond 400</text>
+<rect x="960" y="284.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="960" y="284.0" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="1010.0" y="330.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="1010.0" y="399.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Check Existing Lead</text>
+<rect x="1200" y="284.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="1200" y="284.0" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="1250.0" y="330.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="1250.0" y="399.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Lead Already</text>
+<text x="1250.0" y="412.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Processed</text>
+<rect x="1440" y="172.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="1440" y="172.0" width="100" height="100" rx="10" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="1490.0" y="218.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">respond</text>
+<text x="1490.0" y="287.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Respond 200 Already</text>
+<text x="1490.0" y="300.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Handled</text>
+<rect x="1440" y="284.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="1440" y="284.0" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="1490.0" y="330.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="1490.0" y="399.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Write Client Row</text>
+<rect x="1680" y="284.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1680" y="284.0" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1730.0" y="330.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1730.0" y="399.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build VAPI Payload</text>
+<rect x="1920" y="284.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="1920" y="284.0" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="1970.0" y="330.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="1970.0" y="399.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Fire Outbound Call</text>
+<rect x="2160" y="284.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="2160" y="284.0" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="2210.0" y="330.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="2210.0" y="399.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Call Fired</text>
+<rect x="2400" y="172.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="2400" y="172.0" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="2450.0" y="218.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="2450.0" y="287.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Update Status Call</text>
+<text x="2450.0" y="300.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Initiated</text>
+<rect x="2640" y="172.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="2640" y="172.0" width="100" height="100" rx="10" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="2690.0" y="218.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">respond</text>
+<text x="2690.0" y="287.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Respond 200 Call</text>
+<text x="2690.0" y="300.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Initiated</text>
+<rect x="2400" y="412.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="2400" y="412.0" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="2450.0" y="458.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="2450.0" y="527.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Reset Status VAPI</text>
+<text x="2450.0" y="540.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Failed</text>
+<rect x="2400" y="684.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2400" y="684.0" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2450.0" y="730.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2450.0" y="799.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Alert Owner VAPI</text>
+<text x="2450.0" y="812.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Failed</text>
+<rect x="2640" y="412.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="2640" y="412.0" width="100" height="100" rx="10" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="2690.0" y="458.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">respond</text>
+<text x="2690.0" y="527.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Respond 200 VAPI</text>
+<text x="2690.0" y="540.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Failed</text>
+<rect x="1568" y="124.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1568" y="124.0" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1618.0" y="170.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1618.0" y="239.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Business Hours Check</text>
+<rect x="1760" y="124.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="1760" y="124.0" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="1810.0" y="170.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="1810.0" y="239.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Within Business</text>
+<text x="1810.0" y="252.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Hours?</text>
+<rect x="1968" y="12.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="1968" y="12.0" width="100" height="100" rx="10" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="2018.0" y="58.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">respond</text>
+<text x="2018.0" y="127.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Respond 200 Queued</text>
+<rect x="1440" y="540.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="1440" y="540.0" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="1490.0" y="586.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="1490.0" y="655.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Lead Row Written?</text>
+<rect x="1680" y="680.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="1680" y="680.0" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="1730.0" y="726.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="1730.0" y="795.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Alert Owner — Lead</text>
+<text x="1730.0" y="808.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Row NOT Saved</text>
 </svg>

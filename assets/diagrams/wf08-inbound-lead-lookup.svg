@@ -1,71 +1,71 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-330 -410 1640 986" width="1600" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
-<rect x="-330" y="-410" width="1640" height="986" fill="#f7f7f8"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-284 -364.0 1548 791.0" width="1548" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect x="-284" y="-364.0" width="1548" height="791.0" fill="#f7f7f8"/>
 <defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#dcdce0"/></pattern></defs>
-<rect x="-330" y="-410" width="1640" height="986" fill="url(#g)"/>
-<rect x="-240" y="-320" width="380" height="440" rx="8" fill="#d9f2f2" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
-<text x="-228" y="-296" font-size="13.5" font-weight="700" fill="#5f5930">WF8 — Inbound Lead Lookup</text>
-<text x="-228" y="-279" font-size="11.5" fill="#6f6840">Called SYNCHRONOUSLY by WF-IN2 on every</text>
-<text x="-228" y="-265" font-size="11.5" fill="#6f6840">assistant-request event.</text>
-<text x="-228" y="-251" font-size="11.5" fill="#6f6840">Runs BEFORE the AI speaks — must complete in &lt; 3</text>
-<text x="-228" y="-237" font-size="11.5" fill="#6f6840">seconds.</text>
-<text x="-228" y="-223" font-size="11.5" fill="#6f6840">Flow:</text>
-<text x="-228" y="-209" font-size="11.5" fill="#6f6840">1. Extract phone from VAPI assistant-request</text>
-<text x="-228" y="-195" font-size="11.5" fill="#6f6840">payload</text>
-<text x="-228" y="-181" font-size="11.5" fill="#6f6840">2. No phone (withheld number) → return empty</text>
-<text x="-228" y="-167" font-size="11.5" fill="#6f6840">variables</text>
-<text x="-228" y="-153" font-size="11.5" fill="#6f6840">3. Lookup phone in Clients tab</text>
-<text x="-228" y="-139" font-size="11.5" fill="#6f6840">4. Return { variables: {...} } with callerName,</text>
-<text x="-228" y="-125" font-size="11.5" fill="#6f6840">serviceInterest, isExistingLead, callCount,…</text>
-<text x="-228" y="-111" font-size="11.5" fill="#6f6840">VAPI injects these into the AI system prompt</text>
-<text x="-228" y="-97" font-size="11.5" fill="#6f6840">before first speech.</text>
-<text x="-228" y="-83" font-size="11.5" fill="#6f6840">Upstream: WF-IN2 (sync call on assistant-request)</text>
-<text x="-228" y="-69" font-size="11.5" fill="#6f6840">Downstream: Returns { variables: {...} } to WF-IN2</text>
-<text x="-228" y="-55" font-size="11.5" fill="#6f6840">Sheets: Reads Clients. NEVER writes.</text>
-<text x="-228" y="-41" font-size="11.5" fill="#6f6840">⚠️ Constraint: must complete in &lt; 3 seconds.</text>
+<rect x="-284" y="-364.0" width="1548" height="791.0" fill="url(#g)"/>
+<rect x="-240" y="-320.0" width="380" height="321" rx="8" fill="#d9f2f2" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="-228" y="-296.0" font-size="13.5" font-weight="700" fill="#5f5930">WF8 — Inbound Lead Lookup</text>
+<text x="-228" y="-279.0" font-size="11.5" fill="#6f6840">Called SYNCHRONOUSLY by WF-IN2 on every</text>
+<text x="-228" y="-265.0" font-size="11.5" fill="#6f6840">assistant-request event.</text>
+<text x="-228" y="-251.0" font-size="11.5" fill="#6f6840">Runs BEFORE the AI speaks — must complete in &lt; 3</text>
+<text x="-228" y="-237.0" font-size="11.5" fill="#6f6840">seconds.</text>
+<text x="-228" y="-223.0" font-size="11.5" fill="#6f6840">Flow:</text>
+<text x="-228" y="-209.0" font-size="11.5" fill="#6f6840">1. Extract phone from VAPI assistant-request</text>
+<text x="-228" y="-195.0" font-size="11.5" fill="#6f6840">payload</text>
+<text x="-228" y="-181.0" font-size="11.5" fill="#6f6840">2. No phone (withheld number) → return empty</text>
+<text x="-228" y="-167.0" font-size="11.5" fill="#6f6840">variables</text>
+<text x="-228" y="-153.0" font-size="11.5" fill="#6f6840">3. Lookup phone in Clients tab</text>
+<text x="-228" y="-139.0" font-size="11.5" fill="#6f6840">4. Return { variables: {...} } with callerName,</text>
+<text x="-228" y="-125.0" font-size="11.5" fill="#6f6840">serviceInterest, isExistingLead, callCount,…</text>
+<text x="-228" y="-111.0" font-size="11.5" fill="#6f6840">VAPI injects these into the AI system prompt</text>
+<text x="-228" y="-97.0" font-size="11.5" fill="#6f6840">before first speech.</text>
+<text x="-228" y="-83.0" font-size="11.5" fill="#6f6840">Upstream: WF-IN2 (sync call on assistant-request)</text>
+<text x="-228" y="-69.0" font-size="11.5" fill="#6f6840">Downstream: Returns { variables: {...} } to WF-IN2</text>
+<text x="-228" y="-55.0" font-size="11.5" fill="#6f6840">Sheets: Reads Clients. NEVER writes.</text>
+<text x="-228" y="-41.0" font-size="11.5" fill="#6f6840">⚠️ Constraint: must complete in &lt; 3 seconds.</text>
 <g fill="none" stroke="#9aa0a6" stroke-width="2.5">
-<path d="M100,306 C156,306 168,306 217,306"/>
-<path d="M217,301 L224,306 L217,311" fill="#9aa0a6" stroke="none"/>
-<path d="M324,306 C380,306 392,306 441,306"/>
-<path d="M441,301 L448,306 L441,311" fill="#9aa0a6" stroke="none"/>
-<path d="M548,306 C604,306 616,306 665,306"/>
-<path d="M665,301 L672,306 L665,311" fill="#9aa0a6" stroke="none"/>
-<path d="M772,289 C828,289 840,402 889,402"/>
-<path d="M889,397 L896,402 L889,407" fill="#9aa0a6" stroke="none"/>
-<path d="M772,323 C828,323 840,210 889,210"/>
-<path d="M889,205 L896,210 L889,215" fill="#9aa0a6" stroke="none"/>
-<path d="M996,402 C1052,402 1064,402 1113,402"/>
-<path d="M1113,397 L1120,402 L1113,407" fill="#9aa0a6" stroke="none"/>
+<path d="M100,203 C156,203 168,203 217,203"/>
+<path d="M217,198 L224,203 L217,208" fill="#9aa0a6" stroke="none"/>
+<path d="M324,203 C380,203 392,203 441,203"/>
+<path d="M441,198 L448,203 L441,208" fill="#9aa0a6" stroke="none"/>
+<path d="M548,203 C604,203 616,203 665,203"/>
+<path d="M665,198 L672,203 L665,208" fill="#9aa0a6" stroke="none"/>
+<path d="M772,186 C828,186 840,299 889,299"/>
+<path d="M889,294 L896,299 L889,304" fill="#9aa0a6" stroke="none"/>
+<path d="M772,220 C828,220 840,107 889,107"/>
+<path d="M889,102 L896,107 L889,112" fill="#9aa0a6" stroke="none"/>
+<path d="M996,299 C1052,299 1064,299 1113,299"/>
+<path d="M1113,294 L1120,299 L1113,304" fill="#9aa0a6" stroke="none"/>
 </g>
-<rect x="0" y="256" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
-<rect x="0" y="256" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
-<text x="50.0" y="302.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">sub-flow</text>
-<text x="50.0" y="316.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">in</text>
-<text x="50.0" y="371" font-size="11.5" text-anchor="middle" fill="#2b2f36">Execute Workflow</text>
-<text x="50.0" y="384" font-size="11.5" text-anchor="middle" fill="#2b2f36">Trigger</text>
-<rect x="224" y="256" width="100" height="100" rx="10" fill="#ffffff" stroke="#0aa8a7" stroke-width="3"/>
-<rect x="224" y="256" width="100" height="100" rx="10" fill="#0aa8a7" fill-opacity="0.10"/>
-<text x="274.0" y="302.0" font-size="11" text-anchor="middle" fill="#0aa8a7" font-weight="700">set</text>
-<text x="274.0" y="371" font-size="11.5" text-anchor="middle" fill="#2b2f36">⚙️ Client Config</text>
-<rect x="448" y="256" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
-<rect x="448" y="256" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
-<text x="498.0" y="302.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
-<text x="498.0" y="371" font-size="11.5" text-anchor="middle" fill="#2b2f36">Extract Caller Phone</text>
-<rect x="672" y="256" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
-<rect x="672" y="256" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
-<text x="722.0" y="302.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
-<text x="722.0" y="371" font-size="11.5" text-anchor="middle" fill="#2b2f36">Phone Present?</text>
-<rect x="896" y="352" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
-<rect x="896" y="352" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
-<text x="946.0" y="398.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
-<text x="946.0" y="467" font-size="11.5" text-anchor="middle" fill="#2b2f36">Read Caller Record</text>
-<rect x="1120" y="352" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
-<rect x="1120" y="352" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
-<text x="1170.0" y="398.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
-<text x="1170.0" y="467" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build Variables</text>
-<text x="1170.0" y="480" font-size="11.5" text-anchor="middle" fill="#2b2f36">Response</text>
-<rect x="896" y="160" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
-<rect x="896" y="160" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
-<text x="946.0" y="206.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
-<text x="946.0" y="275" font-size="11.5" text-anchor="middle" fill="#2b2f36">Return Empty</text>
-<text x="946.0" y="288" font-size="11.5" text-anchor="middle" fill="#2b2f36">Variables</text>
+<rect x="0" y="153.0" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="0" y="153.0" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="50.0" y="199.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">sub-flow</text>
+<text x="50.0" y="213.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">in</text>
+<text x="50.0" y="268.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Execute Workflow</text>
+<text x="50.0" y="281.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Trigger</text>
+<rect x="224" y="153.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#0aa8a7" stroke-width="3"/>
+<rect x="224" y="153.0" width="100" height="100" rx="10" fill="#0aa8a7" fill-opacity="0.10"/>
+<text x="274.0" y="199.0" font-size="11" text-anchor="middle" fill="#0aa8a7" font-weight="700">set</text>
+<text x="274.0" y="268.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">⚙️ Client Config</text>
+<rect x="448" y="153.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="448" y="153.0" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="498.0" y="199.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="498.0" y="268.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Extract Caller Phone</text>
+<rect x="672" y="153.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="672" y="153.0" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="722.0" y="199.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="722.0" y="268.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Phone Present?</text>
+<rect x="896" y="249.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="896" y="249.0" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="946.0" y="295.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="946.0" y="364.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Read Caller Record</text>
+<rect x="1120" y="249.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1120" y="249.0" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1170.0" y="295.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1170.0" y="364.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build Variables</text>
+<text x="1170.0" y="377.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Response</text>
+<rect x="896" y="57.0" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="896" y="57.0" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="946.0" y="103.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="946.0" y="172.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Return Empty</text>
+<text x="946.0" y="185.0" font-size="11.5" text-anchor="middle" fill="#2b2f36">Variables</text>
 </svg>
