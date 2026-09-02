@@ -1,0 +1,4926 @@
+{
+  "id": "cZ3gkYFc11fI1npG",
+  "name": "Voice Agent — 06 Inbound SMS Handler",
+  "description": null,
+  "active": true,
+  "activeVersionId": "71832a9d-43a8-46b2-a0cb-feebef273900",
+  "createdAt": "2026-04-12T21:25:49.275Z",
+  "updatedAt": "2026-08-22T12:57:16.632Z",
+  "isArchived": false,
+  "versionCounter": 46,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "wf6-sticky-overview",
+      "name": "📋 WF6 Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -260,
+        -240
+      ],
+      "parameters": {
+        "content": "## WF6 — Inbound SMS Handler\n\nHandles all inbound SMS replies on the Twilio business number.\n\n**Flow:** Twilio webhook → normalize phone → read lead → log SMS → classify intent (Claude AI) → act\n\n**Actions by intent:**\n- **opt-out** (STOP/UNSUBSCRIBE): Status=do-not-contact, SMS Opt-Out=Y + confirmation SMS\n- **do-not-contact**: Status=do-not-contact + reply SMS\n- **callback**: Status=callback-scheduled + Callback Time ISO\n- **positive**: Status=callback-requested + reply SMS + alert owner\n- **confirm** (BEVESTIG): Null-check → Updates ConfirmedAt + reply SMS (or 'no appt found' reply)\n- **cancel** (ANNULEER): Null-check → Cancels appointment + Clients Status=callback-requested + reply SMS (or 'no appt found' reply)\n- **unknown intent**: Alert owner\n- **unknown number**: Alert owner\n\n**Trigger:** POST /webhook/wf6-sms-inbound",
+        "height": 560,
+        "width": 420,
+        "color": 7
+      }
+    },
+    {
+      "id": "wf6-sticky-sections",
+      "name": "🔍 Intake & Classification",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        460,
+        60
+      ],
+      "parameters": {
+        "content": "## Intake & Classification\n\n1. Receive Twilio webhook\n2. Normalize phone → E.164\n3. Read lead row from Sheets by Phone\n4. Log inbound SMS to Messages tab\n5. Lead not found → alert owner, stop\n6. Classify intent via Claude Haiku\n7. STOP keyword override\n8. Route to intent branch",
+        "height": 200,
+        "width": 500,
+        "color": 5
+      }
+    },
+    {
+      "id": "wf6-webhook",
+      "name": "Twilio Inbound SMS",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wf6-sms-inbound",
+        "responseMode": "onReceived",
+        "options": {
+          "responseCode": 200,
+          "responseData": ""
+        },
+        "authentication": "basicAuth"
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "a0d15e15-4400-4bd3-895e-3f79fe9f5c26",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "CREDENTIAL_ID",
+          "name": "D2 WF6 Twilio Inbound Basic Auth"
+        }
+      }
+    },
+    {
+      "id": "wf6-config",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-sheetId",
+              "name": "sheetId",
+              "value": "YOUR_CRM_SHEET_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-clientsTab",
+              "name": "clientsTab",
+              "value": "Clients",
+              "type": "string"
+            },
+            {
+              "id": "cfg-messagesTab",
+              "name": "messagesTab",
+              "value": "Messages",
+              "type": "string"
+            },
+            {
+              "id": "cfg-apptTab",
+              "name": "appointmentsTab",
+              "value": "Appointment Log",
+              "type": "string"
+            },
+            {
+              "id": "cfg-calendarId",
+              "name": "calendarId",
+              "value": "primary",
+              "type": "string"
+            },
+            {
+              "id": "cfg-businessName",
+              "name": "businessName",
+              "value": "Solarify",
+              "type": "string"
+            },
+            {
+              "id": "cfg-twilioFrom",
+              "name": "twilioFromNumber",
+              "value": "PLACEHOLDER_TWILIO_NUMBER",
+              "type": "string"
+            },
+            {
+              "id": "cfg-ownerPhone",
+              "name": "businessOwnerPhone",
+              "value": "PLACEHOLDER_OWNER_PHONE",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "includeOtherFields": true
+        },
+        "includeOtherFields": true
+      }
+    },
+    {
+      "id": "wf6-parse",
+      "name": "Parse SMS Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "jsCode": "try {\n  var item = $input.first().json;\n  var body = item.body || {};\n  var from = body.From || body.from || '';\n  var rawMessage = (body.Body || body.body || '').trim();\n  var messageSid = body.MessageSid || body.messageSid || '';\n  var phone = from;\n  if (phone && phone.charAt(0) === '0') { phone = '+44' + phone.substring(1); }\n  else if (phone && phone.charAt(0) !== '+') { phone = '+' + phone; }\n  phone = phone.replace(/[^+\\d]/g, '');\n  // callback_day added 2026-08-22: the prompt previously returned only HH:MM, so \"call me\n  // tomorrow at 3pm\" silently lost the day and was scheduled for TODAY.\n  var systemPrompt = 'You are classifying SMS replies from leads for a UK home services company (solar panels, insulation). Return JSON only, no extra text: {\"intent\":\"opt-out|do-not-contact|confirm|cancel|callback|positive|unknown\",\"callback_time\":\"HH:MM 24h or null\",\"callback_day\":\"today|tomorrow|YYYY-MM-DD|null\"}. Rules: opt-out=STOP UNSUBSCRIBE QUIT END (exact keywords only, carrier compliance). do-not-contact=do not call, not interested, dont contact me, leave me alone. confirm=CONFIRM yes confirmed I will come I am there confirm appointment. cancel=CANCEL cant make it cancel appointment cancel my booking. callback=call me later call me back call me at X tomorrow ring me. positive=yes interested tell me more how does it work I want more information. unknown=anything else. For callback_day: use \"tomorrow\" if they say tomorrow, \"today\" if they say today or later today, an explicit YYYY-MM-DD if they name a date, otherwise null.';\n  var claudePayload = { model: 'claude-haiku-4-5-20251001', max_tokens: 120, system: systemPrompt, messages: [{ role: 'user', content: rawMessage }] };\n  return [{ json: { phone: phone, rawMessage: rawMessage, messageSid: messageSid, claudePayload: claudePayload, receivedAt: new Date().toISOString() } }];\n} catch(e) { throw new Error('WF6 Parse SMS error: ' + e.message); }"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf6-read-lead",
+      "name": "Read Lead from Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Phone",
+              "lookupValue": "={{ $json.phone }}"
+            }
+          ]
+        },
+        "range": "A:Z",
+        "options": {
+          "returnFirstMatch": true
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "wf6-lead-found",
+      "name": "Lead Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1200,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "phone-exists-in-sheet",
+              "leftValue": "={{ $('Read Lead from Sheets').first().json['Phone'] }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf6-classify",
+      "name": "Classify Intent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1440,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Parse SMS Data').first().json.claudePayload }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "anthropicApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "id": "wf6-parse-intent",
+      "name": "Parse Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        200
+      ],
+      "parameters": {
+        "jsCode": "try {\n  var claudeResponse = $input.first().json;\n  var parseData = $('Parse SMS Data').first().json;\n  var leadData = $('Read Lead from Sheets').first().json;\n  var content = '';\n  if (claudeResponse.content && claudeResponse.content[0] && claudeResponse.content[0].text) { content = claudeResponse.content[0].text.trim(); }\n  var parsed = {};\n  try { content = content.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim(); parsed = JSON.parse(content); } catch(pe) { parsed = { intent: 'unknown', callback_time: null, callback_day: null }; }\n  var intent = parsed.intent || 'unknown';\n  var callbackTime = parsed.callback_time || null;\n  var callbackDay = parsed.callback_day || null;\n  var raw = (parseData.rawMessage || '');\n  var upperMsg = raw.toUpperCase().trim();\n  var stopWords = ['STOP', 'UNSUBSCRIBE', 'QUIT', 'CANCEL', 'END'];\n  for (var i = 0; i < stopWords.length; i++) { if (upperMsg === stopWords[i]) { intent = 'opt-out'; break; } }\n\n  function londonInstant(y, mo, d, hh, mm) {\n    var m = mo + 1;\n    var off = (m >= 3 && m <= 10) ? 1 : 0;\n    return new Date(Date.UTC(y, mo, d, hh - off, mm, 0, 0));\n  }\n\n  var callbackTimeISO = '';\n  if (callbackTime && intent === 'callback') {\n    var parts = callbackTime.match(/(\\d{1,2}):(\\d{2})/);\n    if (parts) {\n      var hours = parseInt(parts[1], 10);\n      var minutes = parseInt(parts[2], 10);\n      var now = new Date();\n      var base = new Date(now.getTime());\n      var dayStr = String(callbackDay || '').toLowerCase();\n      // belt and braces: honour \"tomorrow\" in the raw text even if the model omitted callback_day\n      if (!dayStr && raw.toLowerCase().indexOf('tomorrow') >= 0) { dayStr = 'tomorrow'; }\n      var isoDay = dayStr.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);\n      if (isoDay) {\n        base = new Date(Date.UTC(parseInt(isoDay[1], 10), parseInt(isoDay[2], 10) - 1, parseInt(isoDay[3], 10)));\n      } else if (dayStr.indexOf('tomorrow') >= 0) {\n        base.setUTCDate(base.getUTCDate() + 1);\n      }\n      var dt = londonInstant(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), hours, minutes);\n      if (dt.getTime() <= now.getTime()) {\n        var b2 = new Date(dt.getTime());\n        b2.setUTCDate(b2.getUTCDate() + 1);\n        dt = londonInstant(b2.getUTCFullYear(), b2.getUTCMonth(), b2.getUTCDate(), hours, minutes);\n      }\n      callbackTimeISO = dt.toISOString();\n    }\n  }\n  if (intent === 'callback' && !callbackTimeISO) { callbackTimeISO = new Date(Date.now() + 30 * 60 * 1000).toISOString(); }\n  return [{ json: { intent: intent, callbackTimeISO: callbackTimeISO, phone: parseData.phone, leadName: leadData['Name'] || 'Lead', rawMessage: parseData.rawMessage } }];\n} catch(e) { return [{ json: { intent: 'unknown', callbackTimeISO: '', phone: $('Parse SMS Data').first().json.phone || '', leadName: 'Lead', rawMessage: $('Parse SMS Data').first().json.rawMessage || '' } }]; }"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf6-switch",
+      "name": "Route by Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1920,
+        200
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "opt-out",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "rule-optout"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "opt-out",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "do-not-contact",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "rule-dnc"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "do-not-contact",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "callback",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "rule-callback"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "callback",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "positive",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "rule-positive"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "positive",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "confirm",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "rule-confirm"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "confirm",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "cancel",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "rule-cancel"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "cancel",
+              "renameOutput": true
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf6-update-optout",
+      "name": "Update Clients — Opt Out",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2160,
+        -60
+      ],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $json.phone }}",
+            "Status": "do-not-contact",
+            "SMS Opt-Out": "Y",
+            "Last Contact": "={{ new Date().toISOString() }}",
+            "Upcoming Appointment": ""
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "SMS Opt-Out",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Contact",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Upcoming Appointment",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "wf6-reply-optout",
+      "name": "Reply SMS — Opt Out",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        -60
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Parse Intent').first().json.phone }}",
+        "message": "={{ 'You have been unsubscribed from SMS messages from ' + $('⚙️ Client Config').first().json.businessName + '. You will receive no further messages.' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf6-update-dnc",
+      "name": "Update Clients — DNC",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2160,
+        100
+      ],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $json.phone }}",
+            "Status": "do-not-contact",
+            "SMS Opt-Out": "Y",
+            "Upcoming Appointment": "",
+            "Last Contact": "={{ new Date().toISOString() }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "SMS Opt-Out",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Upcoming Appointment",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Contact",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "wf6-reply-dnc",
+      "name": "Reply SMS — DNC",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        100
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Parse Intent').first().json.phone }}",
+        "message": "={{ 'Understood, we won\\'t contact you again. Thank you for your interest in ' + $('⚙️ Client Config').first().json.businessName + '.' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf6-update-callback",
+      "name": "Update Clients — Callback",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2160,
+        260
+      ],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $json.phone }}",
+            "Status": "callback-scheduled",
+            "Callback Time": "={{ $json.callbackTimeISO }}",
+            "Last Contact": "={{ new Date().toISOString() }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Callback Time",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Contact",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "wf6-reply-callback",
+      "name": "Reply SMS — Callback",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        260
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Parse Intent').first().json.phone }}",
+        "message": "={{ $json.error ? 'Thanks for your message — we’ve received your callback request and someone from ' + $('⚙️ Client Config').first().json.businessName + ' will be in touch. If you don’t hear from us today, please call us directly.' : 'Got it! We’ll call you back as soon as possible. You’ll hear from ' + $('⚙️ Client Config').first().json.businessName + ' shortly.' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf6-update-positive",
+      "name": "Update Clients — Positive",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2160,
+        420
+      ],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $json.phone }}",
+            "Status": "callback-requested",
+            "Last Contact": "={{ new Date().toISOString() }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Contact",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "wf6-reply-positive",
+      "name": "Reply SMS — Positive",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        420
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Parse Intent').first().json.phone }}",
+        "message": "={{ $json.error ? 'Thanks for getting back to us — we’ve received your message and someone from ' + $('⚙️ Client Config').first().json.businessName + ' will follow up. If you don’t hear from us today, please call us directly.' : 'Great! We’ll be in touch as soon as possible. You’ll hear from ' + $('⚙️ Client Config').first().json.businessName + ' soon!' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf6-alert-positive",
+      "name": "Alert Owner — Positive",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        420
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ '🔥 Positive SMS from ' + $('Parse Intent').first().json.leadName + ' (' + $('Parse Intent').first().json.phone + '): \"' + $('Parse Intent').first().json.rawMessage + '\". Call them back!' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf6-alert-unknown-intent",
+      "name": "Alert Owner — Unknown Intent",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        580
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ '❓ SMS from ' + $('Parse Intent').first().json.leadName + ' (' + $('Parse Intent').first().json.phone + '): \"' + $('Parse Intent').first().json.rawMessage + '\". Reply manually.' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf6-alert-unknown-number",
+      "name": "Alert Owner — Unknown Number",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        480
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ '📱 SMS from unknown number ' + $('Parse SMS Data').first().json.phone + ': \"' + $('Parse SMS Data').first().json.rawMessage + '\". No lead found in system.' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf6-read-appt-confirm",
+      "name": "Read Appt Log (Confirm)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2160,
+        -280
+      ],
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Phone",
+              "lookupValue": "={{ $json.phone }}"
+            },
+            {
+              "lookupColumn": "Status",
+              "lookupValue": "confirmed"
+            }
+          ]
+        },
+        "range": "A:Z",
+        "options": {
+          "returnFirstMatch": true
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "wf6-appt-found-confirm",
+      "name": "Appt Found? (Confirm)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2400,
+        -280
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "af-confirm",
+              "leftValue": "={{ $json.CalendarEventId ? 'ok' : 'fail' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf6-update-confirmed",
+      "name": "Update ConfirmedAt",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2640,
+        -280
+      ],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "CalendarEventId": "={{ $json.CalendarEventId }}",
+            "ConfirmedAt": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "CalendarEventId",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ConfirmedAt",
+              "defaultMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "CalendarEventId"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "wf6-reply-confirm",
+      "name": "Reply SMS — Confirm",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2880,
+        -280
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Read Appt Log (Confirm)').first().json.Phone }}",
+        "message": "={{ $json.error ? 'Thanks — we’ve got your reply. We’re just finishing updating your booking, so you may receive one more reminder. Your appointment on ' + $('Read Appt Log (Confirm)').first().json['Date'] + ' at ' + $('Read Appt Log (Confirm)').first().json['Time'] + ' still stands.' : 'Thank you for confirming! We’ll see you on ' + $('Read Appt Log (Confirm)').first().json['Date'] + ' at ' + $('Read Appt Log (Confirm)').first().json['Time'] + '. See you then!' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf6-no-appt-confirm",
+      "name": "Reply SMS — No Appt (Confirm)",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        -440
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Parse Intent').first().json.phone }}",
+        "message": "No active appointment found to confirm. Please get in touch if you have any questions.",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf6-read-appt-cancel",
+      "name": "Read Appt Log (Cancel)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2160,
+        740
+      ],
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Phone",
+              "lookupValue": "={{ $json.phone }}"
+            },
+            {
+              "lookupColumn": "Status",
+              "lookupValue": "confirmed"
+            }
+          ]
+        },
+        "range": "A:Z",
+        "options": {
+          "returnFirstMatch": true
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "wf6-appt-found-cancel",
+      "name": "Appt Found? (Cancel)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2400,
+        740
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "af-cancel",
+              "leftValue": "={{ $json.CalendarEventId ? 'ok' : 'fail' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf6-update-cancelled-appt",
+      "name": "Update Cancelled Appt",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2640,
+        740
+      ],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "CalendarEventId": "={{ $json.CalendarEventId }}",
+            "Status": "cancelled",
+            "CancelledAt": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "CalendarEventId",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "CancelledAt",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "CalendarEventId"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "wf6-update-client-cancel",
+      "name": "Update Clients — Cancel Status",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2880,
+        740
+      ],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Read Appt Log (Cancel)').first().json.Phone }}",
+            "Status": "callback-requested",
+            "Upcoming Appointment": "",
+            "Last Contact": "={{ new Date().toISOString() }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Upcoming Appointment",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Contact",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "wf6-reply-cancel",
+      "name": "Reply SMS — Cancel",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        3120,
+        740
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Read Appt Log (Cancel)').first().json.Phone }}",
+        "message": "Your appointment has been cancelled. We'll be in touch soon to arrange a new time. Speak soon!",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf6-no-appt-cancel",
+      "name": "Reply SMS — No Appt (Cancel)",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        900
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Parse Intent').first().json.phone }}",
+        "message": "No active appointment found to cancel. Please get in touch if you have any questions.",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf6-delete-cal-event",
+      "name": "Delete Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        2520,
+        740
+      ],
+      "parameters": {
+        "resource": "event",
+        "operation": "delete",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.calendarId }}"
+        },
+        "eventId": "={{ $('Read Appt Log (Cancel)').first().json.CalendarEventId }}"
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Calendar OAuth2 API"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "wf6-is-d3-booking",
+      "name": "Is D3 Booking? (Cancel)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2880,
+        880
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "is-chatbot-booking",
+              "leftValue": "={{ $('Read Appt Log (Cancel)').first().json['Booked By'] === 'chatbot' ? 'yes' : 'no' }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf6-alert-d3-cancel",
+      "name": "Alert Owner — D3 Cancel",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        3120,
+        880
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ '⚠️ WhatsApp-booked appointment cancelled via SMS for ' + $('Parse Intent').first().json.leadName + ' (' + $('Parse Intent').first().json.phone + '). Review the WhatsApp thread to confirm the customer understands. Calendar event has been deleted, Appointment Log marked cancelled.' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf6-delete-check",
+      "name": "Delete Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2580,
+        740
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "no-error",
+              "leftValue": "={{ ($json.error || '').toString() }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "88173766-fc19-404b-bcf9-d0012d2a6176",
+      "name": "Reply SMS — Cancel Failed",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        1060
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Parse Intent').first().json.phone }}",
+        "message": "Sorry — we could not complete your cancellation automatically. Your appointment is still booked. Someone from the team will call you shortly to sort it out.",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "251d70c8-3d31-40c5-9206-59943ce6fa8a",
+      "name": "Alert Owner — Cancel Failed",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2880,
+        1060
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ 'CANCEL FAILED: could not delete the calendar event for ' + $('Parse Intent').first().json.phone + '. They texted CANCEL and the appointment is still live. Needs manual cancellation.' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "4742ee93-2106-4f08-a81f-42a65854f269",
+      "name": "Opt-Out Write OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2280,
+        -60
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "optout-write-ok",
+              "leftValue": "={{ $json.error ? 'fail' : 'ok' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "11975f95-19ec-4769-b7e1-ad41f819e685",
+      "name": "Alert Owner — Opt-Out Write FAILED",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2520,
+        -200
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ '🚨 URGENT COMPLIANCE: opt-out from ' + $('Parse Intent').first().json.phone + ' could NOT be written to the CRM. Set SMS Opt-Out=Y and Status=do-not-contact MANUALLY NOW. Do not message this number again.' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "495fb730-8d7a-48e4-a707-d301febc8c9d",
+      "name": "DNC Write OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2280,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "dnc-write-ok",
+              "leftValue": "={{ $json.error ? 'fail' : 'ok' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "06b463bc-1d1d-4049-aca5-2805e4309d83",
+      "name": "Alert Owner — DNC Write FAILED",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2520,
+        200
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ '🚨 URGENT COMPLIANCE: do-not-contact request from ' + $('Parse Intent').first().json.phone + ' could NOT be written to the CRM. Set Status=do-not-contact MANUALLY NOW. Do not call or message this number again.' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "8ac406c2-ec61-47fa-a0df-bcbee7bcbc39",
+      "name": "Read Messages Headers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        800,
+        460
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.messagesTab) + '!1:1' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "8651dc72-d1e8-4cb0-9f40-88c560802a6a",
+      "name": "Build Messages Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        460
+      ],
+      "parameters": {
+        "jsCode": "try {\n  var sms = $('Parse SMS Data').first().json;\n  var lead = $('Read Lead from Sheets').first().json || {};\n  var hdrResp = $input.first().json || {};\n  var headers = (hdrResp.values && hdrResp.values[0] && hdrResp.values[0].length) ? hdrResp.values[0] : null;\n  var usedFallback = false;\n  if (!headers) {\n    headers = ['Name', 'Phone', 'Message', 'Urgency', 'Timestamp', 'Status'];\n    usedFallback = true;\n  }\n  var vals = {\n    'Name': lead['Name'] || '',\n    'Phone': sms.phone || '',\n    'Message': sms.rawMessage || '',\n    'Urgency': 'normal',\n    'Timestamp': sms.receivedAt || new Date().toISOString(),\n    'Status': 'new'\n  };\n  var row = [];\n  for (var i = 0; i < headers.length; i++) {\n    var h = String(headers[i] || '').trim();\n    row.push(Object.prototype.hasOwnProperty.call(vals, h) ? vals[h] : '');\n  }\n  return [{ json: { row: row, headersVerified: !usedFallback, usedFallback: usedFallback } }];\n} catch(e) {\n  return [{ json: { row: ['', '', 'ERROR building Messages row: ' + e.message, 'urgent', new Date().toISOString(), 'new'], headersVerified: false, usedFallback: true, errorMsg: e.message } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "196ff97f-948e-4862-907e-8a3fe39f1f77",
+      "name": "Append Messages Row (atomic)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        460
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.messagesTab) + '!A:Z:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ values: [ $json.row ] }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "ea56a4a9-5e65-444b-81a8-b0a3c187d8cd",
+      "name": "Alert Owner — CRM Write Failed",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2560,
+        1350
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ '⚠️ CRM WRITE FAILED for SMS from ' + $('Parse Intent').first().json.phone + ' (intent: ' + $('Parse Intent').first().json.intent + '). The customer got a reply, but the CRM was NOT updated — action it manually. Message was: \"' + $('Parse Intent').first().json.rawMessage + '\"' }}",
+        "options": {}
+      },
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "79bc5dcf-a1b5-40e0-a571-48fc18c16890",
+      "name": "Callback Write OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2300,
+        1250
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cb-ok",
+              "leftValue": "={{ $json.error ? 'fail' : 'ok' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "feda31fd-7cd8-4f16-ad7b-be793190a05f",
+      "name": "Positive Write OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2300,
+        1350
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "pos-ok",
+              "leftValue": "={{ $json.error ? 'fail' : 'ok' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e07de04d-8186-433c-9d1e-875c373eae0c",
+      "name": "Confirm Write OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2300,
+        1450
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "conf-ok",
+              "leftValue": "={{ $json.error ? 'fail' : 'ok' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "f6e3a62c-e345-45b5-a891-bfe373b8c5bc",
+      "name": "Unknown Sender Opt-Out?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1360,
+        560
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "unknown-stop",
+              "leftValue": "={{ ['STOP','UNSUBSCRIBE','QUIT','END','CANCEL'].indexOf(String($('Parse SMS Data').first().json.rawMessage || '').toUpperCase().trim()) >= 0 ? 'optout' : 'other' }}",
+              "rightValue": "optout",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "ff558306-aed4-4b36-a713-a7b694d398f6",
+      "name": "Suppress Unknown Sender",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1600,
+        640
+      ],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Parse SMS Data').first().json.phone }}",
+            "Name": "Unknown sender — opted out by SMS",
+            "Status": "do-not-contact",
+            "SMS Opt-Out": "Y",
+            "Last Contact": "={{ $now.toISO() }}",
+            "Lead Source": "sms-suppression"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "SMS Opt-Out",
+              "displayName": "SMS Opt-Out",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Contact",
+              "displayName": "Last Contact",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Lead Source",
+              "displayName": "Lead Source",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    }
+  ],
+  "connections": {
+    "Twilio Inbound SMS": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Parse SMS Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse SMS Data": {
+      "main": [
+        [
+          {
+            "node": "Read Lead from Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Found?": {
+      "main": [
+        [
+          {
+            "node": "Classify Intent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown Sender Opt-Out?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Intent": {
+      "main": [
+        [
+          {
+            "node": "Parse Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Intent": {
+      "main": [
+        [
+          {
+            "node": "Route by Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Intent": {
+      "main": [
+        [
+          {
+            "node": "Update Clients — Opt Out",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Clients — DNC",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Clients — Callback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Clients — Positive",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read Appt Log (Confirm)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read Appt Log (Cancel)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Owner — Unknown Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Clients — Callback": {
+      "main": [
+        [
+          {
+            "node": "Reply SMS — Callback",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Callback Write OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Clients — Positive": {
+      "main": [
+        [
+          {
+            "node": "Reply SMS — Positive",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Positive Write OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply SMS — Positive": {
+      "main": [
+        [
+          {
+            "node": "Alert Owner — Positive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Appt Log (Confirm)": {
+      "main": [
+        [
+          {
+            "node": "Appt Found? (Confirm)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Appt Found? (Confirm)": {
+      "main": [
+        [
+          {
+            "node": "Update ConfirmedAt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply SMS — No Appt (Confirm)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update ConfirmedAt": {
+      "main": [
+        [
+          {
+            "node": "Reply SMS — Confirm",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Confirm Write OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Appt Log (Cancel)": {
+      "main": [
+        [
+          {
+            "node": "Appt Found? (Cancel)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Appt Found? (Cancel)": {
+      "main": [
+        [
+          {
+            "node": "Delete Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply SMS — No Appt (Cancel)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Cancelled Appt": {
+      "main": [
+        [
+          {
+            "node": "Update Clients — Cancel Status",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is D3 Booking? (Cancel)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Clients — Cancel Status": {
+      "main": [
+        [
+          {
+            "node": "Reply SMS — Cancel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is D3 Booking? (Cancel)": {
+      "main": [
+        [
+          {
+            "node": "Alert Owner — D3 Cancel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Delete Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Update Cancelled Appt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply SMS — Cancel Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply SMS — Cancel Failed": {
+      "main": [
+        [
+          {
+            "node": "Alert Owner — Cancel Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Clients — Opt Out": {
+      "main": [
+        [
+          {
+            "node": "Opt-Out Write OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Opt-Out Write OK?": {
+      "main": [
+        [
+          {
+            "node": "Reply SMS — Opt Out",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Owner — Opt-Out Write FAILED",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Clients — DNC": {
+      "main": [
+        [
+          {
+            "node": "DNC Write OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DNC Write OK?": {
+      "main": [
+        [
+          {
+            "node": "Reply SMS — DNC",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Owner — DNC Write FAILED",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Lead from Sheets": {
+      "main": [
+        [
+          {
+            "node": "Read Messages Headers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Messages Headers": {
+      "main": [
+        [
+          {
+            "node": "Build Messages Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Messages Row": {
+      "main": [
+        [
+          {
+            "node": "Append Messages Row (atomic)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Messages Row (atomic)": {
+      "main": [
+        [
+          {
+            "node": "Lead Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Callback Write OK?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Alert Owner — CRM Write Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Positive Write OK?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Alert Owner — CRM Write Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm Write OK?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Alert Owner — CRM Write Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unknown Sender Opt-Out?": {
+      "main": [
+        [
+          {
+            "node": "Suppress Unknown Sender",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Owner — Unknown Number",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": [],
+  "activeVersion": {
+    "versionId": "71832a9d-43a8-46b2-a0cb-feebef273900",
+    "workflowId": "cZ3gkYFc11fI1npG",
+    "nodes": [
+      {
+        "id": "wf6-sticky-overview",
+        "name": "📋 WF6 Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -260,
+          -240
+        ],
+        "parameters": {
+          "content": "## WF6 — Inbound SMS Handler\n\nHandles all inbound SMS replies on the Twilio business number.\n\n**Flow:** Twilio webhook → normalize phone → read lead → log SMS → classify intent (Claude AI) → act\n\n**Actions by intent:**\n- **opt-out** (STOP/UNSUBSCRIBE): Status=do-not-contact, SMS Opt-Out=Y + confirmation SMS\n- **do-not-contact**: Status=do-not-contact + reply SMS\n- **callback**: Status=callback-scheduled + Callback Time ISO\n- **positive**: Status=callback-requested + reply SMS + alert owner\n- **confirm** (BEVESTIG): Null-check → Updates ConfirmedAt + reply SMS (or 'no appt found' reply)\n- **cancel** (ANNULEER): Null-check → Cancels appointment + Clients Status=callback-requested + reply SMS (or 'no appt found' reply)\n- **unknown intent**: Alert owner\n- **unknown number**: Alert owner\n\n**Trigger:** POST /webhook/wf6-sms-inbound",
+          "height": 560,
+          "width": 420,
+          "color": 7
+        }
+      },
+      {
+        "id": "wf6-sticky-sections",
+        "name": "🔍 Intake & Classification",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          460,
+          60
+        ],
+        "parameters": {
+          "content": "## Intake & Classification\n\n1. Receive Twilio webhook\n2. Normalize phone → E.164\n3. Read lead row from Sheets by Phone\n4. Log inbound SMS to Messages tab\n5. Lead not found → alert owner, stop\n6. Classify intent via Claude Haiku\n7. STOP keyword override\n8. Route to intent branch",
+          "height": 200,
+          "width": 500,
+          "color": 5
+        }
+      },
+      {
+        "id": "wf6-webhook",
+        "name": "Twilio Inbound SMS",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          300
+        ],
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "wf6-sms-inbound",
+          "responseMode": "onReceived",
+          "options": {
+            "responseCode": 200,
+            "responseData": ""
+          },
+          "authentication": "basicAuth"
+        },
+        "onError": "continueRegularOutput",
+        "webhookId": "a0d15e15-4400-4bd3-895e-3f79fe9f5c26",
+        "credentials": {
+          "httpBasicAuth": {
+            "id": "CREDENTIAL_ID",
+            "name": "D2 WF6 Twilio Inbound Basic Auth"
+          }
+        }
+      },
+      {
+        "id": "wf6-config",
+        "name": "⚙️ Client Config",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          240,
+          300
+        ],
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "cfg-sheetId",
+                "name": "sheetId",
+                "value": "YOUR_CRM_SHEET_ID",
+                "type": "string"
+              },
+              {
+                "id": "cfg-clientsTab",
+                "name": "clientsTab",
+                "value": "Clients",
+                "type": "string"
+              },
+              {
+                "id": "cfg-messagesTab",
+                "name": "messagesTab",
+                "value": "Messages",
+                "type": "string"
+              },
+              {
+                "id": "cfg-apptTab",
+                "name": "appointmentsTab",
+                "value": "Appointment Log",
+                "type": "string"
+              },
+              {
+                "id": "cfg-calendarId",
+                "name": "calendarId",
+                "value": "primary",
+                "type": "string"
+              },
+              {
+                "id": "cfg-businessName",
+                "name": "businessName",
+                "value": "Solarify",
+                "type": "string"
+              },
+              {
+                "id": "cfg-twilioFrom",
+                "name": "twilioFromNumber",
+                "value": "PLACEHOLDER_TWILIO_NUMBER",
+                "type": "string"
+              },
+              {
+                "id": "cfg-ownerPhone",
+                "name": "businessOwnerPhone",
+                "value": "PLACEHOLDER_OWNER_PHONE",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {
+            "includeOtherFields": true
+          },
+          "includeOtherFields": true
+        }
+      },
+      {
+        "id": "wf6-parse",
+        "name": "Parse SMS Data",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          480,
+          300
+        ],
+        "parameters": {
+          "jsCode": "try {\n  var item = $input.first().json;\n  var body = item.body || {};\n  var from = body.From || body.from || '';\n  var rawMessage = (body.Body || body.body || '').trim();\n  var messageSid = body.MessageSid || body.messageSid || '';\n  var phone = from;\n  if (phone && phone.charAt(0) === '0') { phone = '+44' + phone.substring(1); }\n  else if (phone && phone.charAt(0) !== '+') { phone = '+' + phone; }\n  phone = phone.replace(/[^+\\d]/g, '');\n  // callback_day added 2026-08-22: the prompt previously returned only HH:MM, so \"call me\n  // tomorrow at 3pm\" silently lost the day and was scheduled for TODAY.\n  var systemPrompt = 'You are classifying SMS replies from leads for a UK home services company (solar panels, insulation). Return JSON only, no extra text: {\"intent\":\"opt-out|do-not-contact|confirm|cancel|callback|positive|unknown\",\"callback_time\":\"HH:MM 24h or null\",\"callback_day\":\"today|tomorrow|YYYY-MM-DD|null\"}. Rules: opt-out=STOP UNSUBSCRIBE QUIT END (exact keywords only, carrier compliance). do-not-contact=do not call, not interested, dont contact me, leave me alone. confirm=CONFIRM yes confirmed I will come I am there confirm appointment. cancel=CANCEL cant make it cancel appointment cancel my booking. callback=call me later call me back call me at X tomorrow ring me. positive=yes interested tell me more how does it work I want more information. unknown=anything else. For callback_day: use \"tomorrow\" if they say tomorrow, \"today\" if they say today or later today, an explicit YYYY-MM-DD if they name a date, otherwise null.';\n  var claudePayload = { model: 'claude-haiku-4-5-20251001', max_tokens: 120, system: systemPrompt, messages: [{ role: 'user', content: rawMessage }] };\n  return [{ json: { phone: phone, rawMessage: rawMessage, messageSid: messageSid, claudePayload: claudePayload, receivedAt: new Date().toISOString() } }];\n} catch(e) { throw new Error('WF6 Parse SMS error: ' + e.message); }"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "wf6-read-lead",
+        "name": "Read Lead from Sheets",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          720,
+          300
+        ],
+        "parameters": {
+          "operation": "read",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+          },
+          "filtersUI": {
+            "values": [
+              {
+                "lookupColumn": "Phone",
+                "lookupValue": "={{ $json.phone }}"
+              }
+            ]
+          },
+          "range": "A:Z",
+          "options": {
+            "returnFirstMatch": true
+          }
+        },
+        "alwaysOutputData": true,
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000
+      },
+      {
+        "id": "wf6-lead-found",
+        "name": "Lead Found?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1200,
+          300
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": false,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "phone-exists-in-sheet",
+                "leftValue": "={{ $('Read Lead from Sheets').first().json['Phone'] }}",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEmpty",
+                  "singleValue": true
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "wf6-classify",
+        "name": "Classify Intent",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1440,
+          200
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "anthropicApi",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "anthropic-version",
+                "value": "2023-06-01"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $('Parse SMS Data').first().json.claudePayload }}",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "credentials": {
+          "anthropicApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Anthropic account"
+          }
+        }
+      },
+      {
+        "id": "wf6-parse-intent",
+        "name": "Parse Intent",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1680,
+          200
+        ],
+        "parameters": {
+          "jsCode": "try {\n  var claudeResponse = $input.first().json;\n  var parseData = $('Parse SMS Data').first().json;\n  var leadData = $('Read Lead from Sheets').first().json;\n  var content = '';\n  if (claudeResponse.content && claudeResponse.content[0] && claudeResponse.content[0].text) { content = claudeResponse.content[0].text.trim(); }\n  var parsed = {};\n  try { content = content.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim(); parsed = JSON.parse(content); } catch(pe) { parsed = { intent: 'unknown', callback_time: null, callback_day: null }; }\n  var intent = parsed.intent || 'unknown';\n  var callbackTime = parsed.callback_time || null;\n  var callbackDay = parsed.callback_day || null;\n  var raw = (parseData.rawMessage || '');\n  var upperMsg = raw.toUpperCase().trim();\n  var stopWords = ['STOP', 'UNSUBSCRIBE', 'QUIT', 'CANCEL', 'END'];\n  for (var i = 0; i < stopWords.length; i++) { if (upperMsg === stopWords[i]) { intent = 'opt-out'; break; } }\n\n  function londonInstant(y, mo, d, hh, mm) {\n    var m = mo + 1;\n    var off = (m >= 3 && m <= 10) ? 1 : 0;\n    return new Date(Date.UTC(y, mo, d, hh - off, mm, 0, 0));\n  }\n\n  var callbackTimeISO = '';\n  if (callbackTime && intent === 'callback') {\n    var parts = callbackTime.match(/(\\d{1,2}):(\\d{2})/);\n    if (parts) {\n      var hours = parseInt(parts[1], 10);\n      var minutes = parseInt(parts[2], 10);\n      var now = new Date();\n      var base = new Date(now.getTime());\n      var dayStr = String(callbackDay || '').toLowerCase();\n      // belt and braces: honour \"tomorrow\" in the raw text even if the model omitted callback_day\n      if (!dayStr && raw.toLowerCase().indexOf('tomorrow') >= 0) { dayStr = 'tomorrow'; }\n      var isoDay = dayStr.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);\n      if (isoDay) {\n        base = new Date(Date.UTC(parseInt(isoDay[1], 10), parseInt(isoDay[2], 10) - 1, parseInt(isoDay[3], 10)));\n      } else if (dayStr.indexOf('tomorrow') >= 0) {\n        base.setUTCDate(base.getUTCDate() + 1);\n      }\n      var dt = londonInstant(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), hours, minutes);\n      if (dt.getTime() <= now.getTime()) {\n        var b2 = new Date(dt.getTime());\n        b2.setUTCDate(b2.getUTCDate() + 1);\n        dt = londonInstant(b2.getUTCFullYear(), b2.getUTCMonth(), b2.getUTCDate(), hours, minutes);\n      }\n      callbackTimeISO = dt.toISOString();\n    }\n  }\n  if (intent === 'callback' && !callbackTimeISO) { callbackTimeISO = new Date(Date.now() + 30 * 60 * 1000).toISOString(); }\n  return [{ json: { intent: intent, callbackTimeISO: callbackTimeISO, phone: parseData.phone, leadName: leadData['Name'] || 'Lead', rawMessage: parseData.rawMessage } }];\n} catch(e) { return [{ json: { intent: 'unknown', callbackTimeISO: '', phone: $('Parse SMS Data').first().json.phone || '', leadName: 'Lead', rawMessage: $('Parse SMS Data').first().json.rawMessage || '' } }]; }"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "wf6-switch",
+        "name": "Route by Intent",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.4,
+        "position": [
+          1920,
+          200
+        ],
+        "parameters": {
+          "mode": "rules",
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.intent }}",
+                      "rightValue": "opt-out",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "id": "rule-optout"
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "outputKey": "opt-out",
+                "renameOutput": true
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.intent }}",
+                      "rightValue": "do-not-contact",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "id": "rule-dnc"
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "outputKey": "do-not-contact",
+                "renameOutput": true
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.intent }}",
+                      "rightValue": "callback",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "id": "rule-callback"
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "outputKey": "callback",
+                "renameOutput": true
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.intent }}",
+                      "rightValue": "positive",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "id": "rule-positive"
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "outputKey": "positive",
+                "renameOutput": true
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.intent }}",
+                      "rightValue": "confirm",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "id": "rule-confirm"
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "outputKey": "confirm",
+                "renameOutput": true
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": false,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.intent }}",
+                      "rightValue": "cancel",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "id": "rule-cancel"
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "outputKey": "cancel",
+                "renameOutput": true
+              }
+            ]
+          },
+          "options": {
+            "fallbackOutput": "extra"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "wf6-update-optout",
+        "name": "Update Clients — Opt Out",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          2160,
+          -60
+        ],
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "Phone": "={{ $json.phone }}",
+              "Status": "do-not-contact",
+              "SMS Opt-Out": "Y",
+              "Last Contact": "={{ new Date().toISOString() }}",
+              "Upcoming Appointment": ""
+            },
+            "schema": [
+              {
+                "id": "Phone",
+                "defaultMatch": true,
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "Status",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "SMS Opt-Out",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Last Contact",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Upcoming Appointment",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              }
+            ],
+            "matchingColumns": [
+              "Phone"
+            ]
+          },
+          "options": {
+            "cellFormat": "RAW"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000
+      },
+      {
+        "id": "wf6-reply-optout",
+        "name": "Reply SMS — Opt Out",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2400,
+          -60
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('Parse Intent').first().json.phone }}",
+          "message": "={{ 'You have been unsubscribed from SMS messages from ' + $('⚙️ Client Config').first().json.businessName + '. You will receive no further messages.' }}",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "wf6-update-dnc",
+        "name": "Update Clients — DNC",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          2160,
+          100
+        ],
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "Phone": "={{ $json.phone }}",
+              "Status": "do-not-contact",
+              "SMS Opt-Out": "Y",
+              "Upcoming Appointment": "",
+              "Last Contact": "={{ new Date().toISOString() }}"
+            },
+            "schema": [
+              {
+                "id": "Phone",
+                "defaultMatch": true,
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "Status",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "SMS Opt-Out",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Upcoming Appointment",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Last Contact",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              }
+            ],
+            "matchingColumns": [
+              "Phone"
+            ]
+          },
+          "options": {
+            "cellFormat": "RAW"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000
+      },
+      {
+        "id": "wf6-reply-dnc",
+        "name": "Reply SMS — DNC",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2400,
+          100
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('Parse Intent').first().json.phone }}",
+          "message": "={{ 'Understood, we won\\'t contact you again. Thank you for your interest in ' + $('⚙️ Client Config').first().json.businessName + '.' }}",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "wf6-update-callback",
+        "name": "Update Clients — Callback",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          2160,
+          260
+        ],
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "Phone": "={{ $json.phone }}",
+              "Status": "callback-scheduled",
+              "Callback Time": "={{ $json.callbackTimeISO }}",
+              "Last Contact": "={{ new Date().toISOString() }}"
+            },
+            "schema": [
+              {
+                "id": "Phone",
+                "defaultMatch": true,
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "Status",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Callback Time",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Last Contact",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              }
+            ],
+            "matchingColumns": [
+              "Phone"
+            ]
+          },
+          "options": {
+            "cellFormat": "RAW"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000
+      },
+      {
+        "id": "wf6-reply-callback",
+        "name": "Reply SMS — Callback",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2400,
+          260
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('Parse Intent').first().json.phone }}",
+          "message": "={{ $json.error ? 'Thanks for your message — we’ve received your callback request and someone from ' + $('⚙️ Client Config').first().json.businessName + ' will be in touch. If you don’t hear from us today, please call us directly.' : 'Got it! We’ll call you back as soon as possible. You’ll hear from ' + $('⚙️ Client Config').first().json.businessName + ' shortly.' }}",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "wf6-update-positive",
+        "name": "Update Clients — Positive",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          2160,
+          420
+        ],
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "Phone": "={{ $json.phone }}",
+              "Status": "callback-requested",
+              "Last Contact": "={{ new Date().toISOString() }}"
+            },
+            "schema": [
+              {
+                "id": "Phone",
+                "defaultMatch": true,
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "Status",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Last Contact",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              }
+            ],
+            "matchingColumns": [
+              "Phone"
+            ]
+          },
+          "options": {
+            "cellFormat": "RAW"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000
+      },
+      {
+        "id": "wf6-reply-positive",
+        "name": "Reply SMS — Positive",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2400,
+          420
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('Parse Intent').first().json.phone }}",
+          "message": "={{ $json.error ? 'Thanks for getting back to us — we’ve received your message and someone from ' + $('⚙️ Client Config').first().json.businessName + ' will follow up. If you don’t hear from us today, please call us directly.' : 'Great! We’ll be in touch as soon as possible. You’ll hear from ' + $('⚙️ Client Config').first().json.businessName + ' soon!' }}",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "wf6-alert-positive",
+        "name": "Alert Owner — Positive",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2640,
+          420
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+          "message": "={{ '🔥 Positive SMS from ' + $('Parse Intent').first().json.leadName + ' (' + $('Parse Intent').first().json.phone + '): \"' + $('Parse Intent').first().json.rawMessage + '\". Call them back!' }}",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "wf6-alert-unknown-intent",
+        "name": "Alert Owner — Unknown Intent",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2160,
+          580
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+          "message": "={{ '❓ SMS from ' + $('Parse Intent').first().json.leadName + ' (' + $('Parse Intent').first().json.phone + '): \"' + $('Parse Intent').first().json.rawMessage + '\". Reply manually.' }}",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "wf6-alert-unknown-number",
+        "name": "Alert Owner — Unknown Number",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          1440,
+          480
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+          "message": "={{ '📱 SMS from unknown number ' + $('Parse SMS Data').first().json.phone + ': \"' + $('Parse SMS Data').first().json.rawMessage + '\". No lead found in system.' }}",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "wf6-read-appt-confirm",
+        "name": "Read Appt Log (Confirm)",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          2160,
+          -280
+        ],
+        "parameters": {
+          "operation": "read",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+          },
+          "filtersUI": {
+            "values": [
+              {
+                "lookupColumn": "Phone",
+                "lookupValue": "={{ $json.phone }}"
+              },
+              {
+                "lookupColumn": "Status",
+                "lookupValue": "confirmed"
+              }
+            ]
+          },
+          "range": "A:Z",
+          "options": {
+            "returnFirstMatch": true
+          }
+        },
+        "alwaysOutputData": true,
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000
+      },
+      {
+        "id": "wf6-appt-found-confirm",
+        "name": "Appt Found? (Confirm)",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          2400,
+          -280
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "af-confirm",
+                "leftValue": "={{ $json.CalendarEventId ? 'ok' : 'fail' }}",
+                "rightValue": "ok",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "wf6-update-confirmed",
+        "name": "Update ConfirmedAt",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          2640,
+          -280
+        ],
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "CalendarEventId": "={{ $json.CalendarEventId }}",
+              "ConfirmedAt": "={{ $now.toISO() }}"
+            },
+            "schema": [
+              {
+                "id": "CalendarEventId",
+                "defaultMatch": true,
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "ConfirmedAt",
+                "defaultMatch": false
+              }
+            ],
+            "matchingColumns": [
+              "CalendarEventId"
+            ]
+          },
+          "options": {
+            "cellFormat": "RAW"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000
+      },
+      {
+        "id": "wf6-reply-confirm",
+        "name": "Reply SMS — Confirm",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2880,
+          -280
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('Read Appt Log (Confirm)').first().json.Phone }}",
+          "message": "={{ $json.error ? 'Thanks — we’ve got your reply. We’re just finishing updating your booking, so you may receive one more reminder. Your appointment on ' + $('Read Appt Log (Confirm)').first().json['Date'] + ' at ' + $('Read Appt Log (Confirm)').first().json['Time'] + ' still stands.' : 'Thank you for confirming! We’ll see you on ' + $('Read Appt Log (Confirm)').first().json['Date'] + ' at ' + $('Read Appt Log (Confirm)').first().json['Time'] + '. See you then!' }}",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "wf6-no-appt-confirm",
+        "name": "Reply SMS — No Appt (Confirm)",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2640,
+          -440
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('Parse Intent').first().json.phone }}",
+          "message": "No active appointment found to confirm. Please get in touch if you have any questions.",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "wf6-read-appt-cancel",
+        "name": "Read Appt Log (Cancel)",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          2160,
+          740
+        ],
+        "parameters": {
+          "operation": "read",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+          },
+          "filtersUI": {
+            "values": [
+              {
+                "lookupColumn": "Phone",
+                "lookupValue": "={{ $json.phone }}"
+              },
+              {
+                "lookupColumn": "Status",
+                "lookupValue": "confirmed"
+              }
+            ]
+          },
+          "range": "A:Z",
+          "options": {
+            "returnFirstMatch": true
+          }
+        },
+        "alwaysOutputData": true,
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000
+      },
+      {
+        "id": "wf6-appt-found-cancel",
+        "name": "Appt Found? (Cancel)",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          2400,
+          740
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "af-cancel",
+                "leftValue": "={{ $json.CalendarEventId ? 'ok' : 'fail' }}",
+                "rightValue": "ok",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "wf6-update-cancelled-appt",
+        "name": "Update Cancelled Appt",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          2640,
+          740
+        ],
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "CalendarEventId": "={{ $json.CalendarEventId }}",
+              "Status": "cancelled",
+              "CancelledAt": "={{ $now.toISO() }}"
+            },
+            "schema": [
+              {
+                "id": "CalendarEventId",
+                "defaultMatch": true,
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "Status",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "CancelledAt",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              }
+            ],
+            "matchingColumns": [
+              "CalendarEventId"
+            ]
+          },
+          "options": {
+            "cellFormat": "RAW"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000
+      },
+      {
+        "id": "wf6-update-client-cancel",
+        "name": "Update Clients — Cancel Status",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          2880,
+          740
+        ],
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "Phone": "={{ $('Read Appt Log (Cancel)').first().json.Phone }}",
+              "Status": "callback-requested",
+              "Upcoming Appointment": "",
+              "Last Contact": "={{ new Date().toISOString() }}"
+            },
+            "schema": [
+              {
+                "id": "Phone",
+                "defaultMatch": true,
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "Status",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Upcoming Appointment",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Last Contact",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              }
+            ],
+            "matchingColumns": [
+              "Phone"
+            ]
+          },
+          "options": {
+            "cellFormat": "RAW"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000
+      },
+      {
+        "id": "wf6-reply-cancel",
+        "name": "Reply SMS — Cancel",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          3120,
+          740
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('Read Appt Log (Cancel)').first().json.Phone }}",
+          "message": "Your appointment has been cancelled. We'll be in touch soon to arrange a new time. Speak soon!",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "wf6-no-appt-cancel",
+        "name": "Reply SMS — No Appt (Cancel)",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2640,
+          900
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('Parse Intent').first().json.phone }}",
+          "message": "No active appointment found to cancel. Please get in touch if you have any questions.",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "wf6-delete-cal-event",
+        "name": "Delete Calendar Event",
+        "type": "n8n-nodes-base.googleCalendar",
+        "typeVersion": 1.3,
+        "position": [
+          2520,
+          740
+        ],
+        "parameters": {
+          "resource": "event",
+          "operation": "delete",
+          "calendar": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.calendarId }}"
+          },
+          "eventId": "={{ $('Read Appt Log (Cancel)').first().json.CalendarEventId }}"
+        },
+        "credentials": {
+          "googleCalendarOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Calendar OAuth2 API"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000
+      },
+      {
+        "id": "wf6-is-d3-booking",
+        "name": "Is D3 Booking? (Cancel)",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          2880,
+          880
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "is-chatbot-booking",
+                "leftValue": "={{ $('Read Appt Log (Cancel)').first().json['Booked By'] === 'chatbot' ? 'yes' : 'no' }}",
+                "rightValue": "yes",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "wf6-alert-d3-cancel",
+        "name": "Alert Owner — D3 Cancel",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          3120,
+          880
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+          "message": "={{ '⚠️ WhatsApp-booked appointment cancelled via SMS for ' + $('Parse Intent').first().json.leadName + ' (' + $('Parse Intent').first().json.phone + '). Review the WhatsApp thread to confirm the customer understands. Calendar event has been deleted, Appointment Log marked cancelled.' }}",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "wf6-delete-check",
+        "name": "Delete Succeeded?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          2580,
+          740
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": false,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "no-error",
+                "leftValue": "={{ ($json.error || '').toString() }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "88173766-fc19-404b-bcf9-d0012d2a6176",
+        "name": "Reply SMS — Cancel Failed",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2640,
+          1060
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('Parse Intent').first().json.phone }}",
+          "message": "Sorry — we could not complete your cancellation automatically. Your appointment is still booked. Someone from the team will call you shortly to sort it out.",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "251d70c8-3d31-40c5-9206-59943ce6fa8a",
+        "name": "Alert Owner — Cancel Failed",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2880,
+          1060
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+          "message": "={{ 'CANCEL FAILED: could not delete the calendar event for ' + $('Parse Intent').first().json.phone + '. They texted CANCEL and the appointment is still live. Needs manual cancellation.' }}",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "4742ee93-2106-4f08-a81f-42a65854f269",
+        "name": "Opt-Out Write OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          2280,
+          -60
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "optout-write-ok",
+                "leftValue": "={{ $json.error ? 'fail' : 'ok' }}",
+                "rightValue": "ok",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "11975f95-19ec-4769-b7e1-ad41f819e685",
+        "name": "Alert Owner — Opt-Out Write FAILED",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2520,
+          -200
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+          "message": "={{ '🚨 URGENT COMPLIANCE: opt-out from ' + $('Parse Intent').first().json.phone + ' could NOT be written to the CRM. Set SMS Opt-Out=Y and Status=do-not-contact MANUALLY NOW. Do not message this number again.' }}",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "495fb730-8d7a-48e4-a707-d301febc8c9d",
+        "name": "DNC Write OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          2280,
+          100
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "dnc-write-ok",
+                "leftValue": "={{ $json.error ? 'fail' : 'ok' }}",
+                "rightValue": "ok",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "06b463bc-1d1d-4049-aca5-2805e4309d83",
+        "name": "Alert Owner — DNC Write FAILED",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2520,
+          200
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+          "message": "={{ '🚨 URGENT COMPLIANCE: do-not-contact request from ' + $('Parse Intent').first().json.phone + ' could NOT be written to the CRM. Set Status=do-not-contact MANUALLY NOW. Do not call or message this number again.' }}",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "8ac406c2-ec61-47fa-a0df-bcbee7bcbc39",
+        "name": "Read Messages Headers",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          800,
+          460
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.messagesTab) + '!1:1' }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleSheetsOAuth2Api",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "alwaysOutputData": true
+      },
+      {
+        "id": "8651dc72-d1e8-4cb0-9f40-88c560802a6a",
+        "name": "Build Messages Row",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          960,
+          460
+        ],
+        "parameters": {
+          "jsCode": "try {\n  var sms = $('Parse SMS Data').first().json;\n  var lead = $('Read Lead from Sheets').first().json || {};\n  var hdrResp = $input.first().json || {};\n  var headers = (hdrResp.values && hdrResp.values[0] && hdrResp.values[0].length) ? hdrResp.values[0] : null;\n  var usedFallback = false;\n  if (!headers) {\n    headers = ['Name', 'Phone', 'Message', 'Urgency', 'Timestamp', 'Status'];\n    usedFallback = true;\n  }\n  var vals = {\n    'Name': lead['Name'] || '',\n    'Phone': sms.phone || '',\n    'Message': sms.rawMessage || '',\n    'Urgency': 'normal',\n    'Timestamp': sms.receivedAt || new Date().toISOString(),\n    'Status': 'new'\n  };\n  var row = [];\n  for (var i = 0; i < headers.length; i++) {\n    var h = String(headers[i] || '').trim();\n    row.push(Object.prototype.hasOwnProperty.call(vals, h) ? vals[h] : '');\n  }\n  return [{ json: { row: row, headersVerified: !usedFallback, usedFallback: usedFallback } }];\n} catch(e) {\n  return [{ json: { row: ['', '', 'ERROR building Messages row: ' + e.message, 'urgent', new Date().toISOString(), 'new'], headersVerified: false, usedFallback: true, errorMsg: e.message } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "196ff97f-948e-4862-907e-8a3fe39f1f77",
+        "name": "Append Messages Row (atomic)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1120,
+          460
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.messagesTab) + '!A:Z:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS' }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleSheetsOAuth2Api",
+          "sendBody": true,
+          "contentType": "raw",
+          "rawContentType": "application/json",
+          "body": "={{ JSON.stringify({ values: [ $json.row ] }) }}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "alwaysOutputData": true
+      },
+      {
+        "id": "ea56a4a9-5e65-444b-81a8-b0a3c187d8cd",
+        "name": "Alert Owner — CRM Write Failed",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2560,
+          1350
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+          "message": "={{ '⚠️ CRM WRITE FAILED for SMS from ' + $('Parse Intent').first().json.phone + ' (intent: ' + $('Parse Intent').first().json.intent + '). The customer got a reply, but the CRM was NOT updated — action it manually. Message was: \"' + $('Parse Intent').first().json.rawMessage + '\"' }}",
+          "options": {}
+        },
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "79bc5dcf-a1b5-40e0-a571-48fc18c16890",
+        "name": "Callback Write OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          2300,
+          1250
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "cb-ok",
+                "leftValue": "={{ $json.error ? 'fail' : 'ok' }}",
+                "rightValue": "ok",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "feda31fd-7cd8-4f16-ad7b-be793190a05f",
+        "name": "Positive Write OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          2300,
+          1350
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "pos-ok",
+                "leftValue": "={{ $json.error ? 'fail' : 'ok' }}",
+                "rightValue": "ok",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "e07de04d-8186-433c-9d1e-875c373eae0c",
+        "name": "Confirm Write OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          2300,
+          1450
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "conf-ok",
+                "leftValue": "={{ $json.error ? 'fail' : 'ok' }}",
+                "rightValue": "ok",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "f6e3a62c-e345-45b5-a891-bfe373b8c5bc",
+        "name": "Unknown Sender Opt-Out?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1360,
+          560
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "unknown-stop",
+                "leftValue": "={{ ['STOP','UNSUBSCRIBE','QUIT','END','CANCEL'].indexOf(String($('Parse SMS Data').first().json.rawMessage || '').toUpperCase().trim()) >= 0 ? 'optout' : 'other' }}",
+                "rightValue": "optout",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "ff558306-aed4-4b36-a713-a7b694d398f6",
+        "name": "Suppress Unknown Sender",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          1600,
+          640
+        ],
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "Phone": "={{ $('Parse SMS Data').first().json.phone }}",
+              "Name": "Unknown sender — opted out by SMS",
+              "Status": "do-not-contact",
+              "SMS Opt-Out": "Y",
+              "Last Contact": "={{ $now.toISO() }}",
+              "Lead Source": "sms-suppression"
+            },
+            "schema": [
+              {
+                "id": "Phone",
+                "displayName": "Phone",
+                "type": "string",
+                "display": true,
+                "required": false,
+                "defaultMatch": true,
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "Name",
+                "displayName": "Name",
+                "type": "string",
+                "display": true,
+                "required": false,
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Status",
+                "displayName": "Status",
+                "type": "string",
+                "display": true,
+                "required": false,
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "SMS Opt-Out",
+                "displayName": "SMS Opt-Out",
+                "type": "string",
+                "display": true,
+                "required": false,
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Last Contact",
+                "displayName": "Last Contact",
+                "type": "string",
+                "display": true,
+                "required": false,
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Lead Source",
+                "displayName": "Lead Source",
+                "type": "string",
+                "display": true,
+                "required": false,
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              }
+            ],
+            "matchingColumns": [
+              "Phone"
+            ]
+          },
+          "options": {
+            "cellFormat": "RAW"
+          }
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000
+      }
+    ],
+    "connections": {
+      "Twilio Inbound SMS": {
+        "main": [
+          [
+            {
+              "node": "⚙️ Client Config",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⚙️ Client Config": {
+        "main": [
+          [
+            {
+              "node": "Parse SMS Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse SMS Data": {
+        "main": [
+          [
+            {
+              "node": "Read Lead from Sheets",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Lead Found?": {
+        "main": [
+          [
+            {
+              "node": "Classify Intent",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Unknown Sender Opt-Out?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Classify Intent": {
+        "main": [
+          [
+            {
+              "node": "Parse Intent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Intent": {
+        "main": [
+          [
+            {
+              "node": "Route by Intent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Route by Intent": {
+        "main": [
+          [
+            {
+              "node": "Update Clients — Opt Out",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Update Clients — DNC",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Update Clients — Callback",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Update Clients — Positive",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Read Appt Log (Confirm)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Read Appt Log (Cancel)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Alert Owner — Unknown Intent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Clients — Callback": {
+        "main": [
+          [
+            {
+              "node": "Reply SMS — Callback",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Callback Write OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Clients — Positive": {
+        "main": [
+          [
+            {
+              "node": "Reply SMS — Positive",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Positive Write OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Reply SMS — Positive": {
+        "main": [
+          [
+            {
+              "node": "Alert Owner — Positive",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Appt Log (Confirm)": {
+        "main": [
+          [
+            {
+              "node": "Appt Found? (Confirm)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Appt Found? (Confirm)": {
+        "main": [
+          [
+            {
+              "node": "Update ConfirmedAt",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Reply SMS — No Appt (Confirm)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update ConfirmedAt": {
+        "main": [
+          [
+            {
+              "node": "Reply SMS — Confirm",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Confirm Write OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Appt Log (Cancel)": {
+        "main": [
+          [
+            {
+              "node": "Appt Found? (Cancel)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Appt Found? (Cancel)": {
+        "main": [
+          [
+            {
+              "node": "Delete Calendar Event",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Reply SMS — No Appt (Cancel)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Cancelled Appt": {
+        "main": [
+          [
+            {
+              "node": "Update Clients — Cancel Status",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Is D3 Booking? (Cancel)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Clients — Cancel Status": {
+        "main": [
+          [
+            {
+              "node": "Reply SMS — Cancel",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is D3 Booking? (Cancel)": {
+        "main": [
+          [
+            {
+              "node": "Alert Owner — D3 Cancel",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Delete Calendar Event": {
+        "main": [
+          [
+            {
+              "node": "Delete Succeeded?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Delete Succeeded?": {
+        "main": [
+          [
+            {
+              "node": "Update Cancelled Appt",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Reply SMS — Cancel Failed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Reply SMS — Cancel Failed": {
+        "main": [
+          [
+            {
+              "node": "Alert Owner — Cancel Failed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Clients — Opt Out": {
+        "main": [
+          [
+            {
+              "node": "Opt-Out Write OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Opt-Out Write OK?": {
+        "main": [
+          [
+            {
+              "node": "Reply SMS — Opt Out",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Alert Owner — Opt-Out Write FAILED",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Clients — DNC": {
+        "main": [
+          [
+            {
+              "node": "DNC Write OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DNC Write OK?": {
+        "main": [
+          [
+            {
+              "node": "Reply SMS — DNC",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Alert Owner — DNC Write FAILED",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Lead from Sheets": {
+        "main": [
+          [
+            {
+              "node": "Read Messages Headers",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Messages Headers": {
+        "main": [
+          [
+            {
+              "node": "Build Messages Row",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Messages Row": {
+        "main": [
+          [
+            {
+              "node": "Append Messages Row (atomic)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Append Messages Row (atomic)": {
+        "main": [
+          [
+            {
+              "node": "Lead Found?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Callback Write OK?": {
+        "main": [
+          [],
+          [
+            {
+              "node": "Alert Owner — CRM Write Failed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Positive Write OK?": {
+        "main": [
+          [],
+          [
+            {
+              "node": "Alert Owner — CRM Write Failed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Confirm Write OK?": {
+        "main": [
+          [],
+          [
+            {
+              "node": "Alert Owner — CRM Write Failed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Unknown Sender Opt-Out?": {
+        "main": [
+          [
+            {
+              "node": "Suppress Unknown Sender",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Alert Owner — Unknown Number",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Muhammad Ghazwan",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-08-22T12:57:16.633Z",
+    "updatedAt": "2026-08-22T12:57:16.633Z",
+    "workflowPublishHistory": [
+      {
+        "id": 449,
+        "workflowId": "cZ3gkYFc11fI1npG",
+        "versionId": "71832a9d-43a8-46b2-a0cb-feebef273900",
+        "event": "activated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-22T12:57:16.744Z"
+      }
+    ]
+  }
+}

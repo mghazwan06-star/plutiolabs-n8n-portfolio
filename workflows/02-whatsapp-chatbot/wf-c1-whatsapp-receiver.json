@@ -1,0 +1,621 @@
+{
+  "id": "liLjKrwqH1fur3Ap",
+  "name": "D3-WF-C1: WhatsApp Receiver",
+  "description": null,
+  "active": true,
+  "activeVersionId": "dc1e5864-ac5d-43d7-99b5-e546fb319ccc",
+  "createdAt": "2026-05-19T14:39:10.380Z",
+  "updatedAt": "2026-08-16T19:11:58.915Z",
+  "isArchived": false,
+  "versionCounter": 14,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "c1-sticky1",
+      "name": "📋 WF-C1 Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        280,
+        40
+      ],
+      "parameters": {
+        "content": "## WF-C1: WhatsApp Receiver — Twilio Inbound Gateway\n\nReceives inbound WhatsApp messages from Twilio, responds 200 immediately (onReceived), then async-fires message to WF-C2 (Claude Core).\n\n**Twilio POST body fields:**\n- `From`: \"whatsapp:+44XXXXXXXXXX\" → stripped to \"+44XXXXXXXXXX\" (E.164)\n- `Body`: raw message text\n- `To`: business WhatsApp number\n\n**Flow:** Twilio POST → Webhook (200 immediately) → ⚙️ Config → Normalize Phone → Forward to Claude Core\n\n⚠️ BEFORE ACTIVATION:\n1. Set `wfC2WebhookUrl` in ⚙️ Client Config to your n8n webhook URL (e.g. https://your-n8n.cloud/webhook/whatsapp-core)\n2. Point Twilio WhatsApp sandbox/number inbound webhook to this workflow's URL\n3. Twilio credentials needed in WF-C4 (Send Reply) — not this workflow",
+        "height": 280,
+        "width": 940
+      }
+    },
+    {
+      "id": "c1-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        300,
+        440
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-in",
+        "responseMode": "onReceived",
+        "responseData": "noData",
+        "options": {}
+      },
+      "webhookId": "4680e789-00d1-43c2-85fc-16eb2cd364fe",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c1-config",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        540,
+        440
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1-cfg-01",
+              "name": "wfC2WebhookUrl",
+              "type": "string",
+              "value": "https://YOUR_N8N_HOST/webhook/whatsapp-core"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c1-normalize",
+      "name": "Normalize Phone",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        440
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var body = $('Webhook').first().json.body || {};\n  var rawFrom = body.From || '';\n  var messageBody = body.Body || '';\n  var numMedia = parseInt(body.NumMedia || '0', 10);\n  var phone = rawFrom.replace(/^whatsapp:/i, '').trim();\n  if (phone && !phone.startsWith('+')) { phone = '+' + phone; }\n  if (!phone) {\n    return [{ json: { phone: '', message: messageBody, numMedia: numMedia, error: 'Missing From field', skip: true } }];\n  }\n  return [{ json: { phone: phone, message: messageBody, numMedia: numMedia, rawFrom: rawFrom, skip: false } }];\n} catch (e) {\n  return [{ json: { phone: '', message: '', numMedia: 0, error: e.message, skip: true } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c1-if-text",
+      "name": "Has Text Content?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1020,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c1-cond-msg",
+              "leftValue": "={{ $json.message }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "c1-cond-skip",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c1-forward",
+      "name": "Forward to Claude Core",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1260,
+        440
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('⚙️ Client Config').first().json.wfC2WebhookUrl }}",
+        "authentication": "genericCredentialType",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ phone: $json.phone, message: $json.message }) }}",
+        "options": {},
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": false,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENTIAL_ID",
+          "name": "D3 Internal — C1 to C2 header key"
+        }
+      }
+    },
+    {
+      "id": "c1-media-fallback",
+      "name": "Build Media Fallback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1260,
+        580
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var phone = $json.phone || '';\n  var numMedia = $json.numMedia || 0;\n  var message;\n  if (numMedia > 0) {\n    message = \"I can only read text messages. Please type your question and I'll be happy to help!\";\n  } else {\n    message = \"I didn't receive any text in your message. Please type your question and I'll be happy to help!\";\n  }\n  return [{ json: { message: message, phone: phone } }];\n} catch (e) {\n  return [{ json: { message: \"Please type your question and I'll be happy to help!\", phone: '' } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c1-send-media",
+      "name": "Call Send Reply - Media",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1500,
+        580
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "4s8DGFmrZxpX46Dd"
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "78785303-0220-430d-9589-95de1b09f850",
+      "name": "Valid Sender?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c1-valid-sender",
+              "leftValue": "={{ $json.skip === true || !$json.phone ? 'no' : 'yes' }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Normalize Phone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Text Content?": {
+      "main": [
+        [
+          {
+            "node": "Forward to Claude Core",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Media Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Media Fallback": {
+      "main": [
+        [
+          {
+            "node": "Call Send Reply - Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Phone": {
+      "main": [
+        [
+          {
+            "node": "Valid Sender?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Sender?": {
+      "main": [
+        [
+          {
+            "node": "Has Text Content?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London"
+  },
+  "tags": [],
+  "activeVersion": {
+    "versionId": "dc1e5864-ac5d-43d7-99b5-e546fb319ccc",
+    "workflowId": "liLjKrwqH1fur3Ap",
+    "nodes": [
+      {
+        "id": "c1-sticky1",
+        "name": "📋 WF-C1 Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          280,
+          40
+        ],
+        "parameters": {
+          "content": "## WF-C1: WhatsApp Receiver — Twilio Inbound Gateway\n\nReceives inbound WhatsApp messages from Twilio, responds 200 immediately (onReceived), then async-fires message to WF-C2 (Claude Core).\n\n**Twilio POST body fields:**\n- `From`: \"whatsapp:+44XXXXXXXXXX\" → stripped to \"+44XXXXXXXXXX\" (E.164)\n- `Body`: raw message text\n- `To`: business WhatsApp number\n\n**Flow:** Twilio POST → Webhook (200 immediately) → ⚙️ Config → Normalize Phone → Forward to Claude Core\n\n⚠️ BEFORE ACTIVATION:\n1. Set `wfC2WebhookUrl` in ⚙️ Client Config to your n8n webhook URL (e.g. https://your-n8n.cloud/webhook/whatsapp-core)\n2. Point Twilio WhatsApp sandbox/number inbound webhook to this workflow's URL\n3. Twilio credentials needed in WF-C4 (Send Reply) — not this workflow",
+          "height": 280,
+          "width": 940
+        }
+      },
+      {
+        "id": "c1-webhook",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          300,
+          440
+        ],
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "whatsapp-in",
+          "responseMode": "onReceived",
+          "responseData": "noData",
+          "options": {}
+        },
+        "webhookId": "4680e789-00d1-43c2-85fc-16eb2cd364fe",
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "c1-config",
+        "name": "⚙️ Client Config",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          540,
+          440
+        ],
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "c1-cfg-01",
+                "name": "wfC2WebhookUrl",
+                "type": "string",
+                "value": "https://YOUR_N8N_HOST/webhook/whatsapp-core"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "c1-normalize",
+        "name": "Normalize Phone",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          780,
+          440
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var body = $('Webhook').first().json.body || {};\n  var rawFrom = body.From || '';\n  var messageBody = body.Body || '';\n  var numMedia = parseInt(body.NumMedia || '0', 10);\n  var phone = rawFrom.replace(/^whatsapp:/i, '').trim();\n  if (phone && !phone.startsWith('+')) { phone = '+' + phone; }\n  if (!phone) {\n    return [{ json: { phone: '', message: messageBody, numMedia: numMedia, error: 'Missing From field', skip: true } }];\n  }\n  return [{ json: { phone: phone, message: messageBody, numMedia: numMedia, rawFrom: rawFrom, skip: false } }];\n} catch (e) {\n  return [{ json: { phone: '', message: '', numMedia: 0, error: e.message, skip: true } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "c1-if-text",
+        "name": "Has Text Content?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1020,
+          440
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "c1-cond-msg",
+                "leftValue": "={{ $json.message }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEquals"
+                }
+              },
+              {
+                "id": "c1-cond-skip",
+                "leftValue": "={{ $json.skip }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "notEquals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "c1-forward",
+        "name": "Forward to Claude Core",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1260,
+          440
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $('⚙️ Client Config').first().json.wfC2WebhookUrl }}",
+          "authentication": "genericCredentialType",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ phone: $json.phone, message: $json.message }) }}",
+          "options": {},
+          "genericAuthType": "httpHeaderAuth"
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": false,
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "CREDENTIAL_ID",
+            "name": "D3 Internal — C1 to C2 header key"
+          }
+        }
+      },
+      {
+        "id": "c1-media-fallback",
+        "name": "Build Media Fallback",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1260,
+          580
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var phone = $json.phone || '';\n  var numMedia = $json.numMedia || 0;\n  var message;\n  if (numMedia > 0) {\n    message = \"I can only read text messages. Please type your question and I'll be happy to help!\";\n  } else {\n    message = \"I didn't receive any text in your message. Please type your question and I'll be happy to help!\";\n  }\n  return [{ json: { message: message, phone: phone } }];\n} catch (e) {\n  return [{ json: { message: \"Please type your question and I'll be happy to help!\", phone: '' } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "c1-send-media",
+        "name": "Call Send Reply - Media",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          1500,
+          580
+        ],
+        "parameters": {
+          "source": "database",
+          "workflowId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "4s8DGFmrZxpX46Dd"
+          },
+          "options": {}
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "78785303-0220-430d-9589-95de1b09f850",
+        "name": "Valid Sender?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          900,
+          440
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "c1-valid-sender",
+                "leftValue": "={{ $json.skip === true || !$json.phone ? 'no' : 'yes' }}",
+                "rightValue": "yes",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "onError": "continueRegularOutput"
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "⚙️ Client Config",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⚙️ Client Config": {
+        "main": [
+          [
+            {
+              "node": "Normalize Phone",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has Text Content?": {
+        "main": [
+          [
+            {
+              "node": "Forward to Claude Core",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build Media Fallback",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Media Fallback": {
+        "main": [
+          [
+            {
+              "node": "Call Send Reply - Media",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalize Phone": {
+        "main": [
+          [
+            {
+              "node": "Valid Sender?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Valid Sender?": {
+        "main": [
+          [
+            {
+              "node": "Has Text Content?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Muhammad Ghazwan",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-08-16T19:11:58.916Z",
+    "updatedAt": "2026-08-16T19:11:58.916Z",
+    "workflowPublishHistory": [
+      {
+        "id": 186,
+        "workflowId": "liLjKrwqH1fur3Ap",
+        "versionId": "dc1e5864-ac5d-43d7-99b5-e546fb319ccc",
+        "event": "activated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-16T19:11:59.007Z"
+      },
+      {
+        "id": 185,
+        "workflowId": "liLjKrwqH1fur3Ap",
+        "versionId": "dc1e5864-ac5d-43d7-99b5-e546fb319ccc",
+        "event": "deactivated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-16T19:11:59.006Z"
+      }
+    ]
+  }
+}

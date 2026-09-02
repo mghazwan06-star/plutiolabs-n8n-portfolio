@@ -1,0 +1,247 @@
+{
+  "id": "TKqdNUzhzbKzjVHb",
+  "name": "D5 — 02e Call-Failed Handler",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-05-22T16:50:11.931Z",
+  "updatedAt": "2026-08-21T22:49:33.161Z",
+  "isArchived": false,
+  "versionCounter": 5,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "d5wf2e-sticky",
+      "name": "D5-WF2e Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        80
+      ],
+      "parameters": {
+        "content": "## D5-WF2e — Call-Failed Handler\n\nCalled **asynchronously** by D5-WF2b on VAPI call-failed events. No VAPI response needed.\n\n**Job:** Log call-failed to Reactivation Log + alert owner.\n**Does NOT retry** — WF2 handles retry at next scheduled run (30 min interval).\n\n**Input:** raw VAPI call-failed webhook body\n**CRM write:** Reactivation Status=call-failed, Error Notes, Last Touch",
+        "color": 7,
+        "width": 560,
+        "height": 220
+      }
+    },
+    {
+      "id": "d5wf2e-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        420
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d5wf2e-config",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        300,
+        420
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-sheetId",
+              "name": "sheetId",
+              "value": "YOUR_CRM_SHEET_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-reactTab",
+              "name": "reactivationLogTab",
+              "value": "Reactivation Log",
+              "type": "string"
+            },
+            {
+              "id": "cfg-twilioFrom",
+              "name": "twilioFromNumber",
+              "value": "PLACEHOLDER_TWILIO_FROM",
+              "type": "string"
+            },
+            {
+              "id": "cfg-ownerPhone",
+              "name": "ownerPhone",
+              "value": "PLACEHOLDER_OWNER_PHONE",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "includeOtherFields": true
+        },
+        "includeOtherFields": true
+      }
+    },
+    {
+      "id": "d5wf2e-extract",
+      "name": "Extract Call-Failed Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        420
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "try {\n  var body = $input.first().json.body || $input.first().json;\n  var msg = body.message || {};\n  var call = msg.call || {};\n  var meta = call.metadata || {};\n  var phone = (call.customer && call.customer.number) ? call.customer.number : '';\n  var campaignId = meta.campaignId || '';\n  var name = meta.name || '';\n  var errorMsg = (msg.error && msg.error.message) ? msg.error.message : 'VAPI call failed to connect';\n  return [{ json: { phone: phone, campaignId: campaignId, name: name, errorMsg: errorMsg } }];\n} catch(e) {\n  return [{ json: { phone: '', campaignId: '', name: '', errorMsg: 'VAPI call failed to connect' } }];\n}"
+      }
+    },
+    {
+      "id": "d5wf2e-update-log",
+      "name": "Update Reactivation Log — Call Failed",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        740,
+        420
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $json.phone }}",
+            "Campaign ID": "={{ $json.campaignId }}",
+            "Reactivation Status": "call-failed",
+            "Last Touch": "={{ new Date().toISOString() }}",
+            "Error Notes": "={{ $json.errorMsg }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Campaign ID",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reactivation Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Touch",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Error Notes",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone",
+            "Campaign ID"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      }
+    },
+    {
+      "id": "d5wf2e-alert",
+      "name": "Alert Owner — Call Failed",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        960,
+        420
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('⚙️ Client Config').first().json.ownerPhone }}",
+        "message": "={{ 'D5 CALL FAILED: ' + $('Extract Call-Failed Data').first().json.name + ' (' + $('Extract Call-Failed Data').first().json.phone + '). Error: ' + $('Extract Call-Failed Data').first().json.errorMsg + '. Will auto-retry at next scheduled run.' }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Extract Call-Failed Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Call-Failed Data": {
+      "main": [
+        [
+          {
+            "node": "Update Reactivation Log — Call Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Reactivation Log — Call Failed": {
+      "main": [
+        [
+          {
+            "node": "Alert Owner — Call Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveManualExecutions": true
+  },
+  "tags": [],
+  "activeVersion": null
+}

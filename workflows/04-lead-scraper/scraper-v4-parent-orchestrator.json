@@ -1,0 +1,874 @@
+{
+  "id": "IctLwQQPZAMcLJte",
+  "name": "PlutioLabs — Scraper v4 PARENT (Batch Orchestrator)",
+  "description": null,
+  "active": true,
+  "activeVersionId": "77efe3d6-3d51-48b4-a919-911d1ea5c787",
+  "createdAt": "2026-08-17T18:03:52.017Z",
+  "updatedAt": "2026-08-20T20:49:23.641Z",
+  "isArchived": false,
+  "versionCounter": 14,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "sticky-1",
+      "name": "📌 Architecture",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -460,
+        -120
+      ],
+      "parameters": {
+        "width": 620,
+        "height": 420,
+        "content": "## v4 PARENT — Batch Orchestrator\n\nSolves two constraints that pull against each other:\n\n**Memory (F-R1).** n8n keeps every node's input AND output. A ~20-node chain over 5,603 items = ~20 copies resident → the instance was killed at 47s. The child is a separate execution, so its memory is freed after every batch.\n\n**Competitor pool (F-R2).** A 500-lead slice matches at 48.6%; the full pool at ~100%. So the parent builds ONE global index and passes it to every batch — batches never match against just themselves.\n\n### Flow\nfetch → filter → reconcile → build index → loop batches → child → counts back\n\nThe child (`dpgZ964TabmgSJ0k`) returns **counts only**. Returning records would put the dataset back in the parent's memory and undo the whole point.\n\n**This workflow owns the config.** The child reads config from the payload, so there is no drift."
+      }
+    },
+    {
+      "id": "trig",
+      "name": "📥 Run",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        420
+      ],
+      "parameters": {
+        "path": "scraper-v4-run",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "b123797a-580c-41c6-bfa0-343584993880"
+    },
+    {
+      "id": "ack",
+      "name": "↩️ Ack",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -220,
+        620
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ started: true, note: 'Batched run started - poll executions for the Run Summary' }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "config",
+      "name": "⚙️ Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -220,
+        420
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "// PLUTIOLABS SCRAPER v4 — PARENT CONFIG (single source of truth).\n// Passed to the child on every batch; the child never defines its own.\ntry {\n  return [{\n    json: {\n      // Claude no longer needs a key here. '🧠 Claude Enrich' in the CHILD is an\n      // HTTP Request node using the n8n 'anthropicApi' credential (the same one\n      // D3 uses), so the secret never enters config or execution data.\n      claudeModel: 'claude-haiku-4-5',\n\n      // NO API KEYS LIVE HERE ANYMORE (F-R13 closed, 2026-08-19).\n      // Every outbound call is an HTTP Request node using an n8n credential:\n      //   Anthropic  -> 'Anthropic account'  (anthropicApi)\n      //   Apify      -> 'Apify API'          (httpHeaderAuth, api.apify.com only)\n      //   ZeroBounce -> 'ZeroBounce API'     (httpQueryAuth,  api_key param)\n      //   Instantly  -> 'Instantly API'      (httpHeaderAuth, api.instantly.ai only)\n      // Config used to carry these in plaintext, and n8n writes config into the\n      // execution data of EVERY batch - so the keys were readable by anyone with\n      // access to the run history.\n      //\n      // These two are plain booleans, not secrets. They gate the two services\n      // whose credentials are still placeholders - flip to true only once the\n      // matching credential holds a real key.\n      verifyEnabled: false,\n      enrichEnabled: false,\n\n      sheetsId:          'YOUR_SCRAPER_SHEET_ID',\n      sheetsTabName:     'Outreach CRM',\n      sheetsSnapshotTab: 'MCS Snapshot',\n\n      mcsIndexUrl:      'https://findcertifiedinstallers.co.uk/api/index.json',\n      mcsInstallersUrl: 'https://findcertifiedinstallers.co.uk/api/installers.json',\n\n      mcsTechScope: ['solar_pv','ashp','battery','wshp','solar_thermal','eahp'],\n      emailOnlyLtd: true,\n\n      // ---- BATCHING ----\n      // batchSize is reported only. The authoritative value is the literal on\n      // the '🔁 Split In Batches' node (n8n requires a number there, not an\n      // expression). KEEP THE TWO IN SYNC.\n      batchSize: 500,\n      // maxLeads caps the TOTAL run. 0 = full dataset (~5,603).\n      // Kept small while proving the architecture.\n      maxLeads: 500,\n      leadOffset: 0,\n      onlyCerts: [],\n\n      apifyMaxResultsPerSearch: 40,\n      apifyMaxPollMinutes: 20,\n      // CAP SEMANTICS (F-R11): these are TOTALS for the whole run. Pack Batch\n      // divides each by the batch count before handing it to a child, because\n      // the child applies them PER EXECUTION. Left undivided, a '200' verify cap\n      // became 2,400 across 12 batches - against a 100/month ZeroBounce tier.\n      apifyLookupLimitTotal: 500,\n      includeReviews: true,\n      maxReviews: 20,\n      // GATE 1 cap for the Tier-2 REVIEW scrape (run-wide total; Pack Batch\n      // divides it per batch). Cost per lead: $0.004 place + 20 x $0.0005\n      // reviews = $0.014. 100 leads = $1.40.\n      apifyReviewLimitTotal: 100,\n      // 'lowestRanking' deliberately. Complaints live in low-star reviews and\n      // they are what create Templates A and B. For a 4.9-star business the\n      // bottom 20 are still mostly positive, so bestReviewQuote (A-v2) survives;\n      // for a 3.3-star business the complaints are the story anyway.\n      reviewsSort: 'lowestRanking',\n      ukCities: ['London','Manchester','Birmingham','Leeds'],\n      ukKeywords: [\n        'solar panel installer {city}',\n        'solar PV installer {city}',\n        'solar energy company {city}',\n        'solar panel company {city}',\n        'solar battery storage installer {city}',\n        'solar installation {city}',\n        'heat pump installer {city}',\n        'air source heat pump installer {city}',\n        'ground source heat pump installer {city}',\n        'heat pump engineer {city}'\n      ],\n\n      competitorRadiusMiles:    10,\n      competitorRadiusFallback: 15,\n      competitorGapMin:         10,\n      competitorGapMax:         150,\n\n      minReviewsForP1: 8,\n\n      // LEVER 3: a P2 lead whose competitor is this far ahead still gets A-lite.\n      // The A-lite angle (\"they are N reviews ahead\") does not require the LEAD\n      // to have many reviews - it lands harder when they have few. Set to 30 and\n      // not 10 so we take dominant gaps without pulling in micro-businesses that\n      // cannot afford a 2-10k engagement. Raise it to tighten, lower to widen.\n      aLiteP2GapMin: 30,\n\n      reviewsLowCount: 5,\n      reviewsHighCount: 3,\n      // GATE 2 value. maxLeads 500 + batchSize 500 = one batch, so this is also\n      // the per-batch figure. Raise to 0 (unlimited) only after Gate 2 passes.\n      maxClaudeCallsTotal: 100,\n      maxInstantlyCallsTotal: 0,\n      maxVerifyCallsTotal: 200\n    }\n  }];\n} catch (e) {\n  return [{ json: { _error: 'Config failed: ' + e.message } }];\n}"
+      }
+    },
+    {
+      "id": "mcs-idx",
+      "name": "📡 Fetch MCS Index",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        20,
+        420
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "parameters": {
+        "url": "={{ $('⚙️ Config').first().json.mcsIndexUrl }}",
+        "options": {
+          "timeout": 20000
+        }
+      }
+    },
+    {
+      "id": "mcs-fetch",
+      "name": "📥 Fetch MCS Installers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        260,
+        420
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "parameters": {
+        "url": "={{ $('⚙️ Config').first().json.mcsInstallersUrl }}",
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "mcs-split",
+      "name": "🔀 Split MCS Records",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        420
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "try {\n  var payload = $input.first().json;\n  var rows = (payload && payload.installers) ? payload.installers : [];\n  var idx = {};\n  try { idx = $('📡 Fetch MCS Index').first().json || {}; } catch (e) { idx = {}; }\n  var generatedAt = idx.generated_at || '';\n  if (!rows.length) { return [{ json: { _error: 'MCS fetch returned no installers' } }]; }\n  var out = [];\n  for (var i = 0; i < rows.length; i++) {\n    var r = rows[i];\n    r.source = 'mcs';\n    r.mcsGeneratedAt = generatedAt;\n    out.push({ json: r });\n  }\n  return out;\n} catch (e) {\n  return [{ json: { _error: 'Split MCS failed: ' + e.message } }];\n}"
+      }
+    },
+    {
+      "id": "mcs-filter",
+      "name": "🔎 MCS Filter & Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        740,
+        420
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "// Stage 1b — scope filter + the 5 mandatory fixes from the 2026-08-15 data audit.\ntry {\n  var cfg = $('⚙️ Config').first().json;\n  var scope = cfg.mcsTechScope || [];\n  var ltdOnly = cfg.emailOnlyLtd !== false;\n  var maxLeads = cfg.maxLeads || 0;\n  var onlyCerts = cfg.onlyCerts || [];\n  var leadOffset = cfg.leadOffset || 0;\n  var matchedIdx = 0;\n  var items = $input.all();\n\n  var FREE = ['gmail.com','hotmail.com','hotmail.co.uk','yahoo.com','yahoo.co.uk',\n              'outlook.com','icloud.com','btinternet.com','live.co.uk','aol.com',\n              'sky.com','msn.com','me.com'];\n\n  // Scotland / Wales / NI postcode areas. `region` is England-only — never filter on it.\n  var SCOT = ['AB','DD','DG','EH','FK','G','HS','IV','KA','KW','KY','ML','PA','PH','TD','ZE'];\n  var WALES = ['CF','LD','LL','NP','SA'];\n\n  function pcArea(pc) {\n    var m = String(pc || '').toUpperCase().match(/^[A-Z]{1,2}/);\n    return m ? m[0] : '';\n  }\n  function country(pc) {\n    var a = pcArea(pc);\n    if (a === 'BT') return 'Northern Ireland';\n    if (SCOT.indexOf(a) !== -1) return 'Scotland';\n    if (WALES.indexOf(a) !== -1) return 'Wales';\n    return 'England';\n  }\n  function isLtd(name) {\n    var n = String(name || '').toLowerCase().replace(/\\.+$/, '').trim();\n    return /\\b(ltd|limited|llp|plc)$/.test(n);\n  }\n  function fixSite(w) {\n    var s = String(w || '').trim();\n    if (!s) return '';\n    if (/\\s/.test(s)) return '';\n    if (!/\\.[a-z]{2,}/i.test(s)) return '';\n    if (!/^https?:\\/\\//i.test(s)) s = 'https://' + s;\n    return s.replace(/\\/+$/, '');\n  }\n  function normPhone(p) {\n    var d = String(p || '').replace(/\\D/g, '');\n    if (d.indexOf('44') === 0) d = d.substring(2);\n    if (d.indexOf('0') === 0) d = d.substring(1);\n    // F-R7: preserve non-standard lengths - blanking them destroyed working\n    // numbers and created blank match keys (F-R6).\n    return d.length >= 7 ? d : '';\n  }\n  function e164(k) { return k ? '+44' + k : ''; }\n\n  var out = [];\n  var stats = { seen: 0, outOfScope: 0, notLtd: 0, badGeo: 0, kept: 0,\n                pecrRisk: 0, badSite: 0, badPhone: 0, skippedByOffset: 0 };\n\n  for (var i = 0; i < items.length; i++) {\n    // F-R16 FIX: slicing MOVED to '🧭 Build Competitor Index'. Capping here shrank\n    // the competitor index in proportion to maxLeads, which silently collapsed\n    // every A-route to D. See the note in that node.\n    var r = items[i].json;\n    if (!r || r._error) { continue; }\n    stats.seen++;\n\n    if (onlyCerts.length && onlyCerts.indexOf(r.certification_number) === -1) { continue; }\n\n    var techs = r.technologies || [];\n    var inScope = false;\n    for (var t = 0; t < techs.length; t++) {\n      if (scope.indexOf(techs[t]) !== -1) { inScope = true; break; }\n    }\n    if (!inScope) { stats.outOfScope++; continue; }\n\n    var lat = Number(r.latitude), lon = Number(r.longitude);\n    if (!(lat >= 49.8 && lat <= 60.9 && lon >= -8.7 && lon <= 1.9)) {\n      stats.badGeo++; continue;\n    }\n\n    matchedIdx++;\n    // F-R16 FIX: leadOffset also moved to '🧭 Build Competitor Index'.\n\n    var ltd = isLtd(r.name);\n    if (ltdOnly && !ltd) { stats.notLtd++; }\n\n    var site = fixSite(r.website);\n    if (r.website && !site) { stats.badSite++; }\n\n    var phone = normPhone(r.telephone);\n    if (r.telephone && !phone) { stats.badPhone++; }\n\n    var email = String(r.email || '').trim().toLowerCase();\n    var emailDomain = email.indexOf('@') > -1 ? email.split('@')[1] : '';\n    var freeMailbox = FREE.indexOf(emailDomain) !== -1;\n    var emailValid = /^[^@\\s]+@[^@\\s]+\\.[a-z]{2,}$/.test(email);\n\n    var pecrRisk = (!ltd && freeMailbox);\n    if (pecrRisk) { stats.pecrRisk++; }\n\n    var emailable = emailValid && !pecrRisk && (!ltdOnly || ltd);\n\n    stats.kept++;\n    out.push({ json: {\n      source: 'mcs',\n      mcsGeneratedAt: r.mcsGeneratedAt || '',\n      companyName: r.name,\n      certNumber: r.certification_number,\n      certBody: r.certification_body,\n      technologies: techs.join(', '),\n      busRegistered: !!r.bus_registered,\n      address: r.address,\n      postcode: r.postcode,\n      town: r.town,\n      county: r.county,\n      country: country(r.postcode),\n      latitude: lat,\n      longitude: lon,\n      phone: e164(phone),\n      phoneKey: phone,\n      phoneRaw: r.telephone || '',\n      email: email,\n      emailValid: emailValid,\n      emailFreeMailbox: freeMailbox,\n      website: site,\n      googleRating: (r.google_rating === null || r.google_rating === undefined) ? null : Number(r.google_rating),\n      reviewCount: (r.google_review_count === null || r.google_review_count === undefined) ? null : Number(r.google_review_count),\n      googleMatched: (r.google_review_count !== null && r.google_review_count !== undefined),\n      entityType: ltd ? 'ltd' : 'unknown',\n      pecrRisk: pecrRisk,\n      emailable: emailable,\n      mcsPageUrl: r.page_url || ''\n    }});\n  }\n\n  if (!out.length) {\n    return [{ json: { _error: 'MCS filter produced 0 leads', _stats: stats } }];\n  }\n  out[0].json._stats = stats;\n  return out;\n} catch (e) {\n  return [{ json: { _error: 'MCS filter failed: ' + e.message } }];\n}"
+      }
+    },
+    {
+      "id": "build-index",
+      "name": "🧭 Build Competitor Index",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        980,
+        420
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "// Builds ONE global competitor index from the whole filtered set, then hands it\n// to every batch. This is what stops batching from wrecking competitor matching\n// (F-R2: full pool ~100% of eligible leads, a 500-lead slice only 48.6%).\n//\n// Deliberately compact - name, coords, reviews, rating, categories - because it\n// rides along with every child call. The full records never leave the parent.\n//\n// NOTE: leads whose review counts arrive later via the Apify lookup are NOT in\n// this index (MCS only carries review data for ~47%). Run the enrichment pass\n// first, then re-run competitor matching, once the Apify key exists.\ntry {\n  var items = $input.all();\n  var index = [];\n  var out = [];\n  var withCoords = 0;\n\n  // F-R12 FIX: two-pass competitor matching.\n  // MCS only carries review counts for ~47% of leads, so an index built purely\n  // from the in-memory set can never match the other ~2,978 - they would stay on\n  // Template D forever no matter how good the Apify run was.\n  // So: merge in review counts already written to the CRM by a previous\n  // enrichment pass. Run the parent again after an Apify pass and the index\n  // automatically improves. Empty sheet (first ever run) falls back to memory.\n  var sheetIdx = {};\n  var sheetHits = 0;\n  try {\n    var vr = $('📖 Read CRM Index').first().json.valueRanges || [];\n    var jk = (vr[0] && vr[0].values) || [];   // J = Review Count, K = Business Category\n    var bf = (vr[1] && vr[1].values) || [];   // BF = Row Key\n    for (var s = 1; s < jk.length; s++) {     // row 0 is the header\n      var kRow = bf[s] || [];\n      var key = kRow[0] ? String(kRow[0]) : '';\n      if (!key) { continue; }\n      var jRow = jk[s] || [];\n      var rc = (jRow[0] !== undefined && jRow[0] !== '') ? Number(jRow[0]) : null;\n      if (rc === null || isNaN(rc)) { continue; }\n      sheetIdx[key] = { reviewCount: rc, categories: jRow[1] ? String(jRow[1]) : '' };\n      sheetHits++;\n    }\n  } catch (e) { /* first run - no sheet data yet */ }\n\n  for (var i = 0; i < items.length; i++) {\n    var r = items[i].json;\n    if (!r || r._error) { continue; }\n    out.push({ json: r });\n\n    if (typeof r.latitude === 'number' && typeof r.longitude === 'number') {\n      withCoords++;\n      var rKey = r.certNumber ? ('MCS:' + r.certNumber)\n                              : ('NM:' + String(r.companyName || '').toLowerCase());\n      // Prefer the CRM's review count - it reflects any prior Apify enrichment.\n      var sEntry = sheetIdx[rKey];\n      var effRc = (sEntry && sEntry.reviewCount > 0) ? sEntry.reviewCount\n                                                     : (r.reviewCount || 0);\n      if (effRc > 0) {\n        index.push({\n          key: rKey,\n          companyName: r.companyName || '',\n          latitude: r.latitude,\n          longitude: r.longitude,\n          reviewCount: effRc,\n          googleRating: r.googleRating || 0,\n          openingHours: r.openingHours || '',\n          categories: r.categories || (sEntry ? sEntry.categories : '')\n        });\n      }\n    }\n  }\n\n  if (!out.length) { return [{ json: { _error: 'Build Index got 0 leads' } }]; }\n\n  // ---- F-R16 FIX ----\n  // The index above is built from the FULL reconciled pool. ONLY NOW do we slice\n  // to the leads this run will actually enrich.\n  //\n  // Slicing used to happen upstream in '🔎 MCS Filter & Normalize', which shrank\n  // the competitor index in proportion to maxLeads: a 25-lead run produced a\n  // 21-entry index, so almost nothing fell inside the 10-mile radius, no gap was\n  // found, and every A-route collapsed to D. Competitor gap is what creates\n  // A / A-v2 / A-lite - the highest-reply-rate templates - so the old ordering\n  // silently destroyed the best leads in any sliced run.\n  var cfgS = {};\n  try { cfgS = $('⚙️ Config').first().json || {}; } catch (eC) { }\n  var maxLeads = cfgS.maxLeads || 0;\n  var leadOffset = cfgS.leadOffset || 0;\n\n  var emitted = out;\n  if (leadOffset > 0) { emitted = emitted.slice(leadOffset); }\n  if (maxLeads > 0) { emitted = emitted.slice(0, maxLeads); }\n  if (!emitted.length) {\n    return [{ json: { _error: 'Slice produced 0 leads - leadOffset ' + leadOffset + ' is past the end of ' + out.length + ' records' } }];\n  }\n\n  // Attach to the first item only - same pattern as _stats. Pack Batch reads it\n  // via $('🧭 Build Competitor Index').first().json._index\n  emitted[0].json._index = index;\n  emitted[0].json._indexStats = {\n    totalLeads: out.length,\n    indexedFrom: out.length,\n    emitted: emitted.length,\n    withCoords: withCoords,\n    indexSize: index.length,\n    sheetReviewCountsMerged: sheetHits,\n    leadOffset: leadOffset,\n    maxLeads: maxLeads\n  };\n  return emitted;\n} catch (e) {\n  return [{ json: { _error: 'Build Competitor Index failed: ' + e.message } }];\n}"
+      }
+    },
+    {
+      "id": "split-batches",
+      "name": "🔁 Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1220,
+        420
+      ],
+      "parameters": {
+        "batchSize": 500,
+        "options": {}
+      }
+    },
+    {
+      "id": "pack",
+      "name": "📦 Pack Batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1460,
+        560
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "// Collapses one batch into a SINGLE payload item for the child:\n//   { config, index, leads[], batchIndex }\ntry {\n  var cfg = $('⚙️ Config').first().json;\n  var idx = [];\n  try { idx = $('🧭 Build Competitor Index').first().json._index || []; } catch (e) { idx = []; }\n\n  var items = $input.all();\n  var leads = [];\n  for (var i = 0; i < items.length; i++) {\n    var r = items[i].json;\n    if (!r || r._error) { continue; }\n    // Strip the parent-only bookkeeping fields before shipping.\n    if (r._index) { delete r._index; }\n    if (r._indexStats) { delete r._indexStats; }\n    if (r._stats) { delete r._stats; }\n    leads.push(r);\n  }\n\n  if (!leads.length) { return [{ json: { _error: 'Pack Batch got 0 leads' } }]; }\n\n  // F-R11 FIX: the child applies spend caps PER EXECUTION, so a run-wide total\n  // has to be divided by the batch count before it is handed over. Without this\n  // a '200' verify cap became 200 x 12 = 2,400 ZeroBounce credits.\n  var totalLeads = 0;\n  try { totalLeads = $('🧭 Build Competitor Index').first().json._indexStats.totalLeads || 0; } catch (e) {}\n  var size = cfg.batchSize || leads.length;\n  var batches = Math.max(1, Math.ceil(totalLeads / size));\n  function perBatch(total) {\n    if (!total || total <= 0) { return 0; }          // 0 = unlimited, preserve it\n    return Math.max(1, Math.ceil(total / batches));\n  }\n\n  var childCfg = JSON.parse(JSON.stringify(cfg));\n  childCfg.apifyLookupLimit  = perBatch(cfg.apifyLookupLimitTotal);\n  childCfg.apifyReviewLimit  = perBatch(cfg.apifyReviewLimitTotal);\n  childCfg.maxClaudeCalls    = perBatch(cfg.maxClaudeCallsTotal);\n  childCfg.maxInstantlyCalls = perBatch(cfg.maxInstantlyCallsTotal);\n  childCfg.maxVerifyCalls    = perBatch(cfg.maxVerifyCallsTotal);\n  childCfg._batchCount = batches;\n\n  return [{ json: {\n    config: childCfg,\n    index: idx,\n    leads: leads,\n    batchIndex: $runIndex,\n    batchLeadCount: leads.length,\n    indexSize: idx.length,\n    batchCount: batches,\n    perBatchCaps: {\n      apifyLookupLimit: childCfg.apifyLookupLimit,\n      apifyReviewLimit: childCfg.apifyReviewLimit,\n      maxClaudeCalls: childCfg.maxClaudeCalls,\n      maxVerifyCalls: childCfg.maxVerifyCalls\n    }\n  }}];\n} catch (e) {\n  return [{ json: { _error: 'Pack Batch failed: ' + e.message } }];\n}"
+      }
+    },
+    {
+      "id": "exec-child",
+      "name": "🚀 Enrich Batch",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1700,
+        560
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": false,
+      "alwaysOutputData": true,
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "dpgZ964TabmgSJ0k",
+          "mode": "id",
+          "cachedResultName": "PlutioLabs — Scraper v4 CHILD (Enrich Batch)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "run-sum",
+      "name": "📈 Run Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1460,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "// Fires once, on the Split In Batches 'done' output.\ntry {\n  var cfg = $('⚙️ Config').first().json;\n  var idxStats = {};\n  var filterStats = {};\n  try { idxStats = $('🧭 Build Competitor Index').first().json._indexStats || {}; } catch (e) {}\n  try { filterStats = $('🔎 MCS Filter & Normalize').first().json._stats || {}; } catch (e) {}\n\n  var totalLeads = idxStats.totalLeads || 0;\n  var size = cfg.batchSize || 0;\n  var batches = size ? Math.ceil(totalLeads / size) : 0;\n\n  return [{ json: {\n    _summary: 'v4 batched run complete',\n    totalLeads: totalLeads,\n    batchSize: size,\n    batchesRun: batches,\n    competitorIndexSize: idxStats.indexSize || 0,\n    leadsWithCoords: idxStats.withCoords || 0,\n    filterStats: filterStats,\n    maxLeadsCap: cfg.maxLeads,\n    note: 'Per-batch counts are in the CHILD executions. Verify the CRM with the Integrity Check utility.'\n  }}];\n} catch (e) {\n  return [{ json: { _error: 'Run Summary failed: ' + e.message } }];\n}"
+      }
+    },
+    {
+      "id": "reconcile",
+      "name": "🔄 Reconcile & Dedupe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        420
+      ],
+      "parameters": {
+        "jsCode": "// Stage 1d — reconcile MCS + Maps into ONE canonical record shape, then dedupe.\n// CRITICAL: this is the canonicalisation step. It maps town->city,\n// country->ukCountry, technologies->categories (which drives Trade / Trade\n// Scene, F-A1) and derives the WhatsApp signal. Skipping it writes rows with a\n// blank City / Business Category / UK Country and a generic trade fallback.\ntry {\n  var items = $input.all();\n\n  var TECH_LABEL = {\n    solar_pv: 'Solar panel installer', solar_thermal: 'Solar thermal installer',\n    battery: 'Solar battery storage', ashp: 'Heat pump installer',\n    wshp: 'Heat pump installer', eahp: 'Heat pump installer',\n    gshp: 'Heat pump installer', sahp: 'Heat pump installer',\n    gahp: 'Heat pump installer', biomass: 'Biomass installer',\n    wind_turbine: 'Wind turbine installer', micro_chp: 'Micro CHP installer'\n  };\n  var TECH_ORDER = ['solar_pv','solar_thermal','battery','ashp','wshp','eahp',\n                    'gshp','sahp','gahp','biomass','wind_turbine','micro_chp'];\n\n  function techToCategories(techStr) {\n    var raw = String(techStr || '').split(',');\n    var have = {};\n    for (var i = 0; i < raw.length; i++) {\n      var t = raw[i].replace(/\\s/g, '');\n      if (t) { have[t] = true; }\n    }\n    var out = [];\n    for (var o = 0; o < TECH_ORDER.length; o++) {\n      var key = TECH_ORDER[o];\n      if (have[key]) {\n        var lab = TECH_LABEL[key];\n        if (lab && out.indexOf(lab) === -1) { out.push(lab); }\n      }\n    }\n    return out.join(', ');\n  }\n\n  function normPhone(phone) {\n    var raw = String(phone || '');\n    var p = '';\n    for (var ci = 0; ci < raw.length; ci++) {\n      var ch = raw.charAt(ci);\n      if (ch >= '0' && ch <= '9') { p += ch; }\n      else if (ch === '+' && p.length === 0) { p += ch; }\n    }\n    if (p.length < 5) { return ''; }\n    if (p.charAt(0) === '+') { return p; }\n    if (p.charAt(0) === '0') { return '+44' + p.substring(1); }\n    if (p.length > 10 && p.substring(0, 2) === '44') { return '+' + p; }\n    return p;\n  }\n  function phoneKeyOf(e164) {\n    var d = String(e164 || '').replace(/\\D/g, '');\n    if (d.indexOf('44') === 0) { d = d.substring(2); }\n    if (d.indexOf('0') === 0) { d = d.substring(1); }\n    return d.length >= 7 ? d : '';   // F-R7: preserve non-standard lengths\n  }\n  function domainOf(w) {\n    var d = String(w || '').toLowerCase().trim();\n    if (!d) { return ''; }\n    if (d.indexOf('://') !== -1) { d = d.split('://')[1]; }\n    if (d.indexOf('www.') === 0) { d = d.substring(4); }\n    return d.split('/')[0].split('?')[0].trim();\n  }\n  function isMob(e164) { return String(e164 || '').indexOf('+447') === 0; }\n\n  function canonMcs(r) {\n    var ph = r.phone || '';\n    return {\n      companyName: r.companyName || '', city: r.town || '', country: 'UK',\n      ukCountry: r.country || '', postcode: r.postcode || '', county: r.county || '',\n      address: r.address || '',\n      phone: ph, phoneKey: r.phoneKey || phoneKeyOf(ph),\n      website: r.website || '', email: r.email || '',\n      firstName: '', ownerName: '', linkedinUrl: '',\n      source: 'mcs',\n      googleRating: r.googleRating || 0,\n      reviewCount: (r.reviewCount === null || r.reviewCount === undefined) ? 0 : r.reviewCount,\n      googleMatched: !!r.googleMatched,\n      googleMapsUrl: '', categories: techToCategories(r.technologies),\n      openingHours: '', hoursKnown: false,\n      businessAttributes: '', socialLinks: '', reviews: [],\n      latitude: r.latitude, longitude: r.longitude,\n      certNumber: r.certNumber || '', certBody: r.certBody || '',\n      technologies: r.technologies || '', busRegistered: !!r.busRegistered,\n      entityType: r.entityType || 'unknown', pecrRisk: !!r.pecrRisk,\n      emailable: !!r.emailable, emailSource: r.email ? 'mcs' : '',\n      mcsGeneratedAt: r.mcsGeneratedAt || '', mcsPageUrl: r.mcsPageUrl || '',\n      isMobile: isMob(ph), waLink: ''\n    };\n  }\n\n  function canonMaps(r) {\n    var ph = normPhone(r.phone);\n    return {\n      companyName: r.companyName || '', city: r.city || '', country: 'UK',\n      ukCountry: '', postcode: r.postcode || '', county: '', address: r.address || '',\n      phone: ph, phoneKey: phoneKeyOf(ph),\n      website: r.website || '', email: '',\n      firstName: '', ownerName: '', linkedinUrl: '',\n      source: 'maps',\n      googleRating: r.googleRating || 0, reviewCount: r.reviewCount || 0,\n      googleMatched: true,\n      googleMapsUrl: r.googleMapsUrl || '', categories: r.categories || '',\n      openingHours: r.openingHours || '', hoursKnown: !!r.openingHours,\n      businessAttributes: r.businessAttributes || '', socialLinks: r.socialLinks || '',\n      reviews: r.reviews || [],\n      latitude: r.latitude, longitude: r.longitude,\n      certNumber: '', certBody: '', technologies: '', busRegistered: false,\n      entityType: 'unknown', pecrRisk: false, emailable: false, emailSource: '',\n      mcsGeneratedAt: '', mcsPageUrl: '',\n      isMobile: isMob(ph), waLink: r.waLink || ''\n    };\n  }\n\n  var byPhone = {}, byDomain = {};\n  var out = [];\n  var stats = { mcsIn: 0, mapsIn: 0, mapsSkipped: 0, merged: 0, mapsNetNew: 0, dropped: 0 };\n\n  for (var i = 0; i < items.length; i++) {\n    var r = items[i].json;\n    if (!r || r._error || r._skipped) {\n      if (r && r._skipped) { stats.mapsSkipped++; }\n      continue;\n    }\n    if (r.source !== 'mcs') { continue; }\n    stats.mcsIn++;\n    var c = canonMcs(r);\n    if (!c.companyName) { stats.dropped++; continue; }\n    out.push(c);\n    if (c.phoneKey) { byPhone[c.phoneKey] = c; }\n    var d = domainOf(c.website);\n    if (d) { byDomain[d] = c; }\n  }\n\n  for (var j = 0; j < items.length; j++) {\n    var m = items[j].json;\n    if (!m || m._error || m._skipped) { continue; }\n    if (m.source !== 'maps') { continue; }\n    stats.mapsIn++;\n\n    var cm = canonMaps(m);\n    if (!cm.companyName) { stats.dropped++; continue; }\n\n    var dm = domainOf(cm.website);\n    var hit = null;\n    if (cm.phoneKey && byPhone[cm.phoneKey]) { hit = byPhone[cm.phoneKey]; }\n    else if (dm && byDomain[dm]) { hit = byDomain[dm]; }\n\n    if (hit) {\n      hit.source = 'both';\n      hit.googleRating = cm.googleRating || hit.googleRating;\n      hit.reviewCount = cm.reviewCount || hit.reviewCount;\n      hit.googleMatched = true;\n      hit.googleMapsUrl = cm.googleMapsUrl || hit.googleMapsUrl;\n      hit.openingHours = cm.openingHours || hit.openingHours;\n      hit.hoursKnown = hit.hoursKnown || cm.hoursKnown;\n      hit.businessAttributes = cm.businessAttributes || hit.businessAttributes;\n      hit.socialLinks = cm.socialLinks || hit.socialLinks;\n      hit.reviews = (cm.reviews && cm.reviews.length) ? cm.reviews : hit.reviews;\n      hit.waLink = hit.waLink || cm.waLink;\n      if (!hit.categories) { hit.categories = cm.categories; }\n      if (!hit.website) { hit.website = cm.website; }\n      if (hit.latitude === null || hit.latitude === undefined) { hit.latitude = cm.latitude; }\n      if (hit.longitude === null || hit.longitude === undefined) { hit.longitude = cm.longitude; }\n      stats.merged++;\n    } else {\n      out.push(cm);\n      if (cm.phoneKey) { byPhone[cm.phoneKey] = cm; }\n      if (dm) { byDomain[dm] = cm; }\n      stats.mapsNetNew++;\n    }\n  }\n\n  for (var k = 0; k < out.length; k++) {\n    var o = out[k];\n    if (o.waLink) { o.waSignal = 'wa-link'; o.waNumber = o.phone; }\n    else if (o.isMobile) { o.waSignal = 'mobile'; o.waNumber = o.phone; }\n    else { o.waSignal = 'none'; o.waNumber = ''; }\n  }\n\n  out.sort(function(a, b) {\n    var rank = { both: 0, mcs: 1, maps: 2 };\n    return (rank[a.source] || 3) - (rank[b.source] || 3);\n  });\n\n  if (!out.length) {\n    return [{ json: { _error: 'Reconcile produced 0 leads', _stats: stats } }];\n  }\n\n  var results = [];\n  for (var z = 0; z < out.length; z++) { results.push({ json: out[z] }); }\n  results[0].json._reconcileStats = stats;\n  return results;\n} catch (e) {\n  return [{ json: { _error: 'Reconcile failed: ' + e.message } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "read-crm-idx",
+      "name": "📖 Read CRM Index",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -100,
+        420
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/{{ $('⚙️ Config').first().json.sheetsId }}/values:batchGet?ranges={{ encodeURIComponent(\"'Outreach CRM'!J:K\") }}&ranges={{ encodeURIComponent(\"'Outreach CRM'!BF:BF\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "executeOnce": true
+    }
+  ],
+  "connections": {
+    "📡 Fetch MCS Index": {
+      "main": [
+        [
+          {
+            "node": "📥 Fetch MCS Installers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📥 Fetch MCS Installers": {
+      "main": [
+        [
+          {
+            "node": "🔀 Split MCS Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 Split MCS Records": {
+      "main": [
+        [
+          {
+            "node": "🔎 MCS Filter & Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧭 Build Competitor Index": {
+      "main": [
+        [
+          {
+            "node": "🔁 Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔁 Split In Batches": {
+      "main": [
+        [
+          {
+            "node": "📈 Run Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "📦 Pack Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📦 Pack Batch": {
+      "main": [
+        [
+          {
+            "node": "🚀 Enrich Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🚀 Enrich Batch": {
+      "main": [
+        [
+          {
+            "node": "🔁 Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📥 Run": {
+      "main": [
+        [
+          {
+            "node": "↩️ Ack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "↩️ Ack": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔎 MCS Filter & Normalize": {
+      "main": [
+        [
+          {
+            "node": "🔄 Reconcile & Dedupe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔄 Reconcile & Dedupe": {
+      "main": [
+        [
+          {
+            "node": "🧭 Build Competitor Index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Config": {
+      "main": [
+        [
+          {
+            "node": "📖 Read CRM Index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📖 Read CRM Index": {
+      "main": [
+        [
+          {
+            "node": "📡 Fetch MCS Index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveManualExecutions": true
+  },
+  "tags": [],
+  "activeVersion": {
+    "versionId": "77efe3d6-3d51-48b4-a919-911d1ea5c787",
+    "workflowId": "IctLwQQPZAMcLJte",
+    "nodes": [
+      {
+        "id": "sticky-1",
+        "name": "📌 Architecture",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -460,
+          -120
+        ],
+        "parameters": {
+          "width": 620,
+          "height": 420,
+          "content": "## v4 PARENT — Batch Orchestrator\n\nSolves two constraints that pull against each other:\n\n**Memory (F-R1).** n8n keeps every node's input AND output. A ~20-node chain over 5,603 items = ~20 copies resident → the instance was killed at 47s. The child is a separate execution, so its memory is freed after every batch.\n\n**Competitor pool (F-R2).** A 500-lead slice matches at 48.6%; the full pool at ~100%. So the parent builds ONE global index and passes it to every batch — batches never match against just themselves.\n\n### Flow\nfetch → filter → reconcile → build index → loop batches → child → counts back\n\nThe child (`dpgZ964TabmgSJ0k`) returns **counts only**. Returning records would put the dataset back in the parent's memory and undo the whole point.\n\n**This workflow owns the config.** The child reads config from the payload, so there is no drift."
+        }
+      },
+      {
+        "id": "trig",
+        "name": "📥 Run",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          -460,
+          420
+        ],
+        "parameters": {
+          "path": "scraper-v4-run",
+          "httpMethod": "POST",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "webhookId": "b123797a-580c-41c6-bfa0-343584993880"
+      },
+      {
+        "id": "ack",
+        "name": "↩️ Ack",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          -220,
+          620
+        ],
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify({ started: true, note: 'Batched run started - poll executions for the Run Summary' }) }}",
+          "options": {}
+        }
+      },
+      {
+        "id": "config",
+        "name": "⚙️ Config",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -220,
+          420
+        ],
+        "onError": "continueRegularOutput",
+        "parameters": {
+          "jsCode": "// PLUTIOLABS SCRAPER v4 — PARENT CONFIG (single source of truth).\n// Passed to the child on every batch; the child never defines its own.\ntry {\n  return [{\n    json: {\n      // Claude no longer needs a key here. '🧠 Claude Enrich' in the CHILD is an\n      // HTTP Request node using the n8n 'anthropicApi' credential (the same one\n      // D3 uses), so the secret never enters config or execution data.\n      claudeModel: 'claude-haiku-4-5',\n\n      // NO API KEYS LIVE HERE ANYMORE (F-R13 closed, 2026-08-19).\n      // Every outbound call is an HTTP Request node using an n8n credential:\n      //   Anthropic  -> 'Anthropic account'  (anthropicApi)\n      //   Apify      -> 'Apify API'          (httpHeaderAuth, api.apify.com only)\n      //   ZeroBounce -> 'ZeroBounce API'     (httpQueryAuth,  api_key param)\n      //   Instantly  -> 'Instantly API'      (httpHeaderAuth, api.instantly.ai only)\n      // Config used to carry these in plaintext, and n8n writes config into the\n      // execution data of EVERY batch - so the keys were readable by anyone with\n      // access to the run history.\n      //\n      // These two are plain booleans, not secrets. They gate the two services\n      // whose credentials are still placeholders - flip to true only once the\n      // matching credential holds a real key.\n      verifyEnabled: false,\n      enrichEnabled: false,\n\n      sheetsId:          'YOUR_SCRAPER_SHEET_ID',\n      sheetsTabName:     'Outreach CRM',\n      sheetsSnapshotTab: 'MCS Snapshot',\n\n      mcsIndexUrl:      'https://findcertifiedinstallers.co.uk/api/index.json',\n      mcsInstallersUrl: 'https://findcertifiedinstallers.co.uk/api/installers.json',\n\n      mcsTechScope: ['solar_pv','ashp','battery','wshp','solar_thermal','eahp'],\n      emailOnlyLtd: true,\n\n      // ---- BATCHING ----\n      // batchSize is reported only. The authoritative value is the literal on\n      // the '🔁 Split In Batches' node (n8n requires a number there, not an\n      // expression). KEEP THE TWO IN SYNC.\n      batchSize: 500,\n      // maxLeads caps the TOTAL run. 0 = full dataset (~5,603).\n      // Kept small while proving the architecture.\n      maxLeads: 500,\n      leadOffset: 0,\n      onlyCerts: [],\n\n      apifyMaxResultsPerSearch: 40,\n      apifyMaxPollMinutes: 20,\n      // CAP SEMANTICS (F-R11): these are TOTALS for the whole run. Pack Batch\n      // divides each by the batch count before handing it to a child, because\n      // the child applies them PER EXECUTION. Left undivided, a '200' verify cap\n      // became 2,400 across 12 batches - against a 100/month ZeroBounce tier.\n      apifyLookupLimitTotal: 500,\n      includeReviews: true,\n      maxReviews: 20,\n      // GATE 1 cap for the Tier-2 REVIEW scrape (run-wide total; Pack Batch\n      // divides it per batch). Cost per lead: $0.004 place + 20 x $0.0005\n      // reviews = $0.014. 100 leads = $1.40.\n      apifyReviewLimitTotal: 100,\n      // 'lowestRanking' deliberately. Complaints live in low-star reviews and\n      // they are what create Templates A and B. For a 4.9-star business the\n      // bottom 20 are still mostly positive, so bestReviewQuote (A-v2) survives;\n      // for a 3.3-star business the complaints are the story anyway.\n      reviewsSort: 'lowestRanking',\n      ukCities: ['London','Manchester','Birmingham','Leeds'],\n      ukKeywords: [\n        'solar panel installer {city}',\n        'solar PV installer {city}',\n        'solar energy company {city}',\n        'solar panel company {city}',\n        'solar battery storage installer {city}',\n        'solar installation {city}',\n        'heat pump installer {city}',\n        'air source heat pump installer {city}',\n        'ground source heat pump installer {city}',\n        'heat pump engineer {city}'\n      ],\n\n      competitorRadiusMiles:    10,\n      competitorRadiusFallback: 15,\n      competitorGapMin:         10,\n      competitorGapMax:         150,\n\n      minReviewsForP1: 8,\n\n      // LEVER 3: a P2 lead whose competitor is this far ahead still gets A-lite.\n      // The A-lite angle (\"they are N reviews ahead\") does not require the LEAD\n      // to have many reviews - it lands harder when they have few. Set to 30 and\n      // not 10 so we take dominant gaps without pulling in micro-businesses that\n      // cannot afford a 2-10k engagement. Raise it to tighten, lower to widen.\n      aLiteP2GapMin: 30,\n\n      reviewsLowCount: 5,\n      reviewsHighCount: 3,\n      // GATE 2 value. maxLeads 500 + batchSize 500 = one batch, so this is also\n      // the per-batch figure. Raise to 0 (unlimited) only after Gate 2 passes.\n      maxClaudeCallsTotal: 100,\n      maxInstantlyCallsTotal: 0,\n      maxVerifyCallsTotal: 200\n    }\n  }];\n} catch (e) {\n  return [{ json: { _error: 'Config failed: ' + e.message } }];\n}"
+        }
+      },
+      {
+        "id": "mcs-idx",
+        "name": "📡 Fetch MCS Index",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          20,
+          420
+        ],
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "alwaysOutputData": true,
+        "parameters": {
+          "url": "={{ $('⚙️ Config').first().json.mcsIndexUrl }}",
+          "options": {
+            "timeout": 20000
+          }
+        }
+      },
+      {
+        "id": "mcs-fetch",
+        "name": "📥 Fetch MCS Installers",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          260,
+          420
+        ],
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "alwaysOutputData": true,
+        "parameters": {
+          "url": "={{ $('⚙️ Config').first().json.mcsInstallersUrl }}",
+          "options": {
+            "timeout": 120000
+          }
+        }
+      },
+      {
+        "id": "mcs-split",
+        "name": "🔀 Split MCS Records",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          500,
+          420
+        ],
+        "onError": "continueRegularOutput",
+        "parameters": {
+          "jsCode": "try {\n  var payload = $input.first().json;\n  var rows = (payload && payload.installers) ? payload.installers : [];\n  var idx = {};\n  try { idx = $('📡 Fetch MCS Index').first().json || {}; } catch (e) { idx = {}; }\n  var generatedAt = idx.generated_at || '';\n  if (!rows.length) { return [{ json: { _error: 'MCS fetch returned no installers' } }]; }\n  var out = [];\n  for (var i = 0; i < rows.length; i++) {\n    var r = rows[i];\n    r.source = 'mcs';\n    r.mcsGeneratedAt = generatedAt;\n    out.push({ json: r });\n  }\n  return out;\n} catch (e) {\n  return [{ json: { _error: 'Split MCS failed: ' + e.message } }];\n}"
+        }
+      },
+      {
+        "id": "mcs-filter",
+        "name": "🔎 MCS Filter & Normalize",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          740,
+          420
+        ],
+        "onError": "continueRegularOutput",
+        "parameters": {
+          "jsCode": "// Stage 1b — scope filter + the 5 mandatory fixes from the 2026-08-15 data audit.\ntry {\n  var cfg = $('⚙️ Config').first().json;\n  var scope = cfg.mcsTechScope || [];\n  var ltdOnly = cfg.emailOnlyLtd !== false;\n  var maxLeads = cfg.maxLeads || 0;\n  var onlyCerts = cfg.onlyCerts || [];\n  var leadOffset = cfg.leadOffset || 0;\n  var matchedIdx = 0;\n  var items = $input.all();\n\n  var FREE = ['gmail.com','hotmail.com','hotmail.co.uk','yahoo.com','yahoo.co.uk',\n              'outlook.com','icloud.com','btinternet.com','live.co.uk','aol.com',\n              'sky.com','msn.com','me.com'];\n\n  // Scotland / Wales / NI postcode areas. `region` is England-only — never filter on it.\n  var SCOT = ['AB','DD','DG','EH','FK','G','HS','IV','KA','KW','KY','ML','PA','PH','TD','ZE'];\n  var WALES = ['CF','LD','LL','NP','SA'];\n\n  function pcArea(pc) {\n    var m = String(pc || '').toUpperCase().match(/^[A-Z]{1,2}/);\n    return m ? m[0] : '';\n  }\n  function country(pc) {\n    var a = pcArea(pc);\n    if (a === 'BT') return 'Northern Ireland';\n    if (SCOT.indexOf(a) !== -1) return 'Scotland';\n    if (WALES.indexOf(a) !== -1) return 'Wales';\n    return 'England';\n  }\n  function isLtd(name) {\n    var n = String(name || '').toLowerCase().replace(/\\.+$/, '').trim();\n    return /\\b(ltd|limited|llp|plc)$/.test(n);\n  }\n  function fixSite(w) {\n    var s = String(w || '').trim();\n    if (!s) return '';\n    if (/\\s/.test(s)) return '';\n    if (!/\\.[a-z]{2,}/i.test(s)) return '';\n    if (!/^https?:\\/\\//i.test(s)) s = 'https://' + s;\n    return s.replace(/\\/+$/, '');\n  }\n  function normPhone(p) {\n    var d = String(p || '').replace(/\\D/g, '');\n    if (d.indexOf('44') === 0) d = d.substring(2);\n    if (d.indexOf('0') === 0) d = d.substring(1);\n    // F-R7: preserve non-standard lengths - blanking them destroyed working\n    // numbers and created blank match keys (F-R6).\n    return d.length >= 7 ? d : '';\n  }\n  function e164(k) { return k ? '+44' + k : ''; }\n\n  var out = [];\n  var stats = { seen: 0, outOfScope: 0, notLtd: 0, badGeo: 0, kept: 0,\n                pecrRisk: 0, badSite: 0, badPhone: 0, skippedByOffset: 0 };\n\n  for (var i = 0; i < items.length; i++) {\n    // F-R16 FIX: slicing MOVED to '🧭 Build Competitor Index'. Capping here shrank\n    // the competitor index in proportion to maxLeads, which silently collapsed\n    // every A-route to D. See the note in that node.\n    var r = items[i].json;\n    if (!r || r._error) { continue; }\n    stats.seen++;\n\n    if (onlyCerts.length && onlyCerts.indexOf(r.certification_number) === -1) { continue; }\n\n    var techs = r.technologies || [];\n    var inScope = false;\n    for (var t = 0; t < techs.length; t++) {\n      if (scope.indexOf(techs[t]) !== -1) { inScope = true; break; }\n    }\n    if (!inScope) { stats.outOfScope++; continue; }\n\n    var lat = Number(r.latitude), lon = Number(r.longitude);\n    if (!(lat >= 49.8 && lat <= 60.9 && lon >= -8.7 && lon <= 1.9)) {\n      stats.badGeo++; continue;\n    }\n\n    matchedIdx++;\n    // F-R16 FIX: leadOffset also moved to '🧭 Build Competitor Index'.\n\n    var ltd = isLtd(r.name);\n    if (ltdOnly && !ltd) { stats.notLtd++; }\n\n    var site = fixSite(r.website);\n    if (r.website && !site) { stats.badSite++; }\n\n    var phone = normPhone(r.telephone);\n    if (r.telephone && !phone) { stats.badPhone++; }\n\n    var email = String(r.email || '').trim().toLowerCase();\n    var emailDomain = email.indexOf('@') > -1 ? email.split('@')[1] : '';\n    var freeMailbox = FREE.indexOf(emailDomain) !== -1;\n    var emailValid = /^[^@\\s]+@[^@\\s]+\\.[a-z]{2,}$/.test(email);\n\n    var pecrRisk = (!ltd && freeMailbox);\n    if (pecrRisk) { stats.pecrRisk++; }\n\n    var emailable = emailValid && !pecrRisk && (!ltdOnly || ltd);\n\n    stats.kept++;\n    out.push({ json: {\n      source: 'mcs',\n      mcsGeneratedAt: r.mcsGeneratedAt || '',\n      companyName: r.name,\n      certNumber: r.certification_number,\n      certBody: r.certification_body,\n      technologies: techs.join(', '),\n      busRegistered: !!r.bus_registered,\n      address: r.address,\n      postcode: r.postcode,\n      town: r.town,\n      county: r.county,\n      country: country(r.postcode),\n      latitude: lat,\n      longitude: lon,\n      phone: e164(phone),\n      phoneKey: phone,\n      phoneRaw: r.telephone || '',\n      email: email,\n      emailValid: emailValid,\n      emailFreeMailbox: freeMailbox,\n      website: site,\n      googleRating: (r.google_rating === null || r.google_rating === undefined) ? null : Number(r.google_rating),\n      reviewCount: (r.google_review_count === null || r.google_review_count === undefined) ? null : Number(r.google_review_count),\n      googleMatched: (r.google_review_count !== null && r.google_review_count !== undefined),\n      entityType: ltd ? 'ltd' : 'unknown',\n      pecrRisk: pecrRisk,\n      emailable: emailable,\n      mcsPageUrl: r.page_url || ''\n    }});\n  }\n\n  if (!out.length) {\n    return [{ json: { _error: 'MCS filter produced 0 leads', _stats: stats } }];\n  }\n  out[0].json._stats = stats;\n  return out;\n} catch (e) {\n  return [{ json: { _error: 'MCS filter failed: ' + e.message } }];\n}"
+        }
+      },
+      {
+        "id": "build-index",
+        "name": "🧭 Build Competitor Index",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          980,
+          420
+        ],
+        "onError": "continueRegularOutput",
+        "parameters": {
+          "jsCode": "// Builds ONE global competitor index from the whole filtered set, then hands it\n// to every batch. This is what stops batching from wrecking competitor matching\n// (F-R2: full pool ~100% of eligible leads, a 500-lead slice only 48.6%).\n//\n// Deliberately compact - name, coords, reviews, rating, categories - because it\n// rides along with every child call. The full records never leave the parent.\n//\n// NOTE: leads whose review counts arrive later via the Apify lookup are NOT in\n// this index (MCS only carries review data for ~47%). Run the enrichment pass\n// first, then re-run competitor matching, once the Apify key exists.\ntry {\n  var items = $input.all();\n  var index = [];\n  var out = [];\n  var withCoords = 0;\n\n  // F-R12 FIX: two-pass competitor matching.\n  // MCS only carries review counts for ~47% of leads, so an index built purely\n  // from the in-memory set can never match the other ~2,978 - they would stay on\n  // Template D forever no matter how good the Apify run was.\n  // So: merge in review counts already written to the CRM by a previous\n  // enrichment pass. Run the parent again after an Apify pass and the index\n  // automatically improves. Empty sheet (first ever run) falls back to memory.\n  var sheetIdx = {};\n  var sheetHits = 0;\n  try {\n    var vr = $('📖 Read CRM Index').first().json.valueRanges || [];\n    var jk = (vr[0] && vr[0].values) || [];   // J = Review Count, K = Business Category\n    var bf = (vr[1] && vr[1].values) || [];   // BF = Row Key\n    for (var s = 1; s < jk.length; s++) {     // row 0 is the header\n      var kRow = bf[s] || [];\n      var key = kRow[0] ? String(kRow[0]) : '';\n      if (!key) { continue; }\n      var jRow = jk[s] || [];\n      var rc = (jRow[0] !== undefined && jRow[0] !== '') ? Number(jRow[0]) : null;\n      if (rc === null || isNaN(rc)) { continue; }\n      sheetIdx[key] = { reviewCount: rc, categories: jRow[1] ? String(jRow[1]) : '' };\n      sheetHits++;\n    }\n  } catch (e) { /* first run - no sheet data yet */ }\n\n  for (var i = 0; i < items.length; i++) {\n    var r = items[i].json;\n    if (!r || r._error) { continue; }\n    out.push({ json: r });\n\n    if (typeof r.latitude === 'number' && typeof r.longitude === 'number') {\n      withCoords++;\n      var rKey = r.certNumber ? ('MCS:' + r.certNumber)\n                              : ('NM:' + String(r.companyName || '').toLowerCase());\n      // Prefer the CRM's review count - it reflects any prior Apify enrichment.\n      var sEntry = sheetIdx[rKey];\n      var effRc = (sEntry && sEntry.reviewCount > 0) ? sEntry.reviewCount\n                                                     : (r.reviewCount || 0);\n      if (effRc > 0) {\n        index.push({\n          key: rKey,\n          companyName: r.companyName || '',\n          latitude: r.latitude,\n          longitude: r.longitude,\n          reviewCount: effRc,\n          googleRating: r.googleRating || 0,\n          openingHours: r.openingHours || '',\n          categories: r.categories || (sEntry ? sEntry.categories : '')\n        });\n      }\n    }\n  }\n\n  if (!out.length) { return [{ json: { _error: 'Build Index got 0 leads' } }]; }\n\n  // ---- F-R16 FIX ----\n  // The index above is built from the FULL reconciled pool. ONLY NOW do we slice\n  // to the leads this run will actually enrich.\n  //\n  // Slicing used to happen upstream in '🔎 MCS Filter & Normalize', which shrank\n  // the competitor index in proportion to maxLeads: a 25-lead run produced a\n  // 21-entry index, so almost nothing fell inside the 10-mile radius, no gap was\n  // found, and every A-route collapsed to D. Competitor gap is what creates\n  // A / A-v2 / A-lite - the highest-reply-rate templates - so the old ordering\n  // silently destroyed the best leads in any sliced run.\n  var cfgS = {};\n  try { cfgS = $('⚙️ Config').first().json || {}; } catch (eC) { }\n  var maxLeads = cfgS.maxLeads || 0;\n  var leadOffset = cfgS.leadOffset || 0;\n\n  var emitted = out;\n  if (leadOffset > 0) { emitted = emitted.slice(leadOffset); }\n  if (maxLeads > 0) { emitted = emitted.slice(0, maxLeads); }\n  if (!emitted.length) {\n    return [{ json: { _error: 'Slice produced 0 leads - leadOffset ' + leadOffset + ' is past the end of ' + out.length + ' records' } }];\n  }\n\n  // Attach to the first item only - same pattern as _stats. Pack Batch reads it\n  // via $('🧭 Build Competitor Index').first().json._index\n  emitted[0].json._index = index;\n  emitted[0].json._indexStats = {\n    totalLeads: out.length,\n    indexedFrom: out.length,\n    emitted: emitted.length,\n    withCoords: withCoords,\n    indexSize: index.length,\n    sheetReviewCountsMerged: sheetHits,\n    leadOffset: leadOffset,\n    maxLeads: maxLeads\n  };\n  return emitted;\n} catch (e) {\n  return [{ json: { _error: 'Build Competitor Index failed: ' + e.message } }];\n}"
+        }
+      },
+      {
+        "id": "split-batches",
+        "name": "🔁 Split In Batches",
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          1220,
+          420
+        ],
+        "parameters": {
+          "batchSize": 500,
+          "options": {}
+        }
+      },
+      {
+        "id": "pack",
+        "name": "📦 Pack Batch",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1460,
+          560
+        ],
+        "onError": "continueRegularOutput",
+        "parameters": {
+          "jsCode": "// Collapses one batch into a SINGLE payload item for the child:\n//   { config, index, leads[], batchIndex }\ntry {\n  var cfg = $('⚙️ Config').first().json;\n  var idx = [];\n  try { idx = $('🧭 Build Competitor Index').first().json._index || []; } catch (e) { idx = []; }\n\n  var items = $input.all();\n  var leads = [];\n  for (var i = 0; i < items.length; i++) {\n    var r = items[i].json;\n    if (!r || r._error) { continue; }\n    // Strip the parent-only bookkeeping fields before shipping.\n    if (r._index) { delete r._index; }\n    if (r._indexStats) { delete r._indexStats; }\n    if (r._stats) { delete r._stats; }\n    leads.push(r);\n  }\n\n  if (!leads.length) { return [{ json: { _error: 'Pack Batch got 0 leads' } }]; }\n\n  // F-R11 FIX: the child applies spend caps PER EXECUTION, so a run-wide total\n  // has to be divided by the batch count before it is handed over. Without this\n  // a '200' verify cap became 200 x 12 = 2,400 ZeroBounce credits.\n  var totalLeads = 0;\n  try { totalLeads = $('🧭 Build Competitor Index').first().json._indexStats.totalLeads || 0; } catch (e) {}\n  var size = cfg.batchSize || leads.length;\n  var batches = Math.max(1, Math.ceil(totalLeads / size));\n  function perBatch(total) {\n    if (!total || total <= 0) { return 0; }          // 0 = unlimited, preserve it\n    return Math.max(1, Math.ceil(total / batches));\n  }\n\n  var childCfg = JSON.parse(JSON.stringify(cfg));\n  childCfg.apifyLookupLimit  = perBatch(cfg.apifyLookupLimitTotal);\n  childCfg.apifyReviewLimit  = perBatch(cfg.apifyReviewLimitTotal);\n  childCfg.maxClaudeCalls    = perBatch(cfg.maxClaudeCallsTotal);\n  childCfg.maxInstantlyCalls = perBatch(cfg.maxInstantlyCallsTotal);\n  childCfg.maxVerifyCalls    = perBatch(cfg.maxVerifyCallsTotal);\n  childCfg._batchCount = batches;\n\n  return [{ json: {\n    config: childCfg,\n    index: idx,\n    leads: leads,\n    batchIndex: $runIndex,\n    batchLeadCount: leads.length,\n    indexSize: idx.length,\n    batchCount: batches,\n    perBatchCaps: {\n      apifyLookupLimit: childCfg.apifyLookupLimit,\n      apifyReviewLimit: childCfg.apifyReviewLimit,\n      maxClaudeCalls: childCfg.maxClaudeCalls,\n      maxVerifyCalls: childCfg.maxVerifyCalls\n    }\n  }}];\n} catch (e) {\n  return [{ json: { _error: 'Pack Batch failed: ' + e.message } }];\n}"
+        }
+      },
+      {
+        "id": "exec-child",
+        "name": "🚀 Enrich Batch",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.2,
+        "position": [
+          1700,
+          560
+        ],
+        "onError": "continueRegularOutput",
+        "retryOnFail": false,
+        "alwaysOutputData": true,
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "dpgZ964TabmgSJ0k",
+            "mode": "id",
+            "cachedResultName": "PlutioLabs — Scraper v4 CHILD (Enrich Batch)"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {},
+            "matchingColumns": [],
+            "schema": []
+          },
+          "mode": "once",
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        }
+      },
+      {
+        "id": "run-sum",
+        "name": "📈 Run Summary",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1460,
+          300
+        ],
+        "onError": "continueRegularOutput",
+        "parameters": {
+          "jsCode": "// Fires once, on the Split In Batches 'done' output.\ntry {\n  var cfg = $('⚙️ Config').first().json;\n  var idxStats = {};\n  var filterStats = {};\n  try { idxStats = $('🧭 Build Competitor Index').first().json._indexStats || {}; } catch (e) {}\n  try { filterStats = $('🔎 MCS Filter & Normalize').first().json._stats || {}; } catch (e) {}\n\n  var totalLeads = idxStats.totalLeads || 0;\n  var size = cfg.batchSize || 0;\n  var batches = size ? Math.ceil(totalLeads / size) : 0;\n\n  return [{ json: {\n    _summary: 'v4 batched run complete',\n    totalLeads: totalLeads,\n    batchSize: size,\n    batchesRun: batches,\n    competitorIndexSize: idxStats.indexSize || 0,\n    leadsWithCoords: idxStats.withCoords || 0,\n    filterStats: filterStats,\n    maxLeadsCap: cfg.maxLeads,\n    note: 'Per-batch counts are in the CHILD executions. Verify the CRM with the Integrity Check utility.'\n  }}];\n} catch (e) {\n  return [{ json: { _error: 'Run Summary failed: ' + e.message } }];\n}"
+        }
+      },
+      {
+        "id": "reconcile",
+        "name": "🔄 Reconcile & Dedupe",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          860,
+          420
+        ],
+        "parameters": {
+          "jsCode": "// Stage 1d — reconcile MCS + Maps into ONE canonical record shape, then dedupe.\n// CRITICAL: this is the canonicalisation step. It maps town->city,\n// country->ukCountry, technologies->categories (which drives Trade / Trade\n// Scene, F-A1) and derives the WhatsApp signal. Skipping it writes rows with a\n// blank City / Business Category / UK Country and a generic trade fallback.\ntry {\n  var items = $input.all();\n\n  var TECH_LABEL = {\n    solar_pv: 'Solar panel installer', solar_thermal: 'Solar thermal installer',\n    battery: 'Solar battery storage', ashp: 'Heat pump installer',\n    wshp: 'Heat pump installer', eahp: 'Heat pump installer',\n    gshp: 'Heat pump installer', sahp: 'Heat pump installer',\n    gahp: 'Heat pump installer', biomass: 'Biomass installer',\n    wind_turbine: 'Wind turbine installer', micro_chp: 'Micro CHP installer'\n  };\n  var TECH_ORDER = ['solar_pv','solar_thermal','battery','ashp','wshp','eahp',\n                    'gshp','sahp','gahp','biomass','wind_turbine','micro_chp'];\n\n  function techToCategories(techStr) {\n    var raw = String(techStr || '').split(',');\n    var have = {};\n    for (var i = 0; i < raw.length; i++) {\n      var t = raw[i].replace(/\\s/g, '');\n      if (t) { have[t] = true; }\n    }\n    var out = [];\n    for (var o = 0; o < TECH_ORDER.length; o++) {\n      var key = TECH_ORDER[o];\n      if (have[key]) {\n        var lab = TECH_LABEL[key];\n        if (lab && out.indexOf(lab) === -1) { out.push(lab); }\n      }\n    }\n    return out.join(', ');\n  }\n\n  function normPhone(phone) {\n    var raw = String(phone || '');\n    var p = '';\n    for (var ci = 0; ci < raw.length; ci++) {\n      var ch = raw.charAt(ci);\n      if (ch >= '0' && ch <= '9') { p += ch; }\n      else if (ch === '+' && p.length === 0) { p += ch; }\n    }\n    if (p.length < 5) { return ''; }\n    if (p.charAt(0) === '+') { return p; }\n    if (p.charAt(0) === '0') { return '+44' + p.substring(1); }\n    if (p.length > 10 && p.substring(0, 2) === '44') { return '+' + p; }\n    return p;\n  }\n  function phoneKeyOf(e164) {\n    var d = String(e164 || '').replace(/\\D/g, '');\n    if (d.indexOf('44') === 0) { d = d.substring(2); }\n    if (d.indexOf('0') === 0) { d = d.substring(1); }\n    return d.length >= 7 ? d : '';   // F-R7: preserve non-standard lengths\n  }\n  function domainOf(w) {\n    var d = String(w || '').toLowerCase().trim();\n    if (!d) { return ''; }\n    if (d.indexOf('://') !== -1) { d = d.split('://')[1]; }\n    if (d.indexOf('www.') === 0) { d = d.substring(4); }\n    return d.split('/')[0].split('?')[0].trim();\n  }\n  function isMob(e164) { return String(e164 || '').indexOf('+447') === 0; }\n\n  function canonMcs(r) {\n    var ph = r.phone || '';\n    return {\n      companyName: r.companyName || '', city: r.town || '', country: 'UK',\n      ukCountry: r.country || '', postcode: r.postcode || '', county: r.county || '',\n      address: r.address || '',\n      phone: ph, phoneKey: r.phoneKey || phoneKeyOf(ph),\n      website: r.website || '', email: r.email || '',\n      firstName: '', ownerName: '', linkedinUrl: '',\n      source: 'mcs',\n      googleRating: r.googleRating || 0,\n      reviewCount: (r.reviewCount === null || r.reviewCount === undefined) ? 0 : r.reviewCount,\n      googleMatched: !!r.googleMatched,\n      googleMapsUrl: '', categories: techToCategories(r.technologies),\n      openingHours: '', hoursKnown: false,\n      businessAttributes: '', socialLinks: '', reviews: [],\n      latitude: r.latitude, longitude: r.longitude,\n      certNumber: r.certNumber || '', certBody: r.certBody || '',\n      technologies: r.technologies || '', busRegistered: !!r.busRegistered,\n      entityType: r.entityType || 'unknown', pecrRisk: !!r.pecrRisk,\n      emailable: !!r.emailable, emailSource: r.email ? 'mcs' : '',\n      mcsGeneratedAt: r.mcsGeneratedAt || '', mcsPageUrl: r.mcsPageUrl || '',\n      isMobile: isMob(ph), waLink: ''\n    };\n  }\n\n  function canonMaps(r) {\n    var ph = normPhone(r.phone);\n    return {\n      companyName: r.companyName || '', city: r.city || '', country: 'UK',\n      ukCountry: '', postcode: r.postcode || '', county: '', address: r.address || '',\n      phone: ph, phoneKey: phoneKeyOf(ph),\n      website: r.website || '', email: '',\n      firstName: '', ownerName: '', linkedinUrl: '',\n      source: 'maps',\n      googleRating: r.googleRating || 0, reviewCount: r.reviewCount || 0,\n      googleMatched: true,\n      googleMapsUrl: r.googleMapsUrl || '', categories: r.categories || '',\n      openingHours: r.openingHours || '', hoursKnown: !!r.openingHours,\n      businessAttributes: r.businessAttributes || '', socialLinks: r.socialLinks || '',\n      reviews: r.reviews || [],\n      latitude: r.latitude, longitude: r.longitude,\n      certNumber: '', certBody: '', technologies: '', busRegistered: false,\n      entityType: 'unknown', pecrRisk: false, emailable: false, emailSource: '',\n      mcsGeneratedAt: '', mcsPageUrl: '',\n      isMobile: isMob(ph), waLink: r.waLink || ''\n    };\n  }\n\n  var byPhone = {}, byDomain = {};\n  var out = [];\n  var stats = { mcsIn: 0, mapsIn: 0, mapsSkipped: 0, merged: 0, mapsNetNew: 0, dropped: 0 };\n\n  for (var i = 0; i < items.length; i++) {\n    var r = items[i].json;\n    if (!r || r._error || r._skipped) {\n      if (r && r._skipped) { stats.mapsSkipped++; }\n      continue;\n    }\n    if (r.source !== 'mcs') { continue; }\n    stats.mcsIn++;\n    var c = canonMcs(r);\n    if (!c.companyName) { stats.dropped++; continue; }\n    out.push(c);\n    if (c.phoneKey) { byPhone[c.phoneKey] = c; }\n    var d = domainOf(c.website);\n    if (d) { byDomain[d] = c; }\n  }\n\n  for (var j = 0; j < items.length; j++) {\n    var m = items[j].json;\n    if (!m || m._error || m._skipped) { continue; }\n    if (m.source !== 'maps') { continue; }\n    stats.mapsIn++;\n\n    var cm = canonMaps(m);\n    if (!cm.companyName) { stats.dropped++; continue; }\n\n    var dm = domainOf(cm.website);\n    var hit = null;\n    if (cm.phoneKey && byPhone[cm.phoneKey]) { hit = byPhone[cm.phoneKey]; }\n    else if (dm && byDomain[dm]) { hit = byDomain[dm]; }\n\n    if (hit) {\n      hit.source = 'both';\n      hit.googleRating = cm.googleRating || hit.googleRating;\n      hit.reviewCount = cm.reviewCount || hit.reviewCount;\n      hit.googleMatched = true;\n      hit.googleMapsUrl = cm.googleMapsUrl || hit.googleMapsUrl;\n      hit.openingHours = cm.openingHours || hit.openingHours;\n      hit.hoursKnown = hit.hoursKnown || cm.hoursKnown;\n      hit.businessAttributes = cm.businessAttributes || hit.businessAttributes;\n      hit.socialLinks = cm.socialLinks || hit.socialLinks;\n      hit.reviews = (cm.reviews && cm.reviews.length) ? cm.reviews : hit.reviews;\n      hit.waLink = hit.waLink || cm.waLink;\n      if (!hit.categories) { hit.categories = cm.categories; }\n      if (!hit.website) { hit.website = cm.website; }\n      if (hit.latitude === null || hit.latitude === undefined) { hit.latitude = cm.latitude; }\n      if (hit.longitude === null || hit.longitude === undefined) { hit.longitude = cm.longitude; }\n      stats.merged++;\n    } else {\n      out.push(cm);\n      if (cm.phoneKey) { byPhone[cm.phoneKey] = cm; }\n      if (dm) { byDomain[dm] = cm; }\n      stats.mapsNetNew++;\n    }\n  }\n\n  for (var k = 0; k < out.length; k++) {\n    var o = out[k];\n    if (o.waLink) { o.waSignal = 'wa-link'; o.waNumber = o.phone; }\n    else if (o.isMobile) { o.waSignal = 'mobile'; o.waNumber = o.phone; }\n    else { o.waSignal = 'none'; o.waNumber = ''; }\n  }\n\n  out.sort(function(a, b) {\n    var rank = { both: 0, mcs: 1, maps: 2 };\n    return (rank[a.source] || 3) - (rank[b.source] || 3);\n  });\n\n  if (!out.length) {\n    return [{ json: { _error: 'Reconcile produced 0 leads', _stats: stats } }];\n  }\n\n  var results = [];\n  for (var z = 0; z < out.length; z++) { results.push({ json: out[z] }); }\n  results[0].json._reconcileStats = stats;\n  return results;\n} catch (e) {\n  return [{ json: { _error: 'Reconcile failed: ' + e.message } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "read-crm-idx",
+        "name": "📖 Read CRM Index",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          -100,
+          420
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "=https://sheets.googleapis.com/v4/spreadsheets/{{ $('⚙️ Config').first().json.sheetsId }}/values:batchGet?ranges={{ encodeURIComponent(\"'Outreach CRM'!J:K\") }}&ranges={{ encodeURIComponent(\"'Outreach CRM'!BF:BF\") }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleSheetsOAuth2Api",
+          "options": {
+            "timeout": 60000
+          }
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "alwaysOutputData": true,
+        "executeOnce": true
+      }
+    ],
+    "connections": {
+      "📡 Fetch MCS Index": {
+        "main": [
+          [
+            {
+              "node": "📥 Fetch MCS Installers",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "📥 Fetch MCS Installers": {
+        "main": [
+          [
+            {
+              "node": "🔀 Split MCS Records",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "🔀 Split MCS Records": {
+        "main": [
+          [
+            {
+              "node": "🔎 MCS Filter & Normalize",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "🧭 Build Competitor Index": {
+        "main": [
+          [
+            {
+              "node": "🔁 Split In Batches",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "🔁 Split In Batches": {
+        "main": [
+          [
+            {
+              "node": "📈 Run Summary",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "📦 Pack Batch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "📦 Pack Batch": {
+        "main": [
+          [
+            {
+              "node": "🚀 Enrich Batch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "🚀 Enrich Batch": {
+        "main": [
+          [
+            {
+              "node": "🔁 Split In Batches",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "📥 Run": {
+        "main": [
+          [
+            {
+              "node": "↩️ Ack",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "↩️ Ack": {
+        "main": [
+          [
+            {
+              "node": "⚙️ Config",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "🔎 MCS Filter & Normalize": {
+        "main": [
+          [
+            {
+              "node": "🔄 Reconcile & Dedupe",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "🔄 Reconcile & Dedupe": {
+        "main": [
+          [
+            {
+              "node": "🧭 Build Competitor Index",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⚙️ Config": {
+        "main": [
+          [
+            {
+              "node": "📖 Read CRM Index",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "📖 Read CRM Index": {
+        "main": [
+          [
+            {
+              "node": "📡 Fetch MCS Index",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Muhammad Ghazwan",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-08-20T20:49:23.643Z",
+    "updatedAt": "2026-08-20T20:49:23.643Z",
+    "workflowPublishHistory": [
+      {
+        "id": 352,
+        "workflowId": "IctLwQQPZAMcLJte",
+        "versionId": "77efe3d6-3d51-48b4-a919-911d1ea5c787",
+        "event": "activated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-20T20:49:23.759Z"
+      }
+    ]
+  }
+}

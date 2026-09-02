@@ -1,0 +1,1583 @@
+{
+  "id": "dB7H76QtxbUjaUeN",
+  "name": "Voice Agent — 05 Missed Call Recovery",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-04-17T13:24:43.570Z",
+  "updatedAt": "2026-08-21T23:00:40.474Z",
+  "isArchived": false,
+  "versionCounter": 21,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "wf5-sticky-overview",
+      "name": "WF5 Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        80
+      ],
+      "parameters": {
+        "content": "## WF5 — Missed Call Recovery\n\nPolls every 30 min. Finds leads that did not answer and works them through the retry sequence.\n\n**Sequence logic:**\n- Step 0 + no-answer/voicemail: wait 30 min, then Call #2\n- Step 1 + sequence-active: wait 4h, then SMS Follow-up\n- Step 2 + sequence-active: wait 24h, then Call #3\n- Step 3 + sequence-active: wait 2h grace, then Mark Unresponsive\n\n**Callback branch:** Fires VAPI when Callback Time is reached.\n**Business hours:** Calls and SMS only fire 08:00-20:59 London time.\n**Error alerts:** Owner SMS alert if VAPI call fails to queue.\n\nActivate AFTER WF3, WF4, WF2, WF1 are active.",
+        "color": 4,
+        "width": 600,
+        "height": 340
+      }
+    },
+    {
+      "id": "wf5-trigger",
+      "name": "Every 30 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        80,
+        460
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wf5-config",
+      "name": "Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        300,
+        460
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-1",
+              "name": "sheetId",
+              "value": "YOUR_CRM_SHEET_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-2",
+              "name": "clientsTab",
+              "value": "Clients",
+              "type": "string"
+            },
+            {
+              "id": "cfg-3",
+              "name": "vapiApiKey",
+              "value": "PLACEHOLDER_VAPI_API_KEY",
+              "type": "string"
+            },
+            {
+              "id": "cfg-4",
+              "name": "vapiAssistantId",
+              "value": "PLACEHOLDER_VAPI_ASSISTANT_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-5",
+              "name": "vapiPhoneNumberId",
+              "value": "PLACEHOLDER_VAPI_PHONE_NUMBER_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-6",
+              "name": "twilioFromNumber",
+              "value": "PLACEHOLDER_TWILIO_NUMBER",
+              "type": "string"
+            },
+            {
+              "id": "cfg-7",
+              "name": "businessName",
+              "value": "Solarify",
+              "type": "string"
+            },
+            {
+              "id": "cfg-8",
+              "name": "businessOwnerPhone",
+              "value": "PLACEHOLDER_OWNER_PHONE",
+              "type": "string"
+            },
+            {
+              "id": "cfg-9",
+              "name": "timezone",
+              "value": "Europe/London",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wf5-read-clients",
+      "name": "Read Clients",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        520,
+        460
+      ],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Client Config').first().json.sheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Client Config').first().json.clientsTab }}",
+          "mode": "name"
+        },
+        "range": "A:Z",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "wf5-classify",
+      "name": "Filter & Classify Leads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        740,
+        460
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var items = $input.all();\n  var now = new Date();\n  var results = [];\n  var month = now.getUTCMonth() + 1;\n  var tzOffset = (month >= 3 && month <= 10) ? 1 : 0;\n  var localHour = (now.getUTCHours() + tzOffset) % 24;\n  var isBusinessHours = (localHour >= 8 && localHour < 21);\n  for (var i = 0; i < items.length; i++) {\n    var lead = items[i].json;\n    var phone = (lead['Phone'] || '').toString().trim();\n    if (!phone) { continue; }\n    var status = (lead['Status'] || '').toString().trim();\n    var seqStep = parseInt((lead['Sequence Step'] || '0').toString(), 10);\n    if (isNaN(seqStep)) { seqStep = 0; }\n    var smsOptOut = (lead['SMS Opt-Out'] || 'N').toString().trim().toUpperCase();\n    var lastContact = (lead['Last Contact'] || '').toString().trim();\n    var seqStartedAt = (lead['Sequence Started At'] || '').toString().trim();\n    var callbackTime = (lead['Callback Time'] || '').toString().trim();\n    var name = (lead['Name'] || 'there').toString().trim();\n    var serviceInterest = (lead['Service Interest'] || 'home improvement').toString().trim();\n    var callAttempts = parseInt((lead['Call Attempt Count'] || '0').toString(), 10);\n    if (isNaN(callAttempts)) { callAttempts = 0; }\n    var action = null;\n    if (status === 'booked' || status === 'not-interested' || status === 'do-not-contact' || status === 'unresponsive') { continue; }\n    if (!action && isBusinessHours && status === 'new' && seqStep === 0 && !lastContact && callAttempts < 5) { action = 'fire-call-1'; }\n    if (!action && isBusinessHours && status === 'callback-scheduled' && callbackTime) {\n      var cbDate = new Date(callbackTime);\n      if (!isNaN(cbDate.getTime()) && now.getTime() >= cbDate.getTime()) { action = 'fire-callback'; }\n    }\n    if (!action && isBusinessHours && seqStep === 0 && (status === 'no-answer' || status === 'voicemail')) {\n      if (seqStartedAt) { var seqStart = new Date(seqStartedAt); if (!isNaN(seqStart.getTime())) { var minsSince = (now.getTime() - seqStart.getTime()) / 60000; if (minsSince >= 30) { action = 'fire-call-2'; } } }\n    }\n    if (!action && isBusinessHours && seqStep === 1 && status === 'sequence-active') {\n      if (smsOptOut === 'Y') { continue; }\n      if (lastContact) { var lc1 = new Date(lastContact); if (!isNaN(lc1.getTime())) { var h1 = (now.getTime() - lc1.getTime()) / 3600000; if (h1 >= 4) { action = 'send-sms-2'; } } }\n    }\n    if (!action && seqStep === 2 && status === 'sequence-active') {\n      if (lastContact) { var lc2 = new Date(lastContact); if (!isNaN(lc2.getTime())) { var h2 = (now.getTime() - lc2.getTime()) / 3600000; if (h2 >= 24 && isBusinessHours) { action = 'fire-call-3'; } } }\n    }\n    if (!action && seqStep === 3 && status === 'sequence-active') {\n      if (lastContact) { var lc3 = new Date(lastContact); if (!isNaN(lc3.getTime())) { var h3 = (now.getTime() - lc3.getTime()) / 3600000; if (h3 >= 2) { action = 'mark-unresponsive'; } } }\n    }\n    if (action) { results.push({ json: { phone: phone, name: name, serviceInterest: serviceInterest, status: status, seqStep: seqStep, action: action, callbackTime: callbackTime, lastContact: lastContact, callAttempts: callAttempts } }); }\n  }\n  return results;\n} catch(e) { throw new Error('WF5 classify error: ' + e.message); }"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf5-route",
+      "name": "Route Lead Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        960,
+        460
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "wf5-rule-0",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "fire-call-2",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "fire-call-2"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "wf5-rule-1",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "send-sms-2",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "send-sms-2"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "wf5-rule-2",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "fire-call-3",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "fire-call-3"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "wf5-rule-3",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "mark-unresponsive",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "mark-unresponsive"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "wf5-rule-4",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "fire-callback",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "fire-callback"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "wf5-rule-5",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "fire-call-1",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "fire-call-1"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf5-fire-call-2",
+      "name": "Fire VAPI Call #2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1200,
+        160
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": false,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vapi.ai/call",
+        "authentication": "genericCredentialType",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ assistantId: $('Client Config').first().json.vapiAssistantId, phoneNumberId: $('Client Config').first().json.vapiPhoneNumberId, customer: { number: $json.phone, name: $json.name }, assistantOverrides: { variableValues: { leadName: $json.name, serviceInterest: $json.serviceInterest } }, metadata: { workflowSource: 'wf5', sequenceStep: '2', callAttempt: 2 } }) }}",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENTIAL_ID",
+          "name": "VAPI API — D2 Voice Agent"
+        }
+      }
+    },
+    {
+      "id": "wf5-check-call2",
+      "name": "Call #2 Queued?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1400,
+        160
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c2q",
+              "leftValue": "={{ $json.id ? 'ok' : 'fail' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf5-update-step1",
+      "name": "Update - Seq Step 1",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1620,
+        160
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Client Config').first().json.sheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Client Config').first().json.clientsTab }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Filter & Classify Leads').item.json.phone }}",
+            "Status": "sequence-active",
+            "Sequence Step": "1"
+          },
+          "matchingColumns": [
+            "Phone"
+          ],
+          "schema": [
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Sequence Step",
+              "displayName": "Sequence Step",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "wf5-alert-call2-fail",
+      "name": "Alert - Call #2 Failed",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1620,
+        40
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $('Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ '⚠️ VAPI Call 2 failed for ' + $('Filter & Classify Leads').item.json.phone + '. Lead stuck at step 0. Check VAPI.' }}"
+      },
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf5-send-sms2",
+      "name": "Send Follow-Up SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        320
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $('Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $json.phone }}",
+        "message": "={{ 'Hi ' + $json.name + ', we tried calling you earlier about your ' + $json.serviceInterest + ' enquiry. We have great options and would love to help. Call us at ' + $('Client Config').first().json.businessOwnerPhone + ' or we will follow up soon. Reply STOP to opt out.' }}"
+      },
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf5-update-step2",
+      "name": "Update - Seq Step 2",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1440,
+        320
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Client Config').first().json.sheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Client Config').first().json.clientsTab }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Filter & Classify Leads').item.json.phone }}",
+            "Sequence Step": "2",
+            "Last Contact": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": [
+            "Phone"
+          ],
+          "schema": [
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Sequence Step",
+              "displayName": "Sequence Step",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Contact",
+              "displayName": "Last Contact",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "wf5-fire-call-3",
+      "name": "Fire VAPI Call #3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1200,
+        480
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": false,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vapi.ai/call",
+        "authentication": "genericCredentialType",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ assistantId: $('Client Config').first().json.vapiAssistantId, phoneNumberId: $('Client Config').first().json.vapiPhoneNumberId, customer: { number: $json.phone, name: $json.name }, assistantOverrides: { variableValues: { leadName: $json.name, serviceInterest: $json.serviceInterest } }, metadata: { workflowSource: 'wf5', sequenceStep: '3', callAttempt: 3 } }) }}",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENTIAL_ID",
+          "name": "VAPI API — D2 Voice Agent"
+        }
+      }
+    },
+    {
+      "id": "wf5-check-call3",
+      "name": "Call #3 Queued?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1400,
+        480
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c3q",
+              "leftValue": "={{ $json.id ? 'ok' : 'fail' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf5-update-step3",
+      "name": "Update - Seq Step 3",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1620,
+        480
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Client Config').first().json.sheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Client Config').first().json.clientsTab }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Filter & Classify Leads').item.json.phone }}",
+            "Sequence Step": "3"
+          },
+          "matchingColumns": [
+            "Phone"
+          ],
+          "schema": [
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Sequence Step",
+              "displayName": "Sequence Step",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "wf5-alert-call3-fail",
+      "name": "Alert - Call #3 Failed",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1620,
+        380
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $('Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ '⚠️ VAPI Call 3 failed for ' + $('Filter & Classify Leads').item.json.phone + '. Lead stuck at step 2. Check VAPI.' }}"
+      },
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf5-mark-unresp",
+      "name": "Mark Unresponsive",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1200,
+        640
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Client Config').first().json.sheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Client Config').first().json.clientsTab }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $json.phone }}",
+            "Status": "unresponsive",
+            "Unresponsive Since": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": [
+            "Phone"
+          ],
+          "schema": [
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Unresponsive Since",
+              "displayName": "Unresponsive Since",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "wf5-fire-callback",
+      "name": "Fire VAPI Callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1200,
+        800
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": false,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vapi.ai/call",
+        "authentication": "genericCredentialType",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ assistantId: $('Client Config').first().json.vapiAssistantId, phoneNumberId: $('Client Config').first().json.vapiPhoneNumberId, customer: { number: $json.phone, name: $json.name }, assistantOverrides: { variableValues: { leadName: $json.name, serviceInterest: $json.serviceInterest } }, metadata: { workflowSource: 'wf5-callback', callType: 'scheduled-callback' } }) }}",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENTIAL_ID",
+          "name": "VAPI API — D2 Voice Agent"
+        }
+      }
+    },
+    {
+      "id": "wf5-check-callback",
+      "name": "Callback Queued?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1400,
+        800
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cbq",
+              "leftValue": "={{ $json.id ? 'ok' : 'fail' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf5-update-callback",
+      "name": "Update - Callback Fired",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1620,
+        800
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Client Config').first().json.sheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Client Config').first().json.clientsTab }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Filter & Classify Leads').item.json.phone }}",
+            "Status": "call-initiated",
+            "Callback Time": ""
+          },
+          "matchingColumns": [
+            "Phone"
+          ],
+          "schema": [
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Callback Time",
+              "displayName": "Callback Time",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "wf5-alert-callback-fail",
+      "name": "Alert - Callback Failed",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1620,
+        700
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $('Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ '⚠️ VAPI Callback failed for ' + $('Filter & Classify Leads').item.json.phone + '. Reschedule manually or check VAPI.' }}"
+      },
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf5-fire-call-1",
+      "name": "Fire VAPI Call #1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1200,
+        1000
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": false,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vapi.ai/call",
+        "authentication": "genericCredentialType",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ assistantId: $('Client Config').first().json.vapiAssistantId, phoneNumberId: $('Client Config').first().json.vapiPhoneNumberId, customer: { number: $json.phone, name: $json.name }, assistantOverrides: { variableValues: { leadName: $json.name, serviceInterest: $json.serviceInterest } }, metadata: { workflowSource: 'wf5', callType: 'initial-call', callAttempt: 1 } }) }}",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENTIAL_ID",
+          "name": "VAPI API — D2 Voice Agent"
+        }
+      }
+    },
+    {
+      "id": "wf5-check-call1",
+      "name": "Call #1 Queued?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1400,
+        1000
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1q",
+              "leftValue": "={{ $json.id ? 'ok' : 'fail' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf5-update-call-initiated",
+      "name": "Update - Call #1 Initiated",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1620,
+        1000
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Client Config').first().json.sheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Client Config').first().json.clientsTab }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Filter & Classify Leads').item.json.phone }}",
+            "Status": "call-initiated"
+          },
+          "matchingColumns": [
+            "Phone"
+          ],
+          "schema": [
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "wf5-alert-call1-fail",
+      "name": "Alert - Call #1 Failed",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1620,
+        900
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "resource": "sms",
+        "operation": "send",
+        "from": "={{ $('Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ '⚠️ VAPI Call 1 failed for ' + $('Filter & Classify Leads').item.json.phone + '. Lead still on new. Check VAPI and follow up manually.' }}"
+      },
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf5-incr-attempt",
+      "name": "Increment Call Attempt",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1860,
+        900
+      ],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Client Config').first().json.sheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Client Config').first().json.clientsTab }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Filter & Classify Leads').item.json.phone }}",
+            "Call Attempt Count": "={{ ($('Filter & Classify Leads').item.json.callAttempts || 0) + 1 }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Call Attempt Count",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "55a76843-dfbc-4803-b85b-deb3f567ebd1",
+      "name": "Follow-Up SMS Sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1320,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "sms2-ok",
+              "leftValue": "={{ $json.sid ? 'ok' : 'fail' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "b38d9c45-ff96-4f30-8b4a-f14415b371ff",
+      "name": "Alert - Follow-Up SMS Failed",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        200
+      ],
+      "parameters": {
+        "from": "={{ $('Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ 'FOLLOW-UP SMS FAILED for ' + ($json.phone || 'a lead') + '. The sequence step was NOT advanced, so it will be retried on the next run.' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "e101f6b0-8506-472e-b287-4b6fbe647061",
+      "name": "Alert - Unrouted Lead",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        1160
+      ],
+      "parameters": {
+        "from": "={{ $('Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ '⚠️ WF5 could not route lead ' + $json.phone + ' (status: ' + $json.status + ', step: ' + $json.seqStep + ', action: ' + $json.action + '). No call or SMS was sent. Follow up manually.' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 30 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Config": {
+      "main": [
+        [
+          {
+            "node": "Read Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Clients": {
+      "main": [
+        [
+          {
+            "node": "Filter & Classify Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter & Classify Leads": {
+      "main": [
+        [
+          {
+            "node": "Route Lead Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Lead Action": {
+      "main": [
+        [
+          {
+            "node": "Fire VAPI Call #2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Follow-Up SMS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fire VAPI Call #3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Unresponsive",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fire VAPI Callback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fire VAPI Call #1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert - Unrouted Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fire VAPI Call #2": {
+      "main": [
+        [
+          {
+            "node": "Call #2 Queued?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call #2 Queued?": {
+      "main": [
+        [
+          {
+            "node": "Update - Seq Step 1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert - Call #2 Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fire VAPI Call #3": {
+      "main": [
+        [
+          {
+            "node": "Call #3 Queued?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call #3 Queued?": {
+      "main": [
+        [
+          {
+            "node": "Update - Seq Step 3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert - Call #3 Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fire VAPI Callback": {
+      "main": [
+        [
+          {
+            "node": "Callback Queued?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Callback Queued?": {
+      "main": [
+        [
+          {
+            "node": "Update - Callback Fired",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert - Callback Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fire VAPI Call #1": {
+      "main": [
+        [
+          {
+            "node": "Call #1 Queued?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call #1 Queued?": {
+      "main": [
+        [
+          {
+            "node": "Update - Call #1 Initiated",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert - Call #1 Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert - Call #1 Failed": {
+      "main": [
+        [
+          {
+            "node": "Increment Call Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Follow-Up SMS": {
+      "main": [
+        [
+          {
+            "node": "Follow-Up SMS Sent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Follow-Up SMS Sent?": {
+      "main": [
+        [
+          {
+            "node": "Update - Seq Step 2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert - Follow-Up SMS Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": [],
+  "activeVersion": null
+}

@@ -1,0 +1,549 @@
+{
+  "id": "q7qXtlB3YbUorHvn",
+  "name": "D3 — WF-C3g: Tool: take_message",
+  "description": null,
+  "active": true,
+  "activeVersionId": "a69c0623-98a0-48ff-9b6a-617b9fa8ce4e",
+  "createdAt": "2026-08-13T13:07:57.397Z",
+  "updatedAt": "2026-08-18T16:16:41.510Z",
+  "isArchived": false,
+  "versionCounter": 9,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "wfc3g-sticky",
+      "name": "WF-C3g Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        60
+      ],
+      "parameters": {
+        "width": 620,
+        "height": 260,
+        "content": "## WF-C3g — Tool: take_message\n\nCalled by WF-C2 when the customer needs a human: complaint, technical fault, commercial enquiry, recruitment, or an explicit request to speak to someone.\n\n**Writes:** Messages tab (A:F) — Name, Phone, Message, Urgency, Timestamp, Status=new.\n\n**Closes the #1 documented chatbot complaint** — 89% of customers want a human option; only 15% get a working handoff. Before this tool, D3 read out a phone number and nothing was recorded.\n\n**Standards applied:** ES5 + try/catch on all Code nodes, `cellFormat: RAW` (BUG-R17 — Sheets coerces a leading `+`), populated schema on append (BUG-R5), and the response node checks `.error` before claiming success (BUG-R4/R18 — never tell the customer it worked if it didn't).\n\n⚠️ Operational dependency: someone must actually read the Messages tab."
+      }
+    },
+    {
+      "id": "wfc3g-trigger",
+      "name": "When Called by WF-C2",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        420
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "wfc3g-config",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        300,
+        420
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "g1",
+              "name": "sheetId",
+              "value": "YOUR_CRM_SHEET_ID",
+              "type": "string"
+            },
+            {
+              "id": "g2",
+              "name": "messagesTab",
+              "value": "Messages",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "wfc3g-prepare",
+      "name": "Prepare Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        420
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var t = $('When Called by WF-C2').first().json || {};\n  var args = t.toolInput || {};\n\n  var msg = args.message ? String(args.message).trim() : '';\n  if (!msg) { msg = 'Customer asked to speak to a member of the team. No further detail was captured.'; }\n\n  var name = args.name ? String(args.name).trim() : '';\n\n  var urgency = args.urgency ? String(args.urgency).toLowerCase().trim() : 'normal';\n  if (urgency !== 'urgent' && urgency !== 'low') { urgency = 'normal'; }\n\n  return [{ json: {\n    phone: t.phone || '',\n    name: name,\n    message: msg,\n    urgency: urgency,\n    timestamp: new Date().toISOString(),\n    toolUseId: t.toolUseId || ''\n  } }];\n} catch (e) {\n  var fp = '';\n  var fid = '';\n  try { fp = $('When Called by WF-C2').first().json.phone || ''; } catch (x) {}\n  try { fid = $('When Called by WF-C2').first().json.toolUseId || ''; } catch (x) {}\n  return [{ json: {\n    phone: fp,\n    name: '',\n    message: 'Customer asked to speak to a member of the team. Details could not be captured due to a system error.',\n    urgency: 'normal',\n    timestamp: new Date().toISOString(),\n    toolUseId: fid,\n    prepError: e.message\n  } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wfc3g-response",
+      "name": "Return Message Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        420
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var res = $input.first() ? ($input.first().json || {}) : {};\n  var prep = $('Prepare Message').first().json || {};\n  var toolUseId = prep.toolUseId || '';\n\n  // BUG-R4 / R18 rule: the append runs with onError=continueRegularOutput, so a failure\n  // arrives here as DATA. Google's values:append returns updates.updatedRows on success.\n  // Anything else — an error body, an empty object, a 0 — means nothing was written.\n  var saved = !!(res && res.updates && res.updates.updatedRows && res.updates.updatedRows > 0);\n\n  if (!saved) {\n    return [{ json: { toolCallId: toolUseId, result: 'MESSAGE NOT SAVED. A system error stopped it being recorded. Tell the customer you could not take the message down and ask them to call the office directly on the number in your business knowledge. Do NOT tell them the message has been passed on.' } }];\n  }\n\n  var line;\n  if (prep.urgency === 'urgent') {\n    line = 'MESSAGE SAVED and flagged URGENT. Tell the customer it has gone to the team as a priority and someone will get back to them as soon as possible. Do not promise a specific time or a specific person.';\n  } else if (prep.urgency === 'low') {\n    // Low urgency covers recruitment and other non-customer enquiries, where the\n    // prompt explicitly forbids promising a timeline. Do not offer one here either.\n    line = 'MESSAGE SAVED. Tell the customer their details have been passed to the team. Do NOT promise a callback, a timeline or a specific person for this one.';\n  } else {\n    line = 'MESSAGE SAVED. Tell the customer their message has been passed to the team and someone will get back to them within one working day. Do not promise a specific time or a specific person.';\n  }\n\n  return [{ json: { toolCallId: toolUseId, result: line } }];\n} catch (e) {\n  var fid = '';\n  try { fid = $('When Called by WF-C2').first().json.toolUseId || ''; } catch (x) {}\n  return [{ json: { toolCallId: fid, result: 'MESSAGE NOT SAVED. A system error occurred. Ask the customer to call the office directly on the number in your business knowledge. Do NOT claim the message was passed on.' } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "4eaaa6cd-e22c-4daf-8c68-47ea3741b960",
+      "name": "Read Header Row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        740,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.messagesTab + '!1:1') }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "e901217c-9928-44c7-bf12-29f7a4b45a4a",
+      "name": "Build Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// BUG-R34: the n8n Sheets append resolves the target row itself, so two concurrent\n// writes pick the same row and one silently overwrites the other. We now POST to\n// Google's values:append endpoint, which allocates the row server-side and is safe\n// under concurrency. That endpoint writes POSITIONALLY, so column order matters —\n// hence reading the live header row and mapping by NAME rather than hardcoding.\ntry {\n  var prep = $('Prepare Message').first().json || {};\n  var hdrResp = $input.first() ? ($input.first().json || {}) : {};\n\n  // Documented A:F order from GOOGLE_SHEETS_SCHEMA.md. Used only if the live header\n  // read failed, or came back without the columns the row is useless without.\n  var fallback = ['Name', 'Phone', 'Message', 'Urgency', 'Timestamp', 'Status'];\n\n  var headers = [];\n  if (hdrResp && hdrResp.values && hdrResp.values.length > 0 && hdrResp.values[0] && hdrResp.values[0].length > 0) {\n    for (var h = 0; h < hdrResp.values[0].length; h++) { headers.push(String(hdrResp.values[0][h]).trim()); }\n  }\n  var headersVerified = headers.length > 0;\n\n  var criticalOk = headers.indexOf('Phone') !== -1 && headers.indexOf('Message') !== -1;\n  var usedFallback = false;\n  if (!headersVerified || !criticalOk) {\n    headers = fallback;\n    usedFallback = true;\n  }\n\n  var map = {\n    'Name': prep.name || '',\n    'Phone': prep.phone || '',\n    'Message': prep.message || '',\n    'Urgency': prep.urgency || 'normal',\n    'Timestamp': prep.timestamp || new Date().toISOString(),\n    'Status': 'new'\n  };\n\n  var row = [];\n  for (var i = 0; i < headers.length; i++) {\n    if (Object.prototype.hasOwnProperty.call(map, headers[i])) { row.push(map[headers[i]]); }\n    else { row.push(''); }\n  }\n\n  return [{ json: { values: [row], headers: headers, headersVerified: headersVerified, usedFallback: usedFallback } }];\n} catch (e) {\n  // Never return an empty row — an empty append would report success having saved nothing.\n  var p = {};\n  try { p = $('Prepare Message').first().json || {}; } catch (x) {}\n  return [{ json: { values: [[p.name || '', p.phone || '', p.message || '', p.urgency || 'normal', p.timestamp || new Date().toISOString(), 'new']], headers: ['Name', 'Phone', 'Message', 'Urgency', 'Timestamp', 'Status'], headersVerified: false, usedFallback: true, buildError: e.message } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "7cab45d5-4933-49ec-8104-cf0e1e4e3cc4",
+      "name": "Append Row (atomic)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.messagesTab + '!A:F') + ':append' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "RAW"
+            },
+            {
+              "name": "insertDataOption",
+              "value": "INSERT_ROWS"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: $json.values }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500,
+      "alwaysOutputData": true
+    }
+  ],
+  "connections": {
+    "When Called by WF-C2": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Prepare Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Message": {
+      "main": [
+        [
+          {
+            "node": "Read Header Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Header Row": {
+      "main": [
+        [
+          {
+            "node": "Build Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Row": {
+      "main": [
+        [
+          {
+            "node": "Append Row (atomic)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Row (atomic)": {
+      "main": [
+        [
+          {
+            "node": "Return Message Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "timezone": "Europe/London"
+  },
+  "tags": [],
+  "activeVersion": {
+    "versionId": "a69c0623-98a0-48ff-9b6a-617b9fa8ce4e",
+    "workflowId": "q7qXtlB3YbUorHvn",
+    "nodes": [
+      {
+        "id": "wfc3g-sticky",
+        "name": "WF-C3g Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          60,
+          60
+        ],
+        "parameters": {
+          "width": 620,
+          "height": 260,
+          "content": "## WF-C3g — Tool: take_message\n\nCalled by WF-C2 when the customer needs a human: complaint, technical fault, commercial enquiry, recruitment, or an explicit request to speak to someone.\n\n**Writes:** Messages tab (A:F) — Name, Phone, Message, Urgency, Timestamp, Status=new.\n\n**Closes the #1 documented chatbot complaint** — 89% of customers want a human option; only 15% get a working handoff. Before this tool, D3 read out a phone number and nothing was recorded.\n\n**Standards applied:** ES5 + try/catch on all Code nodes, `cellFormat: RAW` (BUG-R17 — Sheets coerces a leading `+`), populated schema on append (BUG-R5), and the response node checks `.error` before claiming success (BUG-R4/R18 — never tell the customer it worked if it didn't).\n\n⚠️ Operational dependency: someone must actually read the Messages tab."
+        }
+      },
+      {
+        "id": "wfc3g-trigger",
+        "name": "When Called by WF-C2",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          80,
+          420
+        ],
+        "parameters": {
+          "inputSource": "passthrough"
+        }
+      },
+      {
+        "id": "wfc3g-config",
+        "name": "⚙️ Client Config",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          300,
+          420
+        ],
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "g1",
+                "name": "sheetId",
+                "value": "YOUR_CRM_SHEET_ID",
+                "type": "string"
+              },
+              {
+                "id": "g2",
+                "name": "messagesTab",
+                "value": "Messages",
+                "type": "string"
+              }
+            ]
+          },
+          "includeOtherFields": true,
+          "options": {}
+        }
+      },
+      {
+        "id": "wfc3g-prepare",
+        "name": "Prepare Message",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          520,
+          420
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var t = $('When Called by WF-C2').first().json || {};\n  var args = t.toolInput || {};\n\n  var msg = args.message ? String(args.message).trim() : '';\n  if (!msg) { msg = 'Customer asked to speak to a member of the team. No further detail was captured.'; }\n\n  var name = args.name ? String(args.name).trim() : '';\n\n  var urgency = args.urgency ? String(args.urgency).toLowerCase().trim() : 'normal';\n  if (urgency !== 'urgent' && urgency !== 'low') { urgency = 'normal'; }\n\n  return [{ json: {\n    phone: t.phone || '',\n    name: name,\n    message: msg,\n    urgency: urgency,\n    timestamp: new Date().toISOString(),\n    toolUseId: t.toolUseId || ''\n  } }];\n} catch (e) {\n  var fp = '';\n  var fid = '';\n  try { fp = $('When Called by WF-C2').first().json.phone || ''; } catch (x) {}\n  try { fid = $('When Called by WF-C2').first().json.toolUseId || ''; } catch (x) {}\n  return [{ json: {\n    phone: fp,\n    name: '',\n    message: 'Customer asked to speak to a member of the team. Details could not be captured due to a system error.',\n    urgency: 'normal',\n    timestamp: new Date().toISOString(),\n    toolUseId: fid,\n    prepError: e.message\n  } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "wfc3g-response",
+        "name": "Return Message Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          960,
+          420
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var res = $input.first() ? ($input.first().json || {}) : {};\n  var prep = $('Prepare Message').first().json || {};\n  var toolUseId = prep.toolUseId || '';\n\n  // BUG-R4 / R18 rule: the append runs with onError=continueRegularOutput, so a failure\n  // arrives here as DATA. Google's values:append returns updates.updatedRows on success.\n  // Anything else — an error body, an empty object, a 0 — means nothing was written.\n  var saved = !!(res && res.updates && res.updates.updatedRows && res.updates.updatedRows > 0);\n\n  if (!saved) {\n    return [{ json: { toolCallId: toolUseId, result: 'MESSAGE NOT SAVED. A system error stopped it being recorded. Tell the customer you could not take the message down and ask them to call the office directly on the number in your business knowledge. Do NOT tell them the message has been passed on.' } }];\n  }\n\n  var line;\n  if (prep.urgency === 'urgent') {\n    line = 'MESSAGE SAVED and flagged URGENT. Tell the customer it has gone to the team as a priority and someone will get back to them as soon as possible. Do not promise a specific time or a specific person.';\n  } else if (prep.urgency === 'low') {\n    // Low urgency covers recruitment and other non-customer enquiries, where the\n    // prompt explicitly forbids promising a timeline. Do not offer one here either.\n    line = 'MESSAGE SAVED. Tell the customer their details have been passed to the team. Do NOT promise a callback, a timeline or a specific person for this one.';\n  } else {\n    line = 'MESSAGE SAVED. Tell the customer their message has been passed to the team and someone will get back to them within one working day. Do not promise a specific time or a specific person.';\n  }\n\n  return [{ json: { toolCallId: toolUseId, result: line } }];\n} catch (e) {\n  var fid = '';\n  try { fid = $('When Called by WF-C2').first().json.toolUseId || ''; } catch (x) {}\n  return [{ json: { toolCallId: fid, result: 'MESSAGE NOT SAVED. A system error occurred. Ask the customer to call the office directly on the number in your business knowledge. Do NOT claim the message was passed on.' } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "4eaaa6cd-e22c-4daf-8c68-47ea3741b960",
+        "name": "Read Header Row",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          740,
+          300
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.messagesTab + '!1:1') }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleSheetsOAuth2Api",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "alwaysOutputData": true
+      },
+      {
+        "id": "e901217c-9928-44c7-bf12-29f7a4b45a4a",
+        "name": "Build Row",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          960,
+          300
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "// BUG-R34: the n8n Sheets append resolves the target row itself, so two concurrent\n// writes pick the same row and one silently overwrites the other. We now POST to\n// Google's values:append endpoint, which allocates the row server-side and is safe\n// under concurrency. That endpoint writes POSITIONALLY, so column order matters —\n// hence reading the live header row and mapping by NAME rather than hardcoding.\ntry {\n  var prep = $('Prepare Message').first().json || {};\n  var hdrResp = $input.first() ? ($input.first().json || {}) : {};\n\n  // Documented A:F order from GOOGLE_SHEETS_SCHEMA.md. Used only if the live header\n  // read failed, or came back without the columns the row is useless without.\n  var fallback = ['Name', 'Phone', 'Message', 'Urgency', 'Timestamp', 'Status'];\n\n  var headers = [];\n  if (hdrResp && hdrResp.values && hdrResp.values.length > 0 && hdrResp.values[0] && hdrResp.values[0].length > 0) {\n    for (var h = 0; h < hdrResp.values[0].length; h++) { headers.push(String(hdrResp.values[0][h]).trim()); }\n  }\n  var headersVerified = headers.length > 0;\n\n  var criticalOk = headers.indexOf('Phone') !== -1 && headers.indexOf('Message') !== -1;\n  var usedFallback = false;\n  if (!headersVerified || !criticalOk) {\n    headers = fallback;\n    usedFallback = true;\n  }\n\n  var map = {\n    'Name': prep.name || '',\n    'Phone': prep.phone || '',\n    'Message': prep.message || '',\n    'Urgency': prep.urgency || 'normal',\n    'Timestamp': prep.timestamp || new Date().toISOString(),\n    'Status': 'new'\n  };\n\n  var row = [];\n  for (var i = 0; i < headers.length; i++) {\n    if (Object.prototype.hasOwnProperty.call(map, headers[i])) { row.push(map[headers[i]]); }\n    else { row.push(''); }\n  }\n\n  return [{ json: { values: [row], headers: headers, headersVerified: headersVerified, usedFallback: usedFallback } }];\n} catch (e) {\n  // Never return an empty row — an empty append would report success having saved nothing.\n  var p = {};\n  try { p = $('Prepare Message').first().json || {}; } catch (x) {}\n  return [{ json: { values: [[p.name || '', p.phone || '', p.message || '', p.urgency || 'normal', p.timestamp || new Date().toISOString(), 'new']], headers: ['Name', 'Phone', 'Message', 'Urgency', 'Timestamp', 'Status'], headersVerified: false, usedFallback: true, buildError: e.message } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "7cab45d5-4933-49ec-8104-cf0e1e4e3cc4",
+        "name": "Append Row (atomic)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1180,
+          300
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.messagesTab + '!A:F') + ':append' }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleSheetsOAuth2Api",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "valueInputOption",
+                "value": "RAW"
+              },
+              {
+                "name": "insertDataOption",
+                "value": "INSERT_ROWS"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ values: $json.values }) }}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1500,
+        "alwaysOutputData": true
+      }
+    ],
+    "connections": {
+      "When Called by WF-C2": {
+        "main": [
+          [
+            {
+              "node": "⚙️ Client Config",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⚙️ Client Config": {
+        "main": [
+          [
+            {
+              "node": "Prepare Message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Message": {
+        "main": [
+          [
+            {
+              "node": "Read Header Row",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Header Row": {
+        "main": [
+          [
+            {
+              "node": "Build Row",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Row": {
+        "main": [
+          [
+            {
+              "node": "Append Row (atomic)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Append Row (atomic)": {
+        "main": [
+          [
+            {
+              "node": "Return Message Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Muhammad Ghazwan",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-08-18T16:16:41.511Z",
+    "updatedAt": "2026-08-18T16:16:41.511Z",
+    "workflowPublishHistory": [
+      {
+        "id": 277,
+        "workflowId": "q7qXtlB3YbUorHvn",
+        "versionId": "a69c0623-98a0-48ff-9b6a-617b9fa8ce4e",
+        "event": "activated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-18T16:16:41.644Z"
+      },
+      {
+        "id": 276,
+        "workflowId": "q7qXtlB3YbUorHvn",
+        "versionId": "a69c0623-98a0-48ff-9b6a-617b9fa8ce4e",
+        "event": "deactivated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-18T16:16:41.643Z"
+      }
+    ]
+  }
+}

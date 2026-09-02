@@ -1,0 +1,653 @@
+{
+  "id": "1EsyoHL1IaXcyON5",
+  "name": "D5 — 02b VAPI Event Router",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-05-22T16:56:20.562Z",
+  "updatedAt": "2026-08-21T22:49:32.155Z",
+  "isArchived": false,
+  "versionCounter": 8,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "d5wf2b-sticky",
+      "name": "D5-WF2b Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        60
+      ],
+      "parameters": {
+        "content": "## D5-WF2b — D5 VAPI Event Router\n\nSingle entry point for all D5 VAPI webhook events.\nWebhook path: **/webhook/d5-vapi-events**\n\n**Sub-workflow IDs:**\n- WF2c-avail (checkAvailability): XYt8y7KMpSArW5bt\n- WF2c-book (bookAppointment): JYW1eTz4OMiYQxfq\n- WF2d (Post-Call Processor): wd6OVv9aMwmHVddB\n- WF2e (Call-Failed Handler): TKqdNUzhzbKzjVHb\n\n**Event routing:**\n- tool-calls → Extract Tool Data → sync sub-workflow → Validate Response → respond (5s budget)\n- end-of-call-report → async WF2d → respond 200 immediately\n- call-failed → async WF2e → respond 200 immediately\n- other → respond 200\n\n**Validate Response nodes (mirrors D2-WF2 Handle WF3 Response pattern):**\nIf sub-workflow crashes or returns malformed data, builds graceful fallback using original toolCallId.\nVAPI always receives a valid { results: [{ toolCallId, result }] } response — never silence.",
+        "color": 4,
+        "width": 720,
+        "height": 320
+      }
+    },
+    {
+      "id": "d5wf2b-webhook",
+      "name": "D5 VAPI Events",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        80,
+        460
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "path": "d5-vapi-events",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {},
+        "authentication": "headerAuth"
+      },
+      "webhookId": "1c9ad244-0e27-4776-9a0e-179273aa8822",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENTIAL_ID",
+          "name": "D2 VAPI — webhook shared secret"
+        }
+      }
+    },
+    {
+      "id": "d5wf2b-config",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        300,
+        460
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-avail",
+              "name": "d5AvailWorkflowId",
+              "value": "XYt8y7KMpSArW5bt",
+              "type": "string"
+            },
+            {
+              "id": "cfg-book",
+              "name": "d5BookWorkflowId",
+              "value": "JYW1eTz4OMiYQxfq",
+              "type": "string"
+            },
+            {
+              "id": "cfg-postcall",
+              "name": "d5PostCallWorkflowId",
+              "value": "wd6OVv9aMwmHVddB",
+              "type": "string"
+            },
+            {
+              "id": "cfg-failed",
+              "name": "d5CallFailedWorkflowId",
+              "value": "TKqdNUzhzbKzjVHb",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "includeOtherFields": true
+        },
+        "includeOtherFields": true
+      }
+    },
+    {
+      "id": "d5wf2b-route-event",
+      "name": "Route by Event Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        520,
+        460
+      ],
+      "parameters": {
+        "mode": "rules",
+        "options": {
+          "fallbackOutput": "extra"
+        },
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "loose",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "id": "rule-tool-calls",
+                    "leftValue": "={{ $json.body.message.type }}",
+                    "rightValue": "tool-calls",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "loose",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "id": "rule-eoc",
+                    "leftValue": "={{ $json.body.message.type }}",
+                    "rightValue": "end-of-call-report",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "loose",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "id": "rule-failed",
+                    "leftValue": "={{ $json.body.message.type }}",
+                    "rightValue": "call-failed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2b-extract-tool",
+      "name": "Extract Tool Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        320
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "try {\n  var data = $input.first().json;\n  var msg = data.body.message || {};\n  var call = msg.call || {};\n  var meta = call.metadata || {};\n  var toolCalls = msg.toolCalls || [];\n  var firstTool = toolCalls[0] || {};\n  var toolCallId = firstTool.id || '';\n  var fn = firstTool.function || {};\n  var toolName = fn.name || '';\n  var toolArgs = fn.arguments || {};\n  var phone = (call.customer && call.customer.number) ? call.customer.number : '';\n  var campaignId = meta.campaignId || '';\n  var name = meta.name || '';\n  var attemptCount = parseInt(meta.attemptCount || 0);\n  return [{ json: { phone: phone, campaignId: campaignId, name: name, attemptCount: attemptCount, toolCallId: toolCallId, toolName: toolName, toolArgs: toolArgs } }];\n} catch(e) {\n  return [{ json: { phone: '', campaignId: '', name: '', attemptCount: 0, toolCallId: '', toolName: '', toolArgs: {}, _error: e.message } }];\n}"
+      }
+    },
+    {
+      "id": "d5wf2b-route-tool",
+      "name": "Route by Tool Name",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        980,
+        320
+      ],
+      "parameters": {
+        "mode": "rules",
+        "options": {
+          "fallbackOutput": "extra"
+        },
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "loose",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "id": "rule-avail",
+                    "leftValue": "={{ $json.toolName }}",
+                    "rightValue": "checkAvailability",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "loose",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "id": "rule-book",
+                    "leftValue": "={{ $json.toolName }}",
+                    "rightValue": "bookAppointment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2b-call-avail",
+      "name": "Call WF2c-avail",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1200,
+        200
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "source": "database",
+        "workflowId": "XYt8y7KMpSArW5bt",
+        "options": {}
+      }
+    },
+    {
+      "id": "d5wf2b-validate-avail",
+      "name": "Validate Response (avail)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        200
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "try {\n  var response = $input.first().json;\n  var results = response.results;\n  // Valid if: results is array, has at least one item, with non-empty toolCallId and result string\n  if (results && Array.isArray(results) && results.length > 0\n      && results[0].toolCallId && typeof results[0].result === 'string' && results[0].result.length > 0) {\n    return [{ json: response }];\n  }\n  // Sub-workflow crashed or returned malformed data — build graceful fallback\n  var toolCallId = '';\n  try { toolCallId = $('Extract Tool Data').first().json.toolCallId || ''; } catch(e2) {}\n  return [{ json: { results: [{ toolCallId: toolCallId, result: \"I'm having trouble checking availability right now. Let me have our team confirm a time with you directly.\" }] } }];\n} catch(e) {\n  var tid = '';\n  try { tid = $('Extract Tool Data').first().json.toolCallId || ''; } catch(e2) {}\n  return [{ json: { results: [{ toolCallId: tid, result: \"I'm having trouble checking availability right now. Let me have our team confirm a time with you directly.\" }] } }];\n}"
+      }
+    },
+    {
+      "id": "d5wf2b-respond-avail",
+      "name": "Respond — Tool (avail)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1640,
+        200
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2b-call-book",
+      "name": "Call WF2c-book",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1200,
+        360
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "source": "database",
+        "workflowId": "JYW1eTz4OMiYQxfq",
+        "options": {}
+      }
+    },
+    {
+      "id": "d5wf2b-validate-book",
+      "name": "Validate Response (book)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        360
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "try {\n  var response = $input.first().json;\n  var results = response.results;\n  // Valid if: results is array, has at least one item, with non-empty toolCallId and result string\n  if (results && Array.isArray(results) && results.length > 0\n      && results[0].toolCallId && typeof results[0].result === 'string' && results[0].result.length > 0) {\n    return [{ json: response }];\n  }\n  // Sub-workflow crashed or returned malformed data — build graceful fallback\n  var toolCallId = '';\n  try { toolCallId = $('Extract Tool Data').first().json.toolCallId || ''; } catch(e2) {}\n  return [{ json: { results: [{ toolCallId: toolCallId, result: \"I'm sorry, I wasn't able to complete the booking. Our team will follow up shortly to confirm your appointment.\" }] } }];\n} catch(e) {\n  var tid = '';\n  try { tid = $('Extract Tool Data').first().json.toolCallId || ''; } catch(e2) {}\n  return [{ json: { results: [{ toolCallId: tid, result: \"I'm sorry, I wasn't able to complete the booking. Our team will follow up shortly to confirm your appointment.\" }] } }];\n}"
+      }
+    },
+    {
+      "id": "d5wf2b-respond-book",
+      "name": "Respond — Tool (book)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1640,
+        360
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2b-unknown-tool",
+      "name": "Build Unknown Tool Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        520
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "try {\n  var toolCallId = $input.first().json.toolCallId || '';\n  return [{ json: { results: [{ toolCallId: toolCallId, result: \"I'm sorry, I can't process that request right now. Please contact us directly for help.\" }] } }];\n} catch(e) {\n  return [{ json: { results: [{ toolCallId: '', result: \"I'm sorry, I can't process that request right now. Please contact us directly for help.\" }] } }];\n}"
+      }
+    },
+    {
+      "id": "d5wf2b-respond-unknown",
+      "name": "Respond — Unknown Tool",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1420,
+        520
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2b-fire-wf2d",
+      "name": "Fire WF2d",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        760,
+        560
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": "wd6OVv9aMwmHVddB",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2b-respond-eoc",
+      "name": "Respond — EOC 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        980,
+        560
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ ({received: true}) }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2b-fire-wf2e",
+      "name": "Fire WF2e",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        760,
+        700
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": "TKqdNUzhzbKzjVHb",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2b-respond-failed",
+      "name": "Respond — Failed 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        980,
+        700
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ ({received: true}) }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2b-respond-default",
+      "name": "Respond — Default 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        760,
+        840
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ ({received: true}) }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "D5 VAPI Events": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Route by Event Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Event Type": {
+      "main": [
+        [
+          {
+            "node": "Extract Tool Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fire WF2d",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fire WF2e",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond — Default 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Tool Data": {
+      "main": [
+        [
+          {
+            "node": "Route by Tool Name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Tool Name": {
+      "main": [
+        [
+          {
+            "node": "Call WF2c-avail",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call WF2c-book",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Unknown Tool Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call WF2c-avail": {
+      "main": [
+        [
+          {
+            "node": "Validate Response (avail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Response (avail)": {
+      "main": [
+        [
+          {
+            "node": "Respond — Tool (avail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call WF2c-book": {
+      "main": [
+        [
+          {
+            "node": "Validate Response (book)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Response (book)": {
+      "main": [
+        [
+          {
+            "node": "Respond — Tool (book)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Unknown Tool Response": {
+      "main": [
+        [
+          {
+            "node": "Respond — Unknown Tool",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fire WF2d": {
+      "main": [
+        [
+          {
+            "node": "Respond — EOC 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fire WF2e": {
+      "main": [
+        [
+          {
+            "node": "Respond — Failed 200",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveManualExecutions": true
+  },
+  "tags": [],
+  "activeVersion": null
+}

@@ -1,0 +1,260 @@
+{
+  "id": "XYt8y7KMpSArW5bt",
+  "name": "D5 — 02c-avail checkAvailability Tool",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-05-22T16:29:03.605Z",
+  "updatedAt": "2026-08-21T22:51:44.261Z",
+  "isArchived": false,
+  "versionCounter": 7,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "d5avail-sticky",
+      "name": "D5-WF2c-avail Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        80
+      ],
+      "parameters": {
+        "content": "## D5-WF2c-avail — checkAvailability Tool Handler\n\nCalled **synchronously** by D5-WF2b when VAPI fires a checkAvailability tool call.\n**MUST respond within 5 seconds — VAPI timeout.**\n\n**Input:** { toolCallId, toolArgs: { date }, phone, campaignId, name }\n**Output:** { results: [{ toolCallId, result: 'availability string' }] }\n\nQueries Google Calendar 09:00–17:00 BST. Returns up to 3 open slots as a single-line string.\n**Error handling:** Calendar API error → graceful fallback string (never fake availability).",
+        "color": 4,
+        "width": 660,
+        "height": 240
+      }
+    },
+    {
+      "id": "d5avail-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        400
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d5avail-config",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        300,
+        400
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-calId",
+              "name": "calendarId",
+              "value": "primary",
+              "type": "string"
+            },
+            {
+              "id": "cfg-tz",
+              "name": "timezone",
+              "value": "Europe/London",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true
+      }
+    },
+    {
+      "id": "d5avail-parse",
+      "name": "Parse Availability Date",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        400
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "try {\n  var input = $('Execute Workflow Trigger').first().json;\n  var toolCallId = input.toolCallId || '';\n  var rawDate = (input.toolArgs && input.toolArgs.date) ? input.toolArgs.date : '';\n  if (!rawDate) {\n    return [{ json: { toolCallId: toolCallId, parseError: true, errorResult: 'I need a date to check availability. Which day were you thinking?' } }];\n  }\n  var now = new Date();\n  var month = now.getUTCMonth() + 1;\n  var bstOffsetHours = (month >= 3 && month <= 10) ? 1 : 0;\n  var targetDate = null;\n  var normalized = rawDate.toLowerCase().trim();\n  if (normalized === 'today') {\n    targetDate = new Date(now);\n  } else if (normalized === 'tomorrow') {\n    targetDate = new Date(now);\n    targetDate.setUTCDate(targetDate.getUTCDate() + 1);\n  } else {\n    var dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];\n    var dayIndex = -1;\n    for (var d = 0; d < dayNames.length; d++) {\n      if (normalized.indexOf(dayNames[d]) !== -1) { dayIndex = d; break; }\n    }\n    if (dayIndex !== -1) {\n      var currentDay = now.getUTCDay();\n      var daysUntil = (dayIndex - currentDay + 7) % 7;\n      if (daysUntil === 0) daysUntil = 7;\n      targetDate = new Date(now);\n      targetDate.setUTCDate(targetDate.getUTCDate() + daysUntil);\n    } else {\n      var parsed = new Date(rawDate);\n      if (!isNaN(parsed.getTime())) { targetDate = parsed; }\n    }\n  }\n  if (!targetDate) {\n    return [{ json: { toolCallId: toolCallId, parseError: true, errorResult: \"I had trouble understanding that date. Could you say something like 'next Tuesday' or '14th April'?\" } }];\n  }\n  var year = targetDate.getUTCFullYear();\n  var mon = targetDate.getUTCMonth();\n  var day = targetDate.getUTCDate();\n  var timeMin = new Date(Date.UTC(year, mon, day, 9 - bstOffsetHours, 0, 0)).toISOString();\n  var timeMax = new Date(Date.UTC(year, mon, day, 17 - bstOffsetHours, 0, 0)).toISOString();\n  var dayLabels = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];\n  var monthLabels = ['January','February','March','April','May','June','July','August','September','October','November','December'];\n  var dateLabel = dayLabels[targetDate.getUTCDay()] + ', ' + targetDate.getUTCDate() + ' ' + monthLabels[targetDate.getUTCMonth()];\n  return [{ json: { toolCallId: toolCallId, parseError: false, timeMin: timeMin, timeMax: timeMax, dateLabel: dateLabel, targetDateISO: targetDate.toISOString().split('T')[0], bstOffsetHours: bstOffsetHours } }];\n} catch(e) {\n  return [{ json: { toolCallId: ($('Execute Workflow Trigger').first().json.toolCallId || ''), parseError: true, errorResult: 'I had trouble checking availability. Could you try a different date?' } }];\n}"
+      }
+    },
+    {
+      "id": "d5avail-if-parsed",
+      "name": "Date Parsed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        740,
+        400
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check-no-parse-error",
+              "leftValue": "={{ $json.parseError }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d5avail-gcal",
+      "name": "Get Calendar Events",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        960,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Calendar OAuth2 API"
+        }
+      },
+      "parameters": {
+        "resource": "event",
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "primary"
+        },
+        "timeMin": "={{ $json.timeMin }}",
+        "timeMax": "={{ $json.timeMax }}",
+        "returnAll": true,
+        "options": {}
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "d5avail-build-error",
+      "name": "Build Parse Error Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        960,
+        520
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "error-results",
+              "name": "results",
+              "value": "={{ [{ toolCallId: $('Parse Availability Date').first().json.toolCallId, result: $('Parse Availability Date').first().json.errorResult || 'I had trouble understanding that date. Could you say it differently?' }] }}",
+              "type": "array"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d5avail-format",
+      "name": "Format Availability Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "try {\n  var parsedData = $('Parse Availability Date').first().json;\n  var toolCallId = parsedData.toolCallId || '';\n  var dateLabel = parsedData.dateLabel || 'that day';\n  var bstOffsetHours = parsedData.bstOffsetHours || 0;\n  var targetDateISO = parsedData.targetDateISO || '';\n  var events = $input.all().map(function(item) { return item.json; });\n\n  // Detect Calendar API error item — onError:continueRegularOutput passes error as item\n  if (events.length > 0 && typeof events[0].error !== 'undefined') {\n    return [{ json: { results: [{ toolCallId: toolCallId, result: \"I'm having trouble checking the calendar right now. Let me have our team confirm a time with you directly.\" }] } }];\n  }\n\n  var bookedSlots = [];\n  events.forEach(function(ev) {\n    if (ev.start && ev.start.dateTime) {\n      bookedSlots.push({\n        start: new Date(ev.start.dateTime),\n        end: ev.end && ev.end.dateTime ? new Date(ev.end.dateTime) : new Date(new Date(ev.start.dateTime).getTime() + 3600000)\n      });\n    }\n  });\n  var hours = [9,10,11,12,13,14,15,16];\n  var availableSlots = [];\n  hours.forEach(function(hour) {\n    var utcHour = hour - bstOffsetHours;\n    var slotStart = new Date(targetDateISO + 'T' + ('0' + utcHour).slice(-2) + ':00:00.000Z');\n    var slotEnd = new Date(slotStart.getTime() + 3600000);\n    var isBooked = false;\n    for (var i = 0; i < bookedSlots.length; i++) {\n      if (slotStart < bookedSlots[i].end && slotEnd > bookedSlots[i].start) { isBooked = true; break; }\n    }\n    if (!isBooked) {\n      var period = hour >= 12 ? 'pm' : 'am';\n      var display = hour > 12 ? hour - 12 : hour;\n      availableSlots.push(display + period);\n    }\n  });\n  var result;\n  if (availableSlots.length === 0) {\n    result = dateLabel + ' is fully booked. Could you try another day, or would you like our team to call you back to arrange a time?';\n  } else if (availableSlots.length === 1) {\n    result = 'I have one slot available on ' + dateLabel + ' at ' + availableSlots[0] + '. Does that work for you?';\n  } else {\n    var shown = availableSlots.slice(0, 3);\n    var suffix = availableSlots.length > 3 ? ' and more' : '';\n    result = 'I have slots available on ' + dateLabel + ' at ' + shown.join(', ') + suffix + '. Which time works best for you?';\n  }\n  return [{ json: { results: [{ toolCallId: toolCallId, result: result }] } }];\n} catch(e) {\n  var tid = '';\n  try { tid = $('Parse Availability Date').first().json.toolCallId || ''; } catch(e2) {}\n  return [{ json: { results: [{ toolCallId: tid, result: \"I'm having trouble checking the calendar right now. Let me have our team confirm a time with you directly.\" }] } }];\n}"
+      }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Parse Availability Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Availability Date": {
+      "main": [
+        [
+          {
+            "node": "Date Parsed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Date Parsed?": {
+      "main": [
+        [
+          {
+            "node": "Get Calendar Events",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Parse Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Calendar Events": {
+      "main": [
+        [
+          {
+            "node": "Format Availability Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveManualExecutions": true
+  },
+  "tags": [],
+  "activeVersion": null
+}

@@ -1,0 +1,286 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-330 -394 3104 1718" width="1600" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect x="-330" y="-394" width="3104" height="1718" fill="#f7f7f8"/>
+<defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#dcdce0"/></pattern></defs>
+<rect x="-330" y="-394" width="3104" height="1718" fill="url(#g)"/>
+<rect x="-240" y="-304" width="400" height="500" rx="8" fill="#d9f2f2" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="-228" y="-280" font-size="13.5" font-weight="700" fill="#5f5930">WF-IN4 — Inbound Post-Call Processing</text>
+<text x="-228" y="-263" font-size="11.5" fill="#6f6840">Triggered ASYNC by WF-IN2 after every inbound call</text>
+<text x="-228" y="-249" font-size="11.5" fill="#6f6840">ends.</text>
+<text x="-228" y="-235" font-size="11.5" fill="#6f6840">No time constraint — fire and forget.</text>
+<text x="-228" y="-221" font-size="11.5" fill="#6f6840">Flow:</text>
+<text x="-228" y="-207" font-size="11.5" fill="#6f6840">1. Parse VAPI end-of-call-report payload</text>
+<text x="-228" y="-193" font-size="11.5" fill="#6f6840">2. Halt if no phone number</text>
+<text x="-228" y="-179" font-size="11.5" fill="#6f6840">3. Short call (&lt; 10s):</text>
+<text x="-228" y="-165" font-size="11.5" fill="#6f6840">- Known caller → update Last Contact + Call Count</text>
+<text x="-228" y="-151" font-size="11.5" fill="#6f6840">only</text>
+<text x="-228" y="-137" font-size="11.5" fill="#6f6840">- Unknown caller → Activity Log only (no Clients</text>
+<text x="-228" y="-123" font-size="11.5" fill="#6f6840">row)</text>
+<text x="-228" y="-109" font-size="11.5" fill="#6f6840">4. Full call:</text>
+<text x="-228" y="-95" font-size="11.5" fill="#6f6840">- Read Clients + Appointment Log + Messages</text>
+<text x="-228" y="-81" font-size="11.5" fill="#6f6840">- Build update payload (outcome, name, email,</text>
+<text x="-228" y="-67" font-size="11.5" fill="#6f6840">service, SMS text)</text>
+<text x="-228" y="-53" font-size="11.5" fill="#6f6840">- Update Clients tab (appendOrUpdate by Phone —</text>
+<text x="-228" y="-39" font-size="11.5" fill="#6f6840">creates row if new caller)</text>
+<text x="-228" y="-25" font-size="11.5" fill="#6f6840">- Write Activity Log (always)</text>
+<text x="-228" y="-11" font-size="11.5" fill="#6f6840">- If urgent message → SMS alert to business owner</text>
+<text x="-228" y="3" font-size="11.5" fill="#6f6840">- Route by outcome → SMS to caller (booked /</text>
+<text x="-228" y="17" font-size="11.5" fill="#6f6840">callback-requested / callback-scheduled)</text>
+<text x="-228" y="31" font-size="11.5" fill="#6f6840">Upstream: WF-IN2 (async fire on end-of-call-report)</text>
+<text x="-228" y="45" font-size="11.5" fill="#6f6840">Downstream: None — end of chain</text>
+<text x="-228" y="59" font-size="11.5" fill="#6f6840">Sheets: Reads Clients + Appt Log + Messages. Writes</text>
+<text x="-228" y="73" font-size="11.5" fill="#6f6840">Clients + Activity Log.</text>
+<text x="-228" y="87" font-size="11.5" fill="#6f6840">⚠️ Before activating: replace</text>
+<text x="-228" y="101" font-size="11.5" fill="#6f6840">PLACEHOLDER_TWILIO_NUMBER and…</text>
+<rect x="1104" y="64" width="340" height="200" rx="8" fill="#cfe4ff" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="1116" y="88" font-size="13.5" font-weight="700" fill="#5f5930">Short Call Path (&lt; 10s)</text>
+<text x="1116" y="105" font-size="11.5" fill="#6f6840">Caller hung up before AI engaged.</text>
+<text x="1116" y="119" font-size="11.5" fill="#6f6840">- Known caller → update Last Contact + Call</text>
+<text x="1116" y="133" font-size="11.5" fill="#6f6840">Count only. No Status change.</text>
+<text x="1116" y="147" font-size="11.5" fill="#6f6840">- Unknown caller → Activity Log row only. No</text>
+<text x="1116" y="161" font-size="11.5" fill="#6f6840">Clients row created.</text>
+<text x="1116" y="175" font-size="11.5" fill="#6f6840">Outcome: inbound-incomplete</text>
+<text x="1116" y="189" font-size="11.5" fill="#6f6840">No SMS sent for short calls.</text>
+<rect x="1120" y="448" width="340" height="180" rx="8" fill="#e8d9ff" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="1132" y="472" font-size="13.5" font-weight="700" fill="#5f5930">Full Call Path (≥ 10s)</text>
+<text x="1132" y="489" font-size="11.5" fill="#6f6840">Real conversation — full CRM processing.</text>
+<text x="1132" y="503" font-size="11.5" fill="#6f6840">Reads Clients + Appt Log + Messages in</text>
+<text x="1132" y="517" font-size="11.5" fill="#6f6840">sequence.</text>
+<text x="1132" y="531" font-size="11.5" fill="#6f6840">Build Update Payload merges all data.</text>
+<text x="1132" y="545" font-size="11.5" fill="#6f6840">Fan-out: Update Clients + Write Activity Log</text>
+<text x="1132" y="559" font-size="11.5" fill="#6f6840">in parallel.</text>
+<text x="1132" y="573" font-size="11.5" fill="#6f6840">Post-write: Urgent alert + Outcome SMS.</text>
+<rect x="2304" y="-64" width="380" height="280" rx="8" fill="#ffe0b2" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="2316" y="-40" font-size="13.5" font-weight="700" fill="#5f5930">Follow-Up Actions</text>
+<text x="2316" y="-23" font-size="11.5" fill="#6f6840">Three parallel branches from Update Client Record:</text>
+<text x="2316" y="-9" font-size="11.5" fill="#6f6840">Branch 1 — Urgent Alert:</text>
+<text x="2316" y="5" font-size="11.5" fill="#6f6840">If caller left urgent message → SMS internal alert</text>
+<text x="2316" y="19" font-size="11.5" fill="#6f6840">to business owner.</text>
+<text x="2316" y="33" font-size="11.5" fill="#6f6840">Branch 2 — Outcome SMS:</text>
+<text x="2316" y="47" font-size="11.5" fill="#6f6840">- booked → booking confirmation</text>
+<text x="2316" y="61" font-size="11.5" fill="#6f6840">- callback-requested → &#x27;we&#x27;ll be in touch&#x27;</text>
+<text x="2316" y="75" font-size="11.5" fill="#6f6840">- callback-scheduled → &#x27;callback confirmed for</text>
+<text x="2316" y="89" font-size="11.5" fill="#6f6840">[time]&#x27;</text>
+<text x="2316" y="103" font-size="11.5" fill="#6f6840">- All others → no SMS</text>
+<text x="2316" y="117" font-size="11.5" fill="#6f6840">⚠️ Set twilioFromNumber + businessOwnerPhone in</text>
+<text x="2316" y="131" font-size="11.5" fill="#6f6840">Client Config.</text>
+<g fill="none" stroke="#9aa0a6" stroke-width="2.5">
+<path d="M100,226 C156,226 168,226 217,226"/>
+<path d="M217,221 L224,226 L217,231" fill="#9aa0a6" stroke="none"/>
+<path d="M324,226 C380,226 392,226 441,226"/>
+<path d="M441,221 L448,226 L441,231" fill="#9aa0a6" stroke="none"/>
+<path d="M548,226 C604,226 616,226 665,226"/>
+<path d="M665,221 L672,226 L665,231" fill="#9aa0a6" stroke="none"/>
+<path d="M772,209 C828,209 840,322 889,322"/>
+<path d="M889,317 L896,322 L889,327" fill="#9aa0a6" stroke="none"/>
+<path d="M772,243 C828,243 840,130 889,130"/>
+<path d="M889,125 L896,130 L889,135" fill="#9aa0a6" stroke="none"/>
+<path d="M996,305 C1052,305 1064,226 1113,226"/>
+<path d="M1113,221 L1120,226 L1113,231" fill="#9aa0a6" stroke="none"/>
+<path d="M996,339 C1052,339 1064,514 1113,514"/>
+<path d="M1113,509 L1120,514 L1113,519" fill="#9aa0a6" stroke="none"/>
+<path d="M1220,226 C1276,226 1288,226 1337,226"/>
+<path d="M1337,221 L1344,226 L1337,231" fill="#9aa0a6" stroke="none"/>
+<path d="M1444,209 C1500,209 1512,130 1561,130"/>
+<path d="M1561,125 L1568,130 L1561,135" fill="#9aa0a6" stroke="none"/>
+<path d="M1444,243 C1500,243 1512,322 1561,322"/>
+<path d="M1561,317 L1568,322 L1561,327" fill="#9aa0a6" stroke="none"/>
+<path d="M1668,130 C1724,130 1736,130 1785,130"/>
+<path d="M1785,125 L1792,130 L1785,135" fill="#9aa0a6" stroke="none"/>
+<path d="M1220,514 C1276,514 1288,514 1337,514"/>
+<path d="M1337,509 L1344,514 L1337,519" fill="#9aa0a6" stroke="none"/>
+<path d="M1444,514 C1500,514 1512,514 1561,514"/>
+<path d="M1561,509 L1568,514 L1561,519" fill="#9aa0a6" stroke="none"/>
+<path d="M1668,514 C1724,514 1736,514 1785,514"/>
+<path d="M1785,509 L1792,514 L1785,519" fill="#9aa0a6" stroke="none"/>
+<path d="M1892,514 C1948,514 1960,418 2009,418"/>
+<path d="M2009,413 L2016,418 L2009,423" fill="#9aa0a6" stroke="none"/>
+<path d="M1892,514 C1948,514 1960,610 2009,610"/>
+<path d="M2009,605 L2016,610 L2009,615" fill="#9aa0a6" stroke="none"/>
+<path d="M2116,418 C2172,418 2184,226 2233,226"/>
+<path d="M2233,221 L2240,226 L2233,231" fill="#9aa0a6" stroke="none"/>
+<path d="M2116,418 C2172,418 2184,514 2233,514"/>
+<path d="M2233,509 L2240,514 L2233,519" fill="#9aa0a6" stroke="none"/>
+<path d="M2116,418 C2161,418 1971,290 2009,290"/>
+<path d="M2009,285 L2016,290 L2009,295" fill="#9aa0a6" stroke="none"/>
+<path d="M2340,209 C2396,209 2408,226 2457,226"/>
+<path d="M2457,221 L2464,226 L2457,231" fill="#9aa0a6" stroke="none"/>
+<path d="M2340,478 C2396,478 2408,418 2457,418"/>
+<path d="M2457,413 L2464,418 L2457,423" fill="#9aa0a6" stroke="none"/>
+<path d="M2340,493 C2396,493 2408,610 2457,610"/>
+<path d="M2457,605 L2464,610 L2457,615" fill="#9aa0a6" stroke="none"/>
+<path d="M2340,507 C2396,507 2408,802 2457,802"/>
+<path d="M2457,797 L2464,802 L2457,807" fill="#9aa0a6" stroke="none"/>
+<path d="M2340,521 C2380,521 2360,1150 2393,1150"/>
+<path d="M2393,1145 L2400,1150 L2393,1155" fill="#9aa0a6" stroke="none"/>
+<path d="M2340,535 C2380,535 2360,1150 2393,1150"/>
+<path d="M2393,1145 L2400,1150 L2393,1155" fill="#9aa0a6" stroke="none"/>
+<path d="M2340,550 C2396,550 2408,994 2457,994"/>
+<path d="M2457,989 L2464,994 L2457,999" fill="#9aa0a6" stroke="none"/>
+<path d="M2116,307 C2161,307 1971,170 2009,170"/>
+<path d="M2009,165 L2016,170 L2009,175" fill="#9aa0a6" stroke="none"/>
+<path d="M2116,610 C2156,610 2146,610 2179,610"/>
+<path d="M2179,605 L2186,610 L2179,615" fill="#9aa0a6" stroke="none"/>
+<path d="M2286,610 C2326,610 2316,610 2349,610"/>
+<path d="M2349,605 L2356,610 L2349,615" fill="#9aa0a6" stroke="none"/>
+<path d="M1892,130 C1932,130 1922,130 1955,130"/>
+<path d="M1955,125 L1962,130 L1955,135" fill="#9aa0a6" stroke="none"/>
+<path d="M2062,130 C2102,130 2092,130 2125,130"/>
+<path d="M2125,125 L2132,130 L2125,135" fill="#9aa0a6" stroke="none"/>
+<path d="M1668,322 C1708,322 1698,322 1731,322"/>
+<path d="M1731,317 L1738,322 L1731,327" fill="#9aa0a6" stroke="none"/>
+<path d="M1838,322 C1878,322 1868,322 1901,322"/>
+<path d="M1901,317 L1908,322 L1901,327" fill="#9aa0a6" stroke="none"/>
+</g>
+<rect x="0" y="176" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="0" y="176" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="50.0" y="222.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">sub-flow</text>
+<text x="50.0" y="236.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">in</text>
+<text x="50.0" y="291" font-size="11.5" text-anchor="middle" fill="#2b2f36">Execute Workflow</text>
+<text x="50.0" y="304" font-size="11.5" text-anchor="middle" fill="#2b2f36">Trigger</text>
+<rect x="224" y="176" width="100" height="100" rx="10" fill="#ffffff" stroke="#0aa8a7" stroke-width="3"/>
+<rect x="224" y="176" width="100" height="100" rx="10" fill="#0aa8a7" fill-opacity="0.10"/>
+<text x="274.0" y="222.0" font-size="11" text-anchor="middle" fill="#0aa8a7" font-weight="700">set</text>
+<text x="274.0" y="291" font-size="11.5" text-anchor="middle" fill="#2b2f36">⚙️ Client Config</text>
+<rect x="448" y="176" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="448" y="176" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="498.0" y="222.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="498.0" y="291" font-size="11.5" text-anchor="middle" fill="#2b2f36">Parse Call Data</text>
+<rect x="672" y="176" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="672" y="176" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="722.0" y="222.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="722.0" y="291" font-size="11.5" text-anchor="middle" fill="#2b2f36">Phone Extracted?</text>
+<rect x="896" y="80" width="100" height="100" rx="10" fill="#ffffff" stroke="#909298" stroke-width="3"/>
+<rect x="896" y="80" width="100" height="100" rx="10" fill="#909298" fill-opacity="0.10"/>
+<text x="946.0" y="126.0" font-size="11" text-anchor="middle" fill="#909298" font-weight="700">stop</text>
+<text x="946.0" y="195" font-size="11.5" text-anchor="middle" fill="#2b2f36">Stop and Error - No</text>
+<text x="946.0" y="208" font-size="11.5" text-anchor="middle" fill="#2b2f36">Phone</text>
+<rect x="896" y="272" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="896" y="272" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="946.0" y="318.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="946.0" y="387" font-size="11.5" text-anchor="middle" fill="#2b2f36">Short Call?</text>
+<rect x="1120" y="176" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="1120" y="176" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="1170.0" y="222.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="1170.0" y="291" font-size="11.5" text-anchor="middle" fill="#2b2f36">Check Known Caller</text>
+<rect x="1344" y="176" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="1344" y="176" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="1394.0" y="222.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="1394.0" y="291" font-size="11.5" text-anchor="middle" fill="#2b2f36">Is Known Caller?</text>
+<rect x="1568" y="80" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="1568" y="80" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="1618.0" y="126.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="1618.0" y="195" font-size="11.5" text-anchor="middle" fill="#2b2f36">Update Last Contact</text>
+<text x="1618.0" y="208" font-size="11.5" text-anchor="middle" fill="#2b2f36">Only</text>
+<rect x="1120" y="464" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="1120" y="464" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="1170.0" y="510.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="1170.0" y="579" font-size="11.5" text-anchor="middle" fill="#2b2f36">Read Client Record</text>
+<rect x="1344" y="464" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="1344" y="464" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="1394.0" y="510.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="1394.0" y="579" font-size="11.5" text-anchor="middle" fill="#2b2f36">Read Appointment</text>
+<text x="1394.0" y="592" font-size="11.5" text-anchor="middle" fill="#2b2f36">Record</text>
+<rect x="1568" y="464" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="1568" y="464" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="1618.0" y="510.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="1618.0" y="579" font-size="11.5" text-anchor="middle" fill="#2b2f36">Read Messages</text>
+<rect x="1792" y="464" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1792" y="464" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1842.0" y="510.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1842.0" y="579" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build Update Payload</text>
+<rect x="2016" y="368" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="2016" y="368" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="2066.0" y="414.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="2066.0" y="483" font-size="11.5" text-anchor="middle" fill="#2b2f36">Update Client Record</text>
+<rect x="2240" y="176" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="2240" y="176" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="2290.0" y="222.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="2290.0" y="291" font-size="11.5" text-anchor="middle" fill="#2b2f36">Check Urgent Message</text>
+<rect x="2464" y="176" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2464" y="176" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2514.0" y="222.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2514.0" y="291" font-size="11.5" text-anchor="middle" fill="#2b2f36">Send Urgent Alert</text>
+<text x="2514.0" y="304" font-size="11.5" text-anchor="middle" fill="#2b2f36">SMS</text>
+<rect x="2240" y="464" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="2240" y="464" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="2290.0" y="510.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">switch</text>
+<text x="2290.0" y="579" font-size="11.5" text-anchor="middle" fill="#2b2f36">Route by Outcome</text>
+<rect x="2464" y="368" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2464" y="368" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2514.0" y="414.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2514.0" y="483" font-size="11.5" text-anchor="middle" fill="#2b2f36">Send Booking</text>
+<text x="2514.0" y="496" font-size="11.5" text-anchor="middle" fill="#2b2f36">Confirmation SMS</text>
+<rect x="2464" y="560" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2464" y="560" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2514.0" y="606.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2514.0" y="675" font-size="11.5" text-anchor="middle" fill="#2b2f36">Send Callback</text>
+<text x="2514.0" y="688" font-size="11.5" text-anchor="middle" fill="#2b2f36">Acknowledged SMS</text>
+<rect x="2464" y="752" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2464" y="752" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2514.0" y="798.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2514.0" y="867" font-size="11.5" text-anchor="middle" fill="#2b2f36">Send Callback</text>
+<text x="2514.0" y="880" font-size="11.5" text-anchor="middle" fill="#2b2f36">Confirmed SMS</text>
+<rect x="2464" y="944" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2464" y="944" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2514.0" y="990.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2514.0" y="1059" font-size="11.5" text-anchor="middle" fill="#2b2f36">Alert Owner —</text>
+<text x="2514.0" y="1072" font-size="11.5" text-anchor="middle" fill="#2b2f36">Unknown Outcome</text>
+<rect x="2016" y="240" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="2016" y="240" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="2066.0" y="286.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="2066.0" y="355" font-size="11.5" text-anchor="middle" fill="#2b2f36">CRM Update OK?</text>
+<rect x="2016" y="120" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2016" y="120" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2066.0" y="166.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2066.0" y="235" font-size="11.5" text-anchor="middle" fill="#2b2f36">Alert Owner — CRM</text>
+<text x="2066.0" y="248" font-size="11.5" text-anchor="middle" fill="#2b2f36">Update FAILED</text>
+<rect x="2400" y="1100" width="100" height="100" rx="10" fill="#ffffff" stroke="#909298" stroke-width="3"/>
+<rect x="2400" y="1100" width="100" height="100" rx="10" fill="#909298" fill-opacity="0.10"/>
+<text x="2450.0" y="1146.0" font-size="11" text-anchor="middle" fill="#909298" font-weight="700">no-op</text>
+<text x="2450.0" y="1215" font-size="11.5" text-anchor="middle" fill="#2b2f36">No Follow-Up Needed</text>
+<rect x="2016" y="560" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="2016" y="560" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="2066.0" y="606.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="2066.0" y="675" font-size="11.5" text-anchor="middle" fill="#2b2f36">Write Activity Log ·</text>
+<text x="2066.0" y="688" font-size="11.5" text-anchor="middle" fill="#2b2f36">Headers</text>
+<rect x="2186" y="560" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="2186" y="560" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="2236.0" y="606.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="2236.0" y="675" font-size="11.5" text-anchor="middle" fill="#2b2f36">Write Activity Log ·</text>
+<text x="2236.0" y="688" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build Row</text>
+<rect x="2356" y="560" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="2356" y="560" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="2406.0" y="606.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="2406.0" y="675" font-size="11.5" text-anchor="middle" fill="#2b2f36">Write Activity Log ·</text>
+<text x="2406.0" y="688" font-size="11.5" text-anchor="middle" fill="#2b2f36">Atomic Append</text>
+<rect x="1792" y="80" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="1792" y="80" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="1842.0" y="126.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="1842.0" y="195" font-size="11.5" text-anchor="middle" fill="#2b2f36">Write Activity Log -</text>
+<text x="1842.0" y="208" font-size="11.5" text-anchor="middle" fill="#2b2f36">Short Known ·…</text>
+<rect x="1962" y="80" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1962" y="80" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="2012.0" y="126.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="2012.0" y="195" font-size="11.5" text-anchor="middle" fill="#2b2f36">Write Activity Log -</text>
+<text x="2012.0" y="208" font-size="11.5" text-anchor="middle" fill="#2b2f36">Short Known · Build…</text>
+<rect x="2132" y="80" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="2132" y="80" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="2182.0" y="126.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="2182.0" y="195" font-size="11.5" text-anchor="middle" fill="#2b2f36">Write Activity Log -</text>
+<text x="2182.0" y="208" font-size="11.5" text-anchor="middle" fill="#2b2f36">Short Known · Atomi…</text>
+<rect x="1568" y="272" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="1568" y="272" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="1618.0" y="318.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="1618.0" y="387" font-size="11.5" text-anchor="middle" fill="#2b2f36">Write Activity Log -</text>
+<text x="1618.0" y="400" font-size="11.5" text-anchor="middle" fill="#2b2f36">Short Unknown ·…</text>
+<rect x="1738" y="272" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1738" y="272" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1788.0" y="318.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1788.0" y="387" font-size="11.5" text-anchor="middle" fill="#2b2f36">Write Activity Log -</text>
+<text x="1788.0" y="400" font-size="11.5" text-anchor="middle" fill="#2b2f36">Short Unknown ·…</text>
+<rect x="1908" y="272" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="1908" y="272" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="1958.0" y="318.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="1958.0" y="387" font-size="11.5" text-anchor="middle" fill="#2b2f36">Write Activity Log -</text>
+<text x="1958.0" y="400" font-size="11.5" text-anchor="middle" fill="#2b2f36">Short Unknown ·…</text>
+</svg>

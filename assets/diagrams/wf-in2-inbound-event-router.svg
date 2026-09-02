@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-410 -618 2240 1498" width="1600" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect x="-410" y="-618" width="2240" height="1498" fill="#f7f7f8"/>
+<defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#dcdce0"/></pattern></defs>
+<rect x="-410" y="-618" width="2240" height="1498" fill="url(#g)"/>
+<rect x="-320" y="-416" width="380" height="440" rx="8" fill="#d9f2f2" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="-308" y="-392" font-size="13.5" font-weight="700" fill="#5f5930">WF-IN2 — Inbound VAPI Event Router</text>
+<text x="-308" y="-375" font-size="11.5" fill="#6f6840">Single webhook URL for ALL inbound VAPI events.</text>
+<text x="-308" y="-361" font-size="11.5" fill="#6f6840">Mirrors WF2 but adds assistant-request routing and</text>
+<text x="-308" y="-347" font-size="11.5" fill="#6f6840">calls WF8.</text>
+<text x="-308" y="-333" font-size="11.5" fill="#6f6840">Routing:</text>
+<text x="-308" y="-319" font-size="11.5" fill="#6f6840">- assistant-request → WF8 Lead Lookup (sync, &lt; 3s)</text>
+<text x="-308" y="-305" font-size="11.5" fill="#6f6840">→ return { variables: {...} }</text>
+<text x="-308" y="-291" font-size="11.5" fill="#6f6840">- tool-calls → WF3 Tool Dispatcher (sync, &lt; 5s) →</text>
+<text x="-308" y="-277" font-size="11.5" fill="#6f6840">return { results: [...] }</text>
+<text x="-308" y="-263" font-size="11.5" fill="#6f6840">- end-of-call-report → WF-IN4 Post-Call (async,</text>
+<text x="-308" y="-249" font-size="11.5" fill="#6f6840">fire+forget) → 200 OK</text>
+<text x="-308" y="-235" font-size="11.5" fill="#6f6840">- Everything else → 200 OK, ignored</text>
+<text x="-308" y="-221" font-size="11.5" fill="#6f6840">Setup:</text>
+<text x="-308" y="-207" font-size="11.5" fill="#6f6840">1. Activate this workflow</text>
+<text x="-308" y="-193" font-size="11.5" fill="#6f6840">2. Copy Production webhook URL from the Webhook</text>
+<text x="-308" y="-179" font-size="11.5" fill="#6f6840">node</text>
+<text x="-308" y="-165" font-size="11.5" fill="#6f6840">3. Paste into VAPI inbound assistant → Server URL</text>
+<text x="-308" y="-151" font-size="11.5" fill="#6f6840">Upstream: VAPI (all inbound assistant events)</text>
+<text x="-308" y="-137" font-size="11.5" fill="#6f6840">Downstream: WF8 (assistant-request), WF3</text>
+<text x="-308" y="-123" font-size="11.5" fill="#6f6840">(tool-calls), WF-IN4 (end-of-call)</text>
+<rect x="720" y="-288" width="300" height="220" rx="8" fill="#cfe4ff" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="732" y="-264" font-size="13.5" font-weight="700" fill="#5f5930">Tool-Calls Branch</text>
+<text x="732" y="-247" font-size="11.5" fill="#6f6840">VAPI needs response within 5 seconds.</text>
+<text x="732" y="-233" font-size="11.5" fill="#6f6840">Calls WF3 synchronously, waits for</text>
+<text x="732" y="-219" font-size="11.5" fill="#6f6840">completion.</text>
+<text x="732" y="-205" font-size="11.5" fill="#6f6840">Returns { results: [...] } directly to</text>
+<text x="732" y="-191" font-size="11.5" fill="#6f6840">VAPI.</text>
+<text x="732" y="-177" font-size="11.5" fill="#6f6840">Error handling: If WF3 crashes, Handle</text>
+<text x="732" y="-163" font-size="11.5" fill="#6f6840">WF3 Response builds a graceful fallbac…</text>
+<rect x="720" y="-528" width="300" height="220" rx="8" fill="#d4f0d4" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="732" y="-504" font-size="13.5" font-weight="700" fill="#5f5930">Assistant-Request Branch</text>
+<text x="732" y="-487" font-size="11.5" fill="#6f6840">Fires BEFORE the AI speaks on every</text>
+<text x="732" y="-473" font-size="11.5" fill="#6f6840">inbound call.</text>
+<text x="732" y="-459" font-size="11.5" fill="#6f6840">Calls WF8 synchronously (must complete</text>
+<text x="732" y="-445" font-size="11.5" fill="#6f6840">&lt; 3 seconds).</text>
+<text x="732" y="-431" font-size="11.5" fill="#6f6840">WF8 looks up caller in Sheets and</text>
+<text x="732" y="-417" font-size="11.5" fill="#6f6840">returns:</text>
+<text x="732" y="-403" font-size="11.5" fill="#6f6840">{ variables: { callerName,</text>
+<text x="732" y="-389" font-size="11.5" fill="#6f6840">serviceInterest, isExistingLead, ... }…</text>
+<text x="732" y="-375" font-size="11.5" fill="#6f6840">VAPI injects these into the system</text>
+<text x="732" y="-361" font-size="11.5" fill="#6f6840">prompt for personalized greeting.</text>
+<text x="732" y="-347" font-size="11.5" fill="#6f6840">Fallback: If WF8 fails, returns empty</text>
+<text x="732" y="-333" font-size="11.5" fill="#6f6840">variables — call proceeds with generic…</text>
+<rect x="1440" y="-80" width="300" height="220" rx="8" fill="#e8d9ff" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="1452" y="-56" font-size="13.5" font-weight="700" fill="#5f5930">End-of-Call Branch</text>
+<text x="1452" y="-39" font-size="11.5" fill="#6f6840">Fires WF-IN4 asynchronously — does NOT</text>
+<text x="1452" y="-25" font-size="11.5" fill="#6f6840">wait.</text>
+<text x="1452" y="-11" font-size="11.5" fill="#6f6840">Responds 200 OK to VAPI immediately.</text>
+<text x="1452" y="3" font-size="11.5" fill="#6f6840">WF-IN4 handles: CRM update, Clients tab</text>
+<text x="1452" y="17" font-size="11.5" fill="#6f6840">update,</text>
+<text x="1452" y="31" font-size="11.5" fill="#6f6840">SMS confirmation, urgency alerts.</text>
+<text x="1452" y="45" font-size="11.5" fill="#6f6840">Inbound calls only. Outbound calls use</text>
+<text x="1452" y="59" font-size="11.5" fill="#6f6840">WF4 via WF2.</text>
+<g fill="none" stroke="#9aa0a6" stroke-width="2.5">
+<path d="M100,418 C156,418 168,418 217,418"/>
+<path d="M217,413 L224,418 L217,423" fill="#9aa0a6" stroke="none"/>
+<path d="M324,418 C380,418 392,402 441,402"/>
+<path d="M441,397 L448,402 L441,407" fill="#9aa0a6" stroke="none"/>
+<path d="M548,372 C604,372 616,130 665,130"/>
+<path d="M665,125 L672,130 L665,135" fill="#9aa0a6" stroke="none"/>
+<path d="M548,392 C604,392 616,322 665,322"/>
+<path d="M665,317 L672,322 L665,327" fill="#9aa0a6" stroke="none"/>
+<path d="M548,412 C604,412 616,514 665,514"/>
+<path d="M665,509 L672,514 L665,519" fill="#9aa0a6" stroke="none"/>
+<path d="M548,432 C604,432 616,706 665,706"/>
+<path d="M665,701 L672,706 L665,711" fill="#9aa0a6" stroke="none"/>
+<path d="M772,130 C828,130 840,130 889,130"/>
+<path d="M889,125 L896,130 L889,135" fill="#9aa0a6" stroke="none"/>
+<path d="M996,130 C1052,130 1064,130 1113,130"/>
+<path d="M1113,125 L1120,130 L1113,135" fill="#9aa0a6" stroke="none"/>
+<path d="M772,322 C828,322 840,322 889,322"/>
+<path d="M889,317 L896,322 L889,327" fill="#9aa0a6" stroke="none"/>
+<path d="M996,322 C1052,322 1064,322 1113,322"/>
+<path d="M1113,317 L1120,322 L1113,327" fill="#9aa0a6" stroke="none"/>
+<path d="M772,514 C828,514 840,514 889,514"/>
+<path d="M889,509 L896,514 L889,519" fill="#9aa0a6" stroke="none"/>
+</g>
+<rect x="0" y="368" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="0" y="368" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="50.0" y="414.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">webhook</text>
+<text x="50.0" y="483" font-size="11.5" text-anchor="middle" fill="#2b2f36">VAPI Inbound Webhook</text>
+<rect x="224" y="368" width="100" height="100" rx="10" fill="#ffffff" stroke="#0aa8a7" stroke-width="3"/>
+<rect x="224" y="368" width="100" height="100" rx="10" fill="#0aa8a7" fill-opacity="0.10"/>
+<text x="274.0" y="414.0" font-size="11" text-anchor="middle" fill="#0aa8a7" font-weight="700">set</text>
+<text x="274.0" y="483" font-size="11.5" text-anchor="middle" fill="#2b2f36">⚙️ Client Config</text>
+<rect x="448" y="352" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="448" y="352" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="498.0" y="398.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">switch</text>
+<text x="498.0" y="467" font-size="11.5" text-anchor="middle" fill="#2b2f36">Route by Event Type</text>
+<rect x="672" y="80" width="100" height="100" rx="10" fill="#ffffff" stroke="#ff6d5a" stroke-width="3"/>
+<rect x="672" y="80" width="100" height="100" rx="10" fill="#ff6d5a" fill-opacity="0.10"/>
+<text x="722.0" y="126.0" font-size="11" text-anchor="middle" fill="#ff6d5a" font-weight="700">sub-flow</text>
+<text x="722.0" y="195" font-size="11.5" text-anchor="middle" fill="#2b2f36">Call WF8 Lead Lookup</text>
+<rect x="896" y="80" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="896" y="80" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="946.0" y="126.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="946.0" y="195" font-size="11.5" text-anchor="middle" fill="#2b2f36">Handle WF8 Response</text>
+<rect x="1120" y="80" width="100" height="100" rx="10" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="1120" y="80" width="100" height="100" rx="10" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="1170.0" y="126.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">respond</text>
+<text x="1170.0" y="195" font-size="11.5" text-anchor="middle" fill="#2b2f36">Return Variables to</text>
+<text x="1170.0" y="208" font-size="11.5" text-anchor="middle" fill="#2b2f36">VAPI</text>
+<rect x="672" y="272" width="100" height="100" rx="10" fill="#ffffff" stroke="#ff6d5a" stroke-width="3"/>
+<rect x="672" y="272" width="100" height="100" rx="10" fill="#ff6d5a" fill-opacity="0.10"/>
+<text x="722.0" y="318.0" font-size="11" text-anchor="middle" fill="#ff6d5a" font-weight="700">sub-flow</text>
+<text x="722.0" y="387" font-size="11.5" text-anchor="middle" fill="#2b2f36">Call WF3 Tool</text>
+<text x="722.0" y="400" font-size="11.5" text-anchor="middle" fill="#2b2f36">Dispatcher</text>
+<rect x="896" y="272" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="896" y="272" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="946.0" y="318.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="946.0" y="387" font-size="11.5" text-anchor="middle" fill="#2b2f36">Handle WF3 Response</text>
+<rect x="1120" y="272" width="100" height="100" rx="10" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="1120" y="272" width="100" height="100" rx="10" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="1170.0" y="318.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">respond</text>
+<text x="1170.0" y="387" font-size="11.5" text-anchor="middle" fill="#2b2f36">Return Tool Results</text>
+<text x="1170.0" y="400" font-size="11.5" text-anchor="middle" fill="#2b2f36">to VAPI</text>
+<rect x="672" y="464" width="100" height="100" rx="10" fill="#ffffff" stroke="#ff6d5a" stroke-width="3"/>
+<rect x="672" y="464" width="100" height="100" rx="10" fill="#ff6d5a" fill-opacity="0.10"/>
+<text x="722.0" y="510.0" font-size="11" text-anchor="middle" fill="#ff6d5a" font-weight="700">sub-flow</text>
+<text x="722.0" y="579" font-size="11.5" text-anchor="middle" fill="#2b2f36">Fire WF-IN4</text>
+<text x="722.0" y="592" font-size="11.5" text-anchor="middle" fill="#2b2f36">Post-Call</text>
+<rect x="896" y="464" width="100" height="100" rx="10" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="896" y="464" width="100" height="100" rx="10" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="946.0" y="510.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">respond</text>
+<text x="946.0" y="579" font-size="11.5" text-anchor="middle" fill="#2b2f36">Acknowledge</text>
+<text x="946.0" y="592" font-size="11.5" text-anchor="middle" fill="#2b2f36">End-of-Call</text>
+<rect x="672" y="656" width="100" height="100" rx="10" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="672" y="656" width="100" height="100" rx="10" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="722.0" y="702.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">respond</text>
+<text x="722.0" y="771" font-size="11.5" text-anchor="middle" fill="#2b2f36">Acknowledge Other</text>
+<text x="722.0" y="784" font-size="11.5" text-anchor="middle" fill="#2b2f36">Events</text>
+</svg>

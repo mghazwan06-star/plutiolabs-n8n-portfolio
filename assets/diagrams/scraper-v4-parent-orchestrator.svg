@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-550 -210 2440 1054" width="1600" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect x="-550" y="-210" width="2440" height="1054" fill="#f7f7f8"/>
+<defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#dcdce0"/></pattern></defs>
+<rect x="-550" y="-210" width="2440" height="1054" fill="url(#g)"/>
+<rect x="-460" y="-120" width="620" height="420" rx="8" fill="#fff8b8" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="-448" y="-96" font-size="13.5" font-weight="700" fill="#5f5930">v4 PARENT — Batch Orchestrator</text>
+<text x="-448" y="-79" font-size="11.5" fill="#6f6840">Solves two constraints that pull against each other:</text>
+<text x="-448" y="-65" font-size="11.5" fill="#6f6840">Memory (F-R1). n8n keeps every node&#x27;s input AND output. A ~20-node chain over</text>
+<text x="-448" y="-51" font-size="11.5" fill="#6f6840">5,603 items = ~20 copies resident → the instance was killed at 47s. The child is…</text>
+<text x="-448" y="-37" font-size="11.5" fill="#6f6840">Competitor pool (F-R2). A 500-lead slice matches at 48.6%; the full pool at</text>
+<text x="-448" y="-23" font-size="11.5" fill="#6f6840">~100%. So the parent builds ONE global index and passes it to every batch —…</text>
+<text x="-448" y="-9" font-size="11.5" fill="#6f6840">Flow</text>
+<text x="-448" y="5" font-size="11.5" fill="#6f6840">fetch → filter → reconcile → build index → loop batches → child → counts back</text>
+<text x="-448" y="19" font-size="11.5" fill="#6f6840">The child (dpgZ964TabmgSJ0k) returns counts only. Returning records would put the</text>
+<text x="-448" y="33" font-size="11.5" fill="#6f6840">dataset back in the parent&#x27;s memory and undo the whole point.</text>
+<text x="-448" y="47" font-size="11.5" fill="#6f6840">This workflow owns the config. The child reads config from the payload, so there</text>
+<text x="-448" y="61" font-size="11.5" fill="#6f6840">is no drift.</text>
+<g fill="none" stroke="#9aa0a6" stroke-width="2.5">
+<path d="M120,470 C183,470 197,470 253,470"/>
+<path d="M253,465 L260,470 L253,475" fill="#9aa0a6" stroke="none"/>
+<path d="M360,470 C423,470 437,470 493,470"/>
+<path d="M493,465 L500,470 L493,475" fill="#9aa0a6" stroke="none"/>
+<path d="M600,470 C663,470 677,470 733,470"/>
+<path d="M733,465 L740,470 L733,475" fill="#9aa0a6" stroke="none"/>
+<path d="M1080,470 C1143,470 1157,470 1213,470"/>
+<path d="M1213,465 L1220,470 L1213,475" fill="#9aa0a6" stroke="none"/>
+<path d="M1320,453 C1383,453 1397,350 1453,350"/>
+<path d="M1453,345 L1460,350 L1453,355" fill="#9aa0a6" stroke="none"/>
+<path d="M1320,487 C1383,487 1397,610 1453,610"/>
+<path d="M1453,605 L1460,610 L1453,615" fill="#9aa0a6" stroke="none"/>
+<path d="M1560,610 C1623,610 1637,610 1693,610"/>
+<path d="M1693,605 L1700,610 L1693,615" fill="#9aa0a6" stroke="none"/>
+<path d="M1800,610 C2061,610 959,470 1213,470"/>
+<path d="M1213,465 L1220,470 L1213,475" fill="#9aa0a6" stroke="none"/>
+<path d="M-360,470 C-297,470 -283,670 -227,670"/>
+<path d="M-227,665 L-220,670 L-227,675" fill="#9aa0a6" stroke="none"/>
+<path d="M-120,670 C-75,670 -265,470 -227,470"/>
+<path d="M-227,465 L-220,470 L-227,475" fill="#9aa0a6" stroke="none"/>
+<path d="M840,470 C880,470 820,470 853,470"/>
+<path d="M853,465 L860,470 L853,475" fill="#9aa0a6" stroke="none"/>
+<path d="M960,470 C1000,470 940,470 973,470"/>
+<path d="M973,465 L980,470 L973,475" fill="#9aa0a6" stroke="none"/>
+<path d="M-120,470 C-80,470 -140,470 -107,470"/>
+<path d="M-107,465 L-100,470 L-107,475" fill="#9aa0a6" stroke="none"/>
+<path d="M0,470 C40,470 -20,470 13,470"/>
+<path d="M13,465 L20,470 L13,475" fill="#9aa0a6" stroke="none"/>
+</g>
+<rect x="-460" y="420" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="-460" y="420" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="-410.0" y="466.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">webhook</text>
+<text x="-410.0" y="535" font-size="11.5" text-anchor="middle" fill="#2b2f36">📥 Run</text>
+<rect x="-220" y="620" width="100" height="100" rx="10" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="-220" y="620" width="100" height="100" rx="10" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="-170.0" y="666.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">respond</text>
+<text x="-170.0" y="735" font-size="11.5" text-anchor="middle" fill="#2b2f36">↩️ Ack</text>
+<rect x="-220" y="420" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="-220" y="420" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="-170.0" y="466.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="-170.0" y="535" font-size="11.5" text-anchor="middle" fill="#2b2f36">⚙️ Config</text>
+<rect x="20" y="420" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="20" y="420" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="70.0" y="466.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="70.0" y="535" font-size="11.5" text-anchor="middle" fill="#2b2f36">📡 Fetch MCS Index</text>
+<rect x="260" y="420" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="260" y="420" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="310.0" y="466.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="310.0" y="535" font-size="11.5" text-anchor="middle" fill="#2b2f36">📥 Fetch MCS</text>
+<text x="310.0" y="548" font-size="11.5" text-anchor="middle" fill="#2b2f36">Installers</text>
+<rect x="500" y="420" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="500" y="420" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="550.0" y="466.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="550.0" y="535" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔀 Split MCS Records</text>
+<rect x="740" y="420" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="740" y="420" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="790.0" y="466.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="790.0" y="535" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔎 MCS Filter &amp;</text>
+<text x="790.0" y="548" font-size="11.5" text-anchor="middle" fill="#2b2f36">Normalize</text>
+<rect x="980" y="420" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="980" y="420" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1030.0" y="466.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1030.0" y="535" font-size="11.5" text-anchor="middle" fill="#2b2f36">🧭 Build Competitor</text>
+<text x="1030.0" y="548" font-size="11.5" text-anchor="middle" fill="#2b2f36">Index</text>
+<rect x="1220" y="420" width="100" height="100" rx="10" fill="#ffffff" stroke="#7d5bed" stroke-width="3"/>
+<rect x="1220" y="420" width="100" height="100" rx="10" fill="#7d5bed" fill-opacity="0.10"/>
+<text x="1270.0" y="466.0" font-size="11" text-anchor="middle" fill="#7d5bed" font-weight="700">loop</text>
+<text x="1270.0" y="535" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔁 Split In Batches</text>
+<rect x="1460" y="560" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1460" y="560" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1510.0" y="606.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1510.0" y="675" font-size="11.5" text-anchor="middle" fill="#2b2f36">📦 Pack Batch</text>
+<rect x="1700" y="560" width="100" height="100" rx="10" fill="#ffffff" stroke="#ff6d5a" stroke-width="3"/>
+<rect x="1700" y="560" width="100" height="100" rx="10" fill="#ff6d5a" fill-opacity="0.10"/>
+<text x="1750.0" y="606.0" font-size="11" text-anchor="middle" fill="#ff6d5a" font-weight="700">sub-flow</text>
+<text x="1750.0" y="675" font-size="11.5" text-anchor="middle" fill="#2b2f36">🚀 Enrich Batch</text>
+<rect x="1460" y="300" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1460" y="300" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1510.0" y="346.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1510.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">📈 Run Summary</text>
+<rect x="860" y="420" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="860" y="420" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="910.0" y="466.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="910.0" y="535" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔄 Reconcile &amp; Dedupe</text>
+<rect x="-100" y="420" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="-100" y="420" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="-50.0" y="466.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="-50.0" y="535" font-size="11.5" text-anchor="middle" fill="#2b2f36">📖 Read CRM Index</text>
+</svg>

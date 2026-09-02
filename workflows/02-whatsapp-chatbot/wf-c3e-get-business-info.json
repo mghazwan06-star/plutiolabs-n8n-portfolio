@@ -1,0 +1,163 @@
+{
+  "id": "3CQsBsd0aptupwMC",
+  "name": "D3 — WF-C3e: Tool: get_business_info",
+  "description": null,
+  "active": true,
+  "activeVersionId": "acd4cbd1-db07-4621-8700-795fc6e27059",
+  "createdAt": "2026-05-19T13:07:20.855Z",
+  "updatedAt": "2026-08-14T10:33:17.221Z",
+  "isArchived": false,
+  "versionCounter": 7,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "wfc3e-sticky",
+      "name": "WF-C3e Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        60
+      ],
+      "parameters": {
+        "content": "## D3 — WF-C3e: Tool — get_business_info\n\nCalled by WF-C2 when Claude invokes the get_business_info tool.\nReturns structured knowledge about Solarify: services, pricing, subsidies,\nfinance, warranties, service area, installation process, hours, contact.\n\n**Input (from WF-C2):**\n- `toolUseId` — Claude tool_use ID (must be echoed back as toolCallId)\n- `toolInput.topic` — knowledge topic requested\n\n**Output:**\n- `toolCallId` — echoes toolUseId\n- `result` — single-line string answer\n\n**No external API calls. No credentials needed.**\nAll knowledge is embedded in the Code node.\nUpgrade to Supabase RAG post-MVP by replacing the Code node.",
+        "color": 4,
+        "width": 680,
+        "height": 300
+      }
+    },
+    {
+      "id": "wfc3e-trigger",
+      "name": "When Called by WF-C2",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        440
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "wfc3e-info",
+      "name": "Lookup Business Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        340,
+        440
+      ],
+      "parameters": {
+        "jsCode": "// SINGLE SOURCE OF TRUTH: every string below must match section 9 of the WF-C2 system\n// prompt word-for-word in substance. BUG-R35 — this tool used to carry its own numbers\n// (£11k ceiling, \"all England and Wales\", 5–10yr inverter, 0% finance rates) which\n// contradicted the prompt. The prompt answers almost everything; this tool is the rare\n// fallback. If the two ever disagree again, the customer gets a coin flip.\ntry {\n  var input = $input.first().json;\n  var toolInput = input.toolInput || {};\n  var toolUseId = input.toolUseId || '';\n  var topic = (toolInput.topic || toolInput.category || toolInput.subject || '').toLowerCase().trim();\n\n  var info = {\n    hours: 'The Solarify office is open Monday to Friday 8am to 6pm and Saturday 9am to 1pm, closed Sunday and bank holidays. Survey visits themselves run Monday to Friday only, never Saturday or Sunday, and need at least 48 hours notice. This WhatsApp line answers any time.',\n    services: 'Solarify installs residential solar PV, typically £5,000 to £9,500 all in, with a free survey first. Battery storage as an add-on is typically £3,000 to £6,500, with inverter compatibility checked at the survey. Monitoring and maintenance: annual plan £149, panel clean £95, fault callout £85 plus parts. Commercial work is handled by a separate specialist team. We do not install heat pumps, insulation, boilers or EV chargers.',\n    pricing: 'Residential solar PV is typically £5,000 to £9,500 all in. Battery storage as an add-on is typically £3,000 to £6,500. Only the free survey produces a fixed quote for their actual roof.',\n    subsidies: '0% VAT on home solar and batteries, currently in place until March 2027 — say currently, never imply it is permanent. The Smart Export Guarantee pays for electricity exported to the grid. Typical payback is 7 to 10 years at current energy prices. Grants exist but are aimed at lower-income households and people on certain benefits rather than everyone; never promise a specific grant or that funding will be approved.',\n    finance: 'We do have finance options, and the team walks through the terms at the survey. Do not quote rates or monthly figures.',\n    warranty: '10-year workmanship guarantee, 25-year panel performance warranty and 10-year inverter warranty. All work is MCS certified and HIES registered with an insurance-backed guarantee.',\n    serviceArea: 'Greater Manchester, Leeds, Sheffield, Liverpool and surrounding areas within roughly 40 miles. Confirm the postcode when booking. Outside that area it is waiting list only.',\n    process: 'The survey is free, no obligation, and takes 45 to 60 minutes. The team prepares a full written quote after the visit. Installation is one day for most homes, two for complex systems.',\n    contact: 'The best way is to book a free survey right here in the chat. They can also ask their question here and the team will follow it up, or call the office during working hours.',\n    about: 'Solarify Ltd, UK solar installation specialists. Established 2017, over 1,400 installations, 4.8 Google rating from 300+ reviews. MCS certified, HIES registered, insurance-backed guarantee on all work. Solar PV and battery storage only.'\n  };\n\n  var result = info[topic];\n  // An empty topic must NOT fall into the substring loop: ''.indexOf('') === 0,\n  // so key.indexOf(topic) matches the first key and silently returns opening hours.\n  if (!result && topic) {\n    var keys = Object.keys(info);\n    for (var i = 0; i < keys.length; i++) {\n      var k = keys[i].toLowerCase();\n      if (topic.indexOf(k) >= 0 || k.indexOf(topic) >= 0) {\n        result = info[keys[i]];\n        break;\n      }\n    }\n  }\n  if (!result) {\n    result = 'I can answer questions about our services, pricing, government incentives, finance, warranties, service area, installation process, opening hours, or how to contact us. Which would you like to know about?';\n  }\n\n  return [{ json: { toolCallId: toolUseId, result: result } }];\n} catch (e) {\n  var fallbackId = '';\n  try { fallbackId = $input.first().json.toolUseId; } catch(x) {}\n  return [{ json: { toolCallId: fallbackId || 'unknown', result: 'I have information about our services, pricing, incentives and installation process. What would you like to know?' } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "When Called by WF-C2": {
+      "main": [
+        [
+          {
+            "node": "Lookup Business Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London"
+  },
+  "tags": [],
+  "activeVersion": {
+    "versionId": "acd4cbd1-db07-4621-8700-795fc6e27059",
+    "workflowId": "3CQsBsd0aptupwMC",
+    "nodes": [
+      {
+        "id": "wfc3e-sticky",
+        "name": "WF-C3e Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          60,
+          60
+        ],
+        "parameters": {
+          "content": "## D3 — WF-C3e: Tool — get_business_info\n\nCalled by WF-C2 when Claude invokes the get_business_info tool.\nReturns structured knowledge about Solarify: services, pricing, subsidies,\nfinance, warranties, service area, installation process, hours, contact.\n\n**Input (from WF-C2):**\n- `toolUseId` — Claude tool_use ID (must be echoed back as toolCallId)\n- `toolInput.topic` — knowledge topic requested\n\n**Output:**\n- `toolCallId` — echoes toolUseId\n- `result` — single-line string answer\n\n**No external API calls. No credentials needed.**\nAll knowledge is embedded in the Code node.\nUpgrade to Supabase RAG post-MVP by replacing the Code node.",
+          "color": 4,
+          "width": 680,
+          "height": 300
+        }
+      },
+      {
+        "id": "wfc3e-trigger",
+        "name": "When Called by WF-C2",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          80,
+          440
+        ],
+        "parameters": {
+          "inputSource": "passthrough"
+        }
+      },
+      {
+        "id": "wfc3e-info",
+        "name": "Lookup Business Info",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          340,
+          440
+        ],
+        "parameters": {
+          "jsCode": "// SINGLE SOURCE OF TRUTH: every string below must match section 9 of the WF-C2 system\n// prompt word-for-word in substance. BUG-R35 — this tool used to carry its own numbers\n// (£11k ceiling, \"all England and Wales\", 5–10yr inverter, 0% finance rates) which\n// contradicted the prompt. The prompt answers almost everything; this tool is the rare\n// fallback. If the two ever disagree again, the customer gets a coin flip.\ntry {\n  var input = $input.first().json;\n  var toolInput = input.toolInput || {};\n  var toolUseId = input.toolUseId || '';\n  var topic = (toolInput.topic || toolInput.category || toolInput.subject || '').toLowerCase().trim();\n\n  var info = {\n    hours: 'The Solarify office is open Monday to Friday 8am to 6pm and Saturday 9am to 1pm, closed Sunday and bank holidays. Survey visits themselves run Monday to Friday only, never Saturday or Sunday, and need at least 48 hours notice. This WhatsApp line answers any time.',\n    services: 'Solarify installs residential solar PV, typically £5,000 to £9,500 all in, with a free survey first. Battery storage as an add-on is typically £3,000 to £6,500, with inverter compatibility checked at the survey. Monitoring and maintenance: annual plan £149, panel clean £95, fault callout £85 plus parts. Commercial work is handled by a separate specialist team. We do not install heat pumps, insulation, boilers or EV chargers.',\n    pricing: 'Residential solar PV is typically £5,000 to £9,500 all in. Battery storage as an add-on is typically £3,000 to £6,500. Only the free survey produces a fixed quote for their actual roof.',\n    subsidies: '0% VAT on home solar and batteries, currently in place until March 2027 — say currently, never imply it is permanent. The Smart Export Guarantee pays for electricity exported to the grid. Typical payback is 7 to 10 years at current energy prices. Grants exist but are aimed at lower-income households and people on certain benefits rather than everyone; never promise a specific grant or that funding will be approved.',\n    finance: 'We do have finance options, and the team walks through the terms at the survey. Do not quote rates or monthly figures.',\n    warranty: '10-year workmanship guarantee, 25-year panel performance warranty and 10-year inverter warranty. All work is MCS certified and HIES registered with an insurance-backed guarantee.',\n    serviceArea: 'Greater Manchester, Leeds, Sheffield, Liverpool and surrounding areas within roughly 40 miles. Confirm the postcode when booking. Outside that area it is waiting list only.',\n    process: 'The survey is free, no obligation, and takes 45 to 60 minutes. The team prepares a full written quote after the visit. Installation is one day for most homes, two for complex systems.',\n    contact: 'The best way is to book a free survey right here in the chat. They can also ask their question here and the team will follow it up, or call the office during working hours.',\n    about: 'Solarify Ltd, UK solar installation specialists. Established 2017, over 1,400 installations, 4.8 Google rating from 300+ reviews. MCS certified, HIES registered, insurance-backed guarantee on all work. Solar PV and battery storage only.'\n  };\n\n  var result = info[topic];\n  // An empty topic must NOT fall into the substring loop: ''.indexOf('') === 0,\n  // so key.indexOf(topic) matches the first key and silently returns opening hours.\n  if (!result && topic) {\n    var keys = Object.keys(info);\n    for (var i = 0; i < keys.length; i++) {\n      var k = keys[i].toLowerCase();\n      if (topic.indexOf(k) >= 0 || k.indexOf(topic) >= 0) {\n        result = info[keys[i]];\n        break;\n      }\n    }\n  }\n  if (!result) {\n    result = 'I can answer questions about our services, pricing, government incentives, finance, warranties, service area, installation process, opening hours, or how to contact us. Which would you like to know about?';\n  }\n\n  return [{ json: { toolCallId: toolUseId, result: result } }];\n} catch (e) {\n  var fallbackId = '';\n  try { fallbackId = $input.first().json.toolUseId; } catch(x) {}\n  return [{ json: { toolCallId: fallbackId || 'unknown', result: 'I have information about our services, pricing, incentives and installation process. What would you like to know?' } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      }
+    ],
+    "connections": {
+      "When Called by WF-C2": {
+        "main": [
+          [
+            {
+              "node": "Lookup Business Info",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Muhammad Ghazwan",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-08-14T10:33:17.222Z",
+    "updatedAt": "2026-08-14T10:33:17.222Z",
+    "workflowPublishHistory": [
+      {
+        "id": 161,
+        "workflowId": "3CQsBsd0aptupwMC",
+        "versionId": "acd4cbd1-db07-4621-8700-795fc6e27059",
+        "event": "activated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-14T10:33:17.345Z"
+      },
+      {
+        "id": 160,
+        "workflowId": "3CQsBsd0aptupwMC",
+        "versionId": "acd4cbd1-db07-4621-8700-795fc6e27059",
+        "event": "deactivated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-14T10:33:17.344Z"
+      }
+    ]
+  }
+}

@@ -1,0 +1,811 @@
+{
+  "id": "JYW1eTz4OMiYQxfq",
+  "name": "D5 — 02c-book bookAppointment Tool",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-05-22T16:32:54.030Z",
+  "updatedAt": "2026-08-21T22:49:32.648Z",
+  "isArchived": false,
+  "versionCounter": 11,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "d5book-sticky",
+      "name": "D5-WF2c-book Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        80
+      ],
+      "parameters": {
+        "content": "## D5-WF2c-book — bookAppointment Tool Handler\n\nCalled **synchronously** by D5-WF2b. Must respond within 5 seconds.\n\n**Writes:** Appointment Log (Booked By=d5-reactivation) | Clients (Status=booked, Last Channel=voice) | Reactivation Log (status=booked)\n\n**Composite key rule:** Reactivation Log always matched on [Phone + Campaign ID].\n**Duplicate guard:** Reads Appointment Log for Phone+Status=confirmed before booking — blocks cross-channel duplicates (catches D2 and D3 bookings too).\n\n**Input:** { toolCallId, toolArgs: { date, time, service, address }, phone, campaignId, name }\n**Output:** { results: [{ toolCallId, result }] }",
+        "color": 4,
+        "width": 660,
+        "height": 240
+      }
+    },
+    {
+      "id": "d5book-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        480
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d5book-config",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        300,
+        480
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-sheetId",
+              "name": "sheetId",
+              "value": "YOUR_CRM_SHEET_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-calId",
+              "name": "calendarId",
+              "value": "primary",
+              "type": "string"
+            },
+            {
+              "id": "cfg-apptTab",
+              "name": "appointmentsTab",
+              "value": "Appointment Log",
+              "type": "string"
+            },
+            {
+              "id": "cfg-clientsTab",
+              "name": "clientsTab",
+              "value": "Clients",
+              "type": "string"
+            },
+            {
+              "id": "cfg-reactTab",
+              "name": "reactivationLogTab",
+              "value": "Reactivation Log",
+              "type": "string"
+            },
+            {
+              "id": "cfg-tz",
+              "name": "timezone",
+              "value": "Europe/London",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true
+      }
+    },
+    {
+      "id": "d5book-parse",
+      "name": "Parse Booking Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        480
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "try {\n  var input = $('Execute Workflow Trigger').first().json;\n  var toolCallId = input.toolCallId || '';\n  var phone = input.phone || '';\n  var campaignId = input.campaignId || '';\n  var name = input.name || '';\n  var args = input.toolArgs || {};\n  var date = (args.date || '').trim();\n  var time = (args.time || '').trim();\n  var service = (args.service || '').trim();\n  var address = (args.address || '').trim();\n  if (!date || !time || !service || !address) {\n    return [{ json: { toolCallId: toolCallId, phone: phone, campaignId: campaignId, name: name, valid: false, errorMsg: 'To book an appointment I need a date, time, service type and your address. Could you confirm those details?' } }];\n  }\n  var month = new Date().getUTCMonth() + 1;\n  var bst = (month >= 3 && month <= 10) ? 1 : 0;\n  var hour = 9;\n  var timeNorm = time.toLowerCase().replace(/\\s/g, '');\n  var m = timeNorm.match(/^(\\d+)(?::(\\d+))?(am|pm)?$/);\n  if (m) {\n    hour = parseInt(m[1]);\n    if (m[3] === 'pm' && hour !== 12) hour += 12;\n    if (m[3] === 'am' && hour === 12) hour = 0;\n  }\n  var parsed = null;\n  var isoAttempt = new Date(date);\n  if (!isNaN(isoAttempt.getTime())) { parsed = isoAttempt; }\n  if (!parsed) {\n    var monthNames = ['january','february','march','april','may','june','july','august','september','october','november','december'];\n    var dateLower = date.toLowerCase();\n    for (var mi = 0; mi < monthNames.length; mi++) {\n      if (dateLower.indexOf(monthNames[mi]) !== -1) {\n        var numMatch = dateLower.match(/(\\d+)/);\n        if (numMatch) {\n          var dayNum = parseInt(numMatch[1]);\n          var yr = new Date().getUTCFullYear();\n          var candidate = new Date(Date.UTC(yr, mi, dayNum));\n          if (!isNaN(candidate.getTime())) {\n            var todayMidnight = new Date();\n            todayMidnight.setUTCHours(0,0,0,0);\n            if (candidate < todayMidnight) { candidate = new Date(Date.UTC(yr + 1, mi, dayNum)); }\n            parsed = candidate;\n          }\n        }\n        break;\n      }\n    }\n  }\n  if (!parsed || isNaN(parsed.getTime())) {\n    return [{ json: { toolCallId: toolCallId, phone: phone, campaignId: campaignId, name: name, valid: false, errorMsg: \"I couldn't quite get that date. Could you say it like 'the 14th of April' or 'next Tuesday'?\" } }];\n  }\n  var utcH = hour - bst;\n  var startISO = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate(), utcH, 0, 0)).toISOString();\n  var appointmentTimeISO = startISO;\n  var endISO = new Date(new Date(startISO).getTime() + 3600000).toISOString();\n  return [{ json: { toolCallId: toolCallId, phone: phone, campaignId: campaignId, name: name, date: date, time: time, service: service, address: address, appointmentTimeISO: appointmentTimeISO, startISO: startISO, endISO: endISO, upcomingAppt: date + ' at ' + time, valid: true } }];\n} catch(e) {\n  return [{ json: { toolCallId: ($('Execute Workflow Trigger').first().json.toolCallId||''), phone: ($('Execute Workflow Trigger').first().json.phone||''), campaignId: ($('Execute Workflow Trigger').first().json.campaignId||''), name: ($('Execute Workflow Trigger').first().json.name||''), valid: false, errorMsg: 'I had a problem processing that booking request. Could you repeat the details?' } }];\n}"
+      }
+    },
+    {
+      "id": "d5book-valid",
+      "name": "Booking Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        740,
+        480
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check-valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d5book-val-error",
+      "name": "Build Validation Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        960,
+        640
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "val-res",
+              "name": "results",
+              "value": "={{ [{ toolCallId: $('Parse Booking Request').first().json.toolCallId, result: $('Parse Booking Request').first().json.errorMsg }] }}",
+              "type": "array"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d5book-check-dup",
+      "name": "Check Duplicate Booking",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        960,
+        360
+      ],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+        },
+        "filtersUI": {
+          "conditions": [
+            {
+              "keyName": "Phone",
+              "condition": "equals",
+              "value": "={{ $('Parse Booking Request').first().json.phone }}"
+            },
+            {
+              "keyName": "Status",
+              "condition": "equals",
+              "value": "confirmed"
+            }
+          ]
+        },
+        "returnFirstMatch": true,
+        "range": "A:Z",
+        "options": {}
+      }
+    },
+    {
+      "id": "d5book-has-dup",
+      "name": "Has Duplicate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1200,
+        360
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check-dup",
+              "leftValue": "={{ $json['CalendarEventId'] }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d5book-dup-warn",
+      "name": "Build Duplicate Warning",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1440,
+        240
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dup-res",
+              "name": "results",
+              "value": "={{ [{ toolCallId: $('Parse Booking Request').first().json.toolCallId, result: 'You already have a confirmed appointment on ' + $json['Date'] + ' at ' + $json['Time'] + '. Shall I reschedule it to a different time instead?' }] }}",
+              "type": "array"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d5book-cal-create",
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1440,
+        480
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Calendar OAuth2 API"
+        }
+      },
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.calendarId }}"
+        },
+        "start": "={{ $('Parse Booking Request').first().json.startISO }}",
+        "end": "={{ $('Parse Booking Request').first().json.endISO }}",
+        "additionalFields": {
+          "summary": "={{ $('Parse Booking Request').first().json.service + ' — ' + $('Parse Booking Request').first().json.name }}",
+          "description": "={{ 'Phone: ' + $('Parse Booking Request').first().json.phone + ' | Address: ' + $('Parse Booking Request').first().json.address + ' | Campaign: ' + $('Parse Booking Request').first().json.campaignId + ' | Source: D5 Reactivation' }}"
+        }
+      }
+    },
+    {
+      "id": "d5book-cal-if",
+      "name": "Calendar Created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1680,
+        480
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check-cal-id",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d5book-cal-error",
+      "name": "Build Calendar Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1900,
+        360
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cal-err-res",
+              "name": "results",
+              "value": "={{ [{ toolCallId: $('Parse Booking Request').first().json.toolCallId, result: \"I'm sorry, I wasn't able to complete the booking just now. Our team will follow up with you shortly to confirm your appointment.\" }] }}",
+              "type": "array"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d5book-log-appt",
+      "name": "Log Booking to Appointment Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1900,
+        560
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $('Parse Booking Request').first().json.name }}",
+            "Phone": "={{ $('Parse Booking Request').first().json.phone }}",
+            "Email": "",
+            "Service": "={{ $('Parse Booking Request').first().json.service }}",
+            "Address": "={{ $('Parse Booking Request').first().json.address }}",
+            "Date": "={{ $('Parse Booking Request').first().json.date }}",
+            "Time": "={{ $('Parse Booking Request').first().json.time }}",
+            "Status": "confirmed",
+            "CalendarEventId": "={{ $json.id }}",
+            "Booked At": "={{ new Date().toISOString() }}",
+            "Notes": "D5 reactivation booking",
+            "AppointmentTimeISO": "={{ $('Parse Booking Request').first().json.appointmentTimeISO }}",
+            "Booked By": "d5-reactivation"
+          },
+          "schema": [
+            {
+              "id": "Name",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Phone",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Email",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Service",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Address",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Date",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Time",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "CalendarEventId",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Booked At",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Notes",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "AppointmentTimeISO",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Booked By",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "CalendarEventId"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      }
+    },
+    {
+      "id": "d5book-update-clients",
+      "name": "Update Clients — Booked",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2140,
+        560
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Parse Booking Request').first().json.phone }}",
+            "Status": "booked",
+            "Last Outcome": "booked",
+            "Last Channel": "voice",
+            "Last Contact": "={{ new Date().toISOString() }}",
+            "Upcoming Appointment": "={{ $('Parse Booking Request').first().json.upcomingAppt }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Outcome",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Channel",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Contact",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Upcoming Appointment",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      }
+    },
+    {
+      "id": "d5book-update-reactlog",
+      "name": "Update Reactivation Log — Booked",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2380,
+        560
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Parse Booking Request').first().json.phone }}",
+            "Campaign ID": "={{ $('Parse Booking Request').first().json.campaignId }}",
+            "Reactivation Status": "booked",
+            "Last Touch": "={{ new Date().toISOString() }}",
+            "Completed At": "={{ new Date().toISOString() }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Campaign ID",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reactivation Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Touch",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Completed At",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone",
+            "Campaign ID"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      }
+    },
+    {
+      "id": "d5book-success",
+      "name": "Build Success Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2620,
+        560
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "try {\n  var p = $('Parse Booking Request').first().json;\n  var result = \"Brilliant! I've booked your \" + p.service + \" for \" + p.date + \" at \" + p.time + \". Our team will visit you at \" + p.address + \". You'll receive a reminder before your appointment.\";\n  return [{ json: { results: [{ toolCallId: p.toolCallId, result: result }] } }];\n} catch(e) {\n  var tid = '';\n  try { tid = $('Parse Booking Request').first().json.toolCallId || ''; } catch(e2) {}\n  return [{ json: { results: [{ toolCallId: tid, result: \"Your appointment has been booked. Our team will be in touch to confirm the details.\" }] } }];\n}"
+      }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Parse Booking Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Booking Request": {
+      "main": [
+        [
+          {
+            "node": "Booking Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Booking Valid?": {
+      "main": [
+        [
+          {
+            "node": "Check Duplicate Booking",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Duplicate Booking": {
+      "main": [
+        [
+          {
+            "node": "Has Duplicate?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Duplicate?": {
+      "main": [
+        [
+          {
+            "node": "Build Duplicate Warning",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Calendar Created?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendar Created?": {
+      "main": [
+        [
+          {
+            "node": "Log Booking to Appointment Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Calendar Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Booking to Appointment Log": {
+      "main": [
+        [
+          {
+            "node": "Update Clients — Booked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Clients — Booked": {
+      "main": [
+        [
+          {
+            "node": "Update Reactivation Log — Booked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Reactivation Log — Booked": {
+      "main": [
+        [
+          {
+            "node": "Build Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveManualExecutions": true
+  },
+  "tags": [],
+  "activeVersion": null
+}

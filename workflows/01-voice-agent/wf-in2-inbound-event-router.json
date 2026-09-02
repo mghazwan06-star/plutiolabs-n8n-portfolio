@@ -1,0 +1,529 @@
+{
+  "id": "OaFDdYieSpOn2UPV",
+  "name": "Voice Agent — IN2 Inbound VAPI Event Router",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-04-30T12:14:07.803Z",
+  "updatedAt": "2026-08-21T22:49:31.416Z",
+  "isArchived": false,
+  "versionCounter": 14,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WF-IN2 — Inbound VAPI Event Router\n\nSingle webhook URL for ALL inbound VAPI events.\nMirrors WF2 but adds assistant-request routing and calls WF8.\n\n**Routing:**\n- `assistant-request` → WF8 Lead Lookup (sync, < 3s) → return { variables: {...} }\n- `tool-calls` → WF3 Tool Dispatcher (sync, < 5s) → return { results: [...] }\n- `end-of-call-report` → WF-IN4 Post-Call (async, fire+forget) → 200 OK\n- Everything else → 200 OK, ignored\n\n**Setup:**\n1. Activate this workflow\n2. Copy Production webhook URL from the Webhook node\n3. Paste into VAPI inbound assistant → Server URL\n\n**Upstream:** VAPI (all inbound assistant events)\n**Downstream:** WF8 (assistant-request), WF3 (tool-calls), WF-IN4 (end-of-call)",
+        "height": 440,
+        "width": 380,
+        "color": 7
+      },
+      "id": "win2-sticky-overview",
+      "name": "📋 WF-IN2 Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        -416
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Tool-Calls Branch**\n\nVAPI needs response within 5 seconds.\nCalls WF3 synchronously, waits for completion.\nReturns `{ results: [...] }` directly to VAPI.\n\n**Error handling:** If WF3 crashes, Handle WF3 Response builds a graceful fallback using original toolCallIds. VAPI never times out silently.",
+        "height": 220,
+        "width": 300,
+        "color": 4
+      },
+      "id": "win2-sticky-tools",
+      "name": "📞 Tool-Calls Branch",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        720,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Assistant-Request Branch**\n\nFires BEFORE the AI speaks on every inbound call.\nCalls WF8 synchronously (must complete < 3 seconds).\n\nWF8 looks up caller in Sheets and returns:\n`{ variables: { callerName, serviceInterest, isExistingLead, ... } }`\n\nVAPI injects these into the system prompt for personalized greeting.\n\n**Fallback:** If WF8 fails, returns empty variables — call proceeds with generic greeting.",
+        "height": 220,
+        "width": 300,
+        "color": 3
+      },
+      "id": "win2-sticky-assist",
+      "name": "🎤 Assistant-Request Branch",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        720,
+        -528
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**End-of-Call Branch**\n\nFires WF-IN4 asynchronously — does NOT wait.\nResponds 200 OK to VAPI immediately.\n\nWF-IN4 handles: CRM update, Clients tab update,\nSMS confirmation, urgency alerts.\n\nInbound calls only. Outbound calls use WF4 via WF2.",
+        "height": 220,
+        "width": 300,
+        "color": 5
+      },
+      "id": "win2-sticky-eoc",
+      "name": "📊 End-of-Call Branch",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vapi-inbound",
+        "responseMode": "responseNode",
+        "options": {},
+        "authentication": "headerAuth"
+      },
+      "id": "win2-webhook",
+      "name": "VAPI Inbound Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        368
+      ],
+      "webhookId": "8ebec724-760b-4661-9c2a-48d0b2d40de4",
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENTIAL_ID",
+          "name": "D2 VAPI — webhook shared secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-wf8",
+              "name": "wf8Id",
+              "value": "pezK9CIkBbvo9ys8",
+              "type": "string"
+            },
+            {
+              "id": "cfg-wf3",
+              "name": "wf3Id",
+              "value": "Dy8Md4sv3QE7eIXp",
+              "type": "string"
+            },
+            {
+              "id": "cfg-wfin4",
+              "name": "wfIN4Id",
+              "value": "y8VIDRDOcQyyCSRy",
+              "type": "string"
+            },
+            {
+              "id": "cfg-biz",
+              "name": "businessName",
+              "value": "Solarify",
+              "type": "string"
+            },
+            {
+              "id": "cfg-tz",
+              "name": "timezone",
+              "value": "Europe/London",
+              "type": "string"
+            },
+            {
+              "id": "cfg-fallback",
+              "name": "toolErrorMessage",
+              "value": "I'm having a technical issue right now. Let me take your details and someone from our team will call you back shortly.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "includeOtherFields": true
+        },
+        "includeOtherFields": true
+      },
+      "id": "win2-config",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "rule-assist-req",
+                    "leftValue": "={{ $json.body.message.type }}",
+                    "rightValue": "assistant-request",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "assistant-request"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "rule-tool",
+                    "leftValue": "={{ $json.body.message.type }}",
+                    "rightValue": "tool-calls",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "tool-calls"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "rule-eoc",
+                    "leftValue": "={{ $json.body.message.type }}",
+                    "rightValue": "end-of-call-report",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "end-of-call"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "win2-switch",
+      "name": "Route by Event Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        448,
+        352
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.wf8Id }}"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "win2-call-wf8",
+      "name": "Call WF8 Lead Lookup",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        672,
+        80
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  var result = $input.first().json;\n  if (result && result.variables) {\n    return [{ json: result }];\n  }\n  // WF8 returned no variables — return empty (call proceeds with generic greeting)\n  return [{ json: { variables: {} } }];\n} catch(e) {\n  return [{ json: { variables: {} } }];\n}"
+      },
+      "id": "win2-wf8-handler",
+      "name": "Handle WF8 Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        80
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "win2-respond-vars",
+      "name": "Return Variables to VAPI",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1120,
+        80
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.wf3Id }}"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "win2-call-wf3",
+      "name": "Call WF3 Tool Dispatcher",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        672,
+        272
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  var wf3Result = $input.first().json;\n  if (wf3Result && wf3Result.results && Array.isArray(wf3Result.results) && wf3Result.results.length > 0) {\n    return [{ json: wf3Result }];\n  }\n  // WF3 failed — build graceful fallback using original toolCallIds\n  var fallbackMsg = $('⚙️ Client Config').first().json.toolErrorMessage || \"I'm having a technical issue. Please try again.\";\n  var results = [];\n  try {\n    var msg = $('VAPI Inbound Webhook').first().json.body.message;\n    if (msg && msg.toolCallList && msg.toolCallList.length > 0) {\n      var i;\n      for (i = 0; i < msg.toolCallList.length; i++) {\n        results.push({ toolCallId: msg.toolCallList[i].id, result: fallbackMsg });\n      }\n    }\n  } catch(e2) {}\n  if (results.length === 0) {\n    results.push({ toolCallId: 'unknown', result: fallbackMsg });\n  }\n  return [{ json: { results: results } }];\n} catch(e) {\n  return [{ json: { results: [{ toolCallId: 'unknown', result: 'An error occurred. Please try again.' }] } }];\n}"
+      },
+      "id": "win2-wf3-handler",
+      "name": "Handle WF3 Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        272
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "win2-respond-tools",
+      "name": "Return Tool Results to VAPI",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1120,
+        272
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.wfIN4Id }}"
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "id": "win2-fire-wfin4",
+      "name": "Fire WF-IN4 Post-Call",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        672,
+        464
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "win2-respond-eoc",
+      "name": "Acknowledge End-of-Call",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        896,
+        464
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "win2-respond-other",
+      "name": "Acknowledge Other Events",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        672,
+        656
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "VAPI Inbound Webhook": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Route by Event Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Event Type": {
+      "main": [
+        [
+          {
+            "node": "Call WF8 Lead Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call WF3 Tool Dispatcher",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fire WF-IN4 Post-Call",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Acknowledge Other Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call WF8 Lead Lookup": {
+      "main": [
+        [
+          {
+            "node": "Handle WF8 Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle WF8 Response": {
+      "main": [
+        [
+          {
+            "node": "Return Variables to VAPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call WF3 Tool Dispatcher": {
+      "main": [
+        [
+          {
+            "node": "Handle WF3 Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle WF3 Response": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Results to VAPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fire WF-IN4 Post-Call": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge End-of-Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "binaryMode": "separate"
+  },
+  "tags": [],
+  "activeVersion": null
+}

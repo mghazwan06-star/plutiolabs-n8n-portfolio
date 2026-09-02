@@ -1,0 +1,304 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-490 -150 4920 1314" width="1600" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect x="-490" y="-150" width="4920" height="1314" fill="#f7f7f8"/>
+<defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#dcdce0"/></pattern></defs>
+<rect x="-490" y="-150" width="4920" height="1314" fill="url(#g)"/>
+<rect x="-400" y="-60" width="560" height="400" rx="8" fill="#fff8b8" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="-388" y="-36" font-size="13.5" font-weight="700" fill="#5f5930">PlutioLabs Lead Scraper v3 — MCS + Google Maps</text>
+<text x="-388" y="-19" font-size="11.5" fill="#6f6840">Niche: Solar + Heat Pump (UK)</text>
+<text x="-388" y="-5" font-size="11.5" fill="#6f6840">Spec: SCRAPER_V3_DUAL_SOURCE_PLAN.md</text>
+<text x="-388" y="9" font-size="11.5" fill="#6f6840">Checklist: OUTREACH_LAUNCH_CHECKLIST.md</text>
+<text x="-388" y="23" font-size="11.5" fill="#6f6840">Two sources, two different jobs</text>
+<text x="-388" y="37" font-size="11.5" fill="#6f6840">- MCS = the LIST (who, where, verified email, certification)</text>
+<text x="-388" y="51" font-size="11.5" fill="#6f6840">- Google Maps = the AMMUNITION (reviews, hours, competitor)</text>
+<text x="-388" y="65" font-size="11.5" fill="#6f6840">Neither alone can fill the CRM. MCS-only routes 100% to Template D.</text>
+<text x="-388" y="79" font-size="11.5" fill="#6f6840">Build status</text>
+<text x="-388" y="93" font-size="11.5" fill="#6f6840">- ✅ Stage 1a/1b — MCS seed + filter (NO credentials needed)</text>
+<text x="-388" y="107" font-size="11.5" fill="#6f6840">- ⏳ Stage 1c — Google Maps keyword discovery (port from v2)</text>
+<text x="-388" y="121" font-size="11.5" fill="#6f6840">- ⏳ Stage 3a — Apify place lookup (needs Apify key, GATE 1)</text>
+<text x="-388" y="135" font-size="11.5" fill="#6f6840">- ⏳ Stage 3b — geospatial competitor match</text>
+<text x="-388" y="149" font-size="11.5" fill="#6f6840">- ⏳ Stages 4–10 — port from v2 (VweER3SSx9Saluzx)</text>
+<text x="-388" y="163" font-size="11.5" fill="#6f6840">v2 (VweER3SSx9Saluzx) is left untouched as the fallback.</text>
+<rect x="640" y="-60" width="900" height="340" rx="8" fill="#fff8b8" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="652" y="-36" font-size="13.5" font-weight="700" fill="#5f5930">Stage 1a/1b — MCS Seed + Filter</text>
+<text x="652" y="-19" font-size="11.5" fill="#6f6840">Public JSON API, no auth, no rate limit. 5,620 UK certified installers.</text>
+<text x="652" y="-5" font-size="11.5" fill="#6f6840">Index first (923 B) → compare generated_at to last run → only pull the 4.2 MB file if changed.</text>
+<text x="652" y="9" font-size="11.5" fill="#6f6840">Filter applies 5 fixes from the 2026-08-15 data audit</text>
+<text x="652" y="23" font-size="11.5" fill="#6f6840">1. Prepend https:// — 83.2% of websites have no scheme</text>
+<text x="652" y="37" font-size="11.5" fill="#6f6840">2. Drop 9 malformed websites + 2 out-of-UK-bbox rows</text>
+<text x="652" y="51" font-size="11.5" fill="#6f6840">3. Never filter on region — England-only field; 929 blanks are Scotland/Wales/NI</text>
+<text x="652" y="65" font-size="11.5" fill="#6f6840">4. Handle 23 non-10-digit phones</text>
+<text x="652" y="79" font-size="11.5" fill="#6f6840">5. Flag free-mailbox + no-Ltd as PECR high-risk → phone only</text>
+<text x="652" y="93" font-size="11.5" fill="#6f6840">Expected output: ~4,644 emailable Ltd leads in scope.</text>
+<rect x="1480" y="180" width="700" height="300" rx="8" fill="#fff8b8" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="1492" y="204" font-size="13.5" font-weight="700" fill="#5f5930">Stage 1c/1d — Discovery + Merge</text>
+<text x="1492" y="221" font-size="11.5" fill="#6f6840">Maps runs the SAME niche as MCS (solar + heat pump) to catch what MCS structurally cannot</text>
+<text x="1492" y="235" font-size="11.5" fill="#6f6840">see: umbrella-scheme installers, lapsed certifications, commercial-only, and businesses…</text>
+<text x="1492" y="249" font-size="11.5" fill="#6f6840">Dedupe key: normalised phone (+44…) OR website domain.</text>
+<text x="1492" y="263" font-size="11.5" fill="#6f6840">Precedence: MCS wins email / address / certification / technologies. Maps wins rating /</text>
+<text x="1492" y="277" font-size="11.5" fill="#6f6840">reviews / hours / categories / Maps URL. In both → source: &#x27;both&#x27;, sorted first.</text>
+<text x="1492" y="291" font-size="11.5" fill="#6f6840">⚠️ Maps node skips gracefully if the Apify key is missing, so the MCS branch still runs.</text>
+<text x="1492" y="305" font-size="11.5" fill="#6f6840">⚠️ v2 discarded location.lat/lng. Now captured — without it every Maps lead is invisible to</text>
+<text x="1492" y="319" font-size="11.5" fill="#6f6840">the geospatial competitor match.</text>
+<rect x="2700" y="180" width="780" height="300" rx="8" fill="#fff8b8" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="2712" y="204" font-size="13.5" font-weight="700" fill="#5f5930">Stages 3a–9 — Enrichment</text>
+<text x="2712" y="221" font-size="11.5" fill="#6f6840">GATE 1 → _lookupStats.matchRate (need ≥70%)</text>
+<text x="2712" y="235" font-size="11.5" fill="#6f6840">GATE 2 → _reviewStats.callComplaintRate (measure — drives A vs D mix)</text>
+<text x="2712" y="249" font-size="11.5" fill="#6f6840">GATE 3 → _verifyStats.invalidRate (need &lt;5%)</text>
+<text x="2712" y="263" font-size="11.5" fill="#6f6840">All three stages are capped via Config (apifyLookupLimit, maxClaudeCalls, maxVerifyCalls) so a pilot</text>
+<text x="2712" y="277" font-size="11.5" fill="#6f6840">cannot become a full-spend run by accident. Set to 0 for unlimited after the gates pass.</text>
+<text x="2712" y="291" font-size="11.5" fill="#6f6840">Review Analysis sends the lowest-rated reviews (complaint → Template A/B) AND the highest-rated (quote</text>
+<text x="2712" y="305" font-size="11.5" fill="#6f6840">→ A-v2) in one call. Sending only lowest would kill A-v2.</text>
+<text x="2712" y="319" font-size="11.5" fill="#6f6840">Instantly is only called where it adds something — MCS already supplies an email for 100% of its rows.</text>
+<rect x="3640" y="180" width="700" height="300" rx="8" fill="#fff8b8" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="3652" y="204" font-size="13.5" font-weight="700" fill="#5f5930">Stage 10/11 — CRM Output</text>
+<text x="3652" y="221" font-size="11.5" fill="#6f6840">Output keys are the Sheet column headers (autoMapInputData). Adding a field here requires</text>
+<text x="3652" y="235" font-size="11.5" fill="#6f6840">adding the header to the sheet or it is silently dropped.</text>
+<text x="3652" y="249" font-size="11.5" fill="#6f6840">⚠️ 17 new headers must exist in row 1 before the first run — see V3_BUILD_LOG.md.</text>
+<text x="3652" y="263" font-size="11.5" fill="#6f6840">LinkedIn message generation was removed. It contained hardcoded fabricated client results.</text>
+<text x="3652" y="277" font-size="11.5" fill="#6f6840">The WhatsApp replacement makes no performance claims until a real case study exists.</text>
+<text x="3652" y="291" font-size="11.5" fill="#6f6840">WhatsApp is a SECOND touch — export only where the Day-2 call connected. Meta bans numbers</text>
+<text x="3652" y="305" font-size="11.5" fill="#6f6840">for unsolicited business-initiated messages regardless of what PECR allows.</text>
+<g fill="none" stroke="#9aa0a6" stroke-width="2.5">
+<path d="M160,450 C232,450 248,950 313,950"/>
+<path d="M313,945 L320,950 L313,955" fill="#9aa0a6" stroke="none"/>
+<path d="M400,450 C463,450 477,450 533,450"/>
+<path d="M533,445 L540,450 L533,455" fill="#9aa0a6" stroke="none"/>
+<path d="M640,450 C703,450 717,450 773,450"/>
+<path d="M773,445 L780,450 L773,455" fill="#9aa0a6" stroke="none"/>
+<path d="M880,450 C943,450 957,450 1013,450"/>
+<path d="M1013,445 L1020,450 L1013,455" fill="#9aa0a6" stroke="none"/>
+<path d="M1120,450 C1183,450 1197,450 1253,450"/>
+<path d="M1253,445 L1260,450 L1253,455" fill="#9aa0a6" stroke="none"/>
+<path d="M1120,450 C1300,450 1340,590 1513,590"/>
+<path d="M1513,585 L1520,590 L1513,595" fill="#9aa0a6" stroke="none"/>
+<path d="M400,750 C904,750 1016,608 1513,608"/>
+<path d="M1513,603 L1520,608 L1513,613" fill="#9aa0a6" stroke="none"/>
+<path d="M1620,590 C1683,590 1697,590 1753,590"/>
+<path d="M1753,585 L1760,590 L1753,595" fill="#9aa0a6" stroke="none"/>
+<path d="M2340,590 C2403,590 2417,590 2473,590"/>
+<path d="M2473,585 L2480,590 L2473,595" fill="#9aa0a6" stroke="none"/>
+<path d="M3780,590 C3843,590 3857,590 3913,590"/>
+<path d="M3913,585 L3920,590 L3913,595" fill="#9aa0a6" stroke="none"/>
+<path d="M-60,950 C-6,950 6,450 53,450"/>
+<path d="M53,445 L60,450 L53,455" fill="#9aa0a6" stroke="none"/>
+<path d="M4020,590 C4083,590 4097,590 4153,590"/>
+<path d="M4153,585 L4160,590 L4153,595" fill="#9aa0a6" stroke="none"/>
+<path d="M2820,590 C2883,590 2897,590 2953,590"/>
+<path d="M2953,585 L2960,590 L2953,595" fill="#9aa0a6" stroke="none"/>
+<path d="M3060,573 C3123,573 3137,490 3193,490"/>
+<path d="M3193,485 L3200,490 L3193,495" fill="#9aa0a6" stroke="none"/>
+<path d="M3060,607 C3339,607 3401,608 3673,608"/>
+<path d="M3673,603 L3680,608 L3673,613" fill="#9aa0a6" stroke="none"/>
+<path d="M3300,490 C3363,490 3377,490 3433,490"/>
+<path d="M3433,485 L3440,490 L3433,495" fill="#9aa0a6" stroke="none"/>
+<path d="M3540,490 C3603,490 3617,590 3673,590"/>
+<path d="M3673,585 L3680,590 L3673,595" fill="#9aa0a6" stroke="none"/>
+<path d="M420,950 C1041,950 1179,590 1793,590"/>
+<path d="M1793,585 L1800,590 L1793,595" fill="#9aa0a6" stroke="none"/>
+<path d="M1900,590 C1940,590 1910,590 1943,590"/>
+<path d="M1943,585 L1950,590 L1943,595" fill="#9aa0a6" stroke="none"/>
+<path d="M2050,573 C2090,573 2060,490 2093,490"/>
+<path d="M2093,485 L2100,490 L2093,495" fill="#9aa0a6" stroke="none"/>
+<path d="M2050,607 C2154,607 2176,590 2273,590"/>
+<path d="M2273,585 L2280,590 L2273,595" fill="#9aa0a6" stroke="none"/>
+<path d="M2200,490 C2240,490 2240,590 2273,590"/>
+<path d="M2273,585 L2280,590 L2273,595" fill="#9aa0a6" stroke="none"/>
+<path d="M2380,590 C2443,590 2177,590 2233,590"/>
+<path d="M2233,585 L2240,590 L2233,595" fill="#9aa0a6" stroke="none"/>
+<path d="M2580,590 C2620,590 2560,450 2593,450"/>
+<path d="M2593,445 L2600,450 L2593,455" fill="#9aa0a6" stroke="none"/>
+<path d="M2700,450 C2740,450 2720,450 2753,450"/>
+<path d="M2753,445 L2760,450 L2753,455" fill="#9aa0a6" stroke="none"/>
+<path d="M2860,433 C2900,433 2870,350 2903,350"/>
+<path d="M2903,345 L2910,350 L2903,355" fill="#9aa0a6" stroke="none"/>
+<path d="M2860,467 C2959,467 2981,450 3073,450"/>
+<path d="M3073,445 L3080,450 L3073,455" fill="#9aa0a6" stroke="none"/>
+<path d="M3010,350 C3050,350 3040,450 3073,450"/>
+<path d="M3073,445 L3080,450 L3073,455" fill="#9aa0a6" stroke="none"/>
+<path d="M3180,450 C3387,450 2513,590 2713,590"/>
+<path d="M2713,585 L2720,590 L2713,595" fill="#9aa0a6" stroke="none"/>
+<path d="M3540,810 C3580,810 3540,810 3573,810"/>
+<path d="M3573,805 L3580,810 L3573,815" fill="#9aa0a6" stroke="none"/>
+<path d="M3680,793 C3720,793 3680,930 3713,930"/>
+<path d="M3713,925 L3720,930 L3713,935" fill="#9aa0a6" stroke="none"/>
+<path d="M3680,827 C3761,827 3779,810 3853,810"/>
+<path d="M3853,805 L3860,810 L3853,815" fill="#9aa0a6" stroke="none"/>
+<path d="M3820,930 C3860,930 3820,810 3853,810"/>
+<path d="M3853,805 L3860,810 L3853,815" fill="#9aa0a6" stroke="none"/>
+<path d="M3960,810 C4086,810 3554,590 3673,590"/>
+<path d="M3673,585 L3680,590 L3673,595" fill="#9aa0a6" stroke="none"/>
+<path d="M3780,590 C4068,590 2852,810 3133,810"/>
+<path d="M3133,805 L3140,810 L3133,815" fill="#9aa0a6" stroke="none"/>
+<path d="M3240,810 C3280,810 3240,810 3273,810"/>
+<path d="M3273,805 L3280,810 L3273,815" fill="#9aa0a6" stroke="none"/>
+<path d="M3380,793 C3425,793 3235,990 3273,990"/>
+<path d="M3273,985 L3280,990 L3273,995" fill="#9aa0a6" stroke="none"/>
+<path d="M3380,827 C3420,827 3400,670 3433,670"/>
+<path d="M3433,665 L3440,670 L3433,675" fill="#9aa0a6" stroke="none"/>
+<path d="M3380,990 C3420,990 3400,670 3433,670"/>
+<path d="M3433,665 L3440,670 L3433,675" fill="#9aa0a6" stroke="none"/>
+<path d="M3540,670 C3585,670 3395,810 3433,810"/>
+<path d="M3433,805 L3440,810 L3433,815" fill="#9aa0a6" stroke="none"/>
+</g>
+<rect x="60" y="400" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="60" y="400" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="110.0" y="446.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="110.0" y="515" font-size="11.5" text-anchor="middle" fill="#2b2f36">⚙️ Config</text>
+<rect x="300" y="400" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="300" y="400" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<rect x="300" y="400" width="100" height="100" rx="10" fill="#ffffff" fill-opacity="0.55"/>
+<text x="350.0" y="446.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="350.0" y="515" font-size="11.5" text-anchor="middle" fill="#2b2f36">📡 Fetch MCS Index</text>
+<rect x="540" y="400" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="540" y="400" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<rect x="540" y="400" width="100" height="100" rx="10" fill="#ffffff" fill-opacity="0.55"/>
+<text x="590.0" y="446.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="590.0" y="515" font-size="11.5" text-anchor="middle" fill="#2b2f36">📥 Fetch MCS</text>
+<text x="590.0" y="528" font-size="11.5" text-anchor="middle" fill="#2b2f36">Installers</text>
+<rect x="780" y="400" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="780" y="400" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<rect x="780" y="400" width="100" height="100" rx="10" fill="#ffffff" fill-opacity="0.55"/>
+<text x="830.0" y="446.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="830.0" y="515" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔀 Split MCS Records</text>
+<rect x="1020" y="400" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1020" y="400" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<rect x="1020" y="400" width="100" height="100" rx="10" fill="#ffffff" fill-opacity="0.55"/>
+<text x="1070.0" y="446.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1070.0" y="515" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔎 MCS Filter &amp;</text>
+<text x="1070.0" y="528" font-size="11.5" text-anchor="middle" fill="#2b2f36">Normalize</text>
+<rect x="1260" y="400" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1260" y="400" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<rect x="1260" y="400" width="100" height="100" rx="10" fill="#ffffff" fill-opacity="0.55"/>
+<text x="1310.0" y="446.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1310.0" y="515" font-size="11.5" text-anchor="middle" fill="#2b2f36">📊 MCS Summary</text>
+<rect x="300" y="700" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="300" y="700" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<rect x="300" y="700" width="100" height="100" rx="10" fill="#ffffff" fill-opacity="0.55"/>
+<text x="350.0" y="746.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="350.0" y="815" font-size="11.5" text-anchor="middle" fill="#2b2f36">🗺️ Google Maps UK</text>
+<rect x="1520" y="540" width="100" height="100" rx="10" fill="#ffffff" stroke="#7d5bed" stroke-width="3"/>
+<rect x="1520" y="540" width="100" height="100" rx="10" fill="#7d5bed" fill-opacity="0.10"/>
+<rect x="1520" y="540" width="100" height="100" rx="10" fill="#ffffff" fill-opacity="0.55"/>
+<text x="1570.0" y="586.0" font-size="11" text-anchor="middle" fill="#7d5bed" font-weight="700">merge</text>
+<text x="1570.0" y="655" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔗 Merge Sources</text>
+<rect x="1760" y="540" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1760" y="540" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<rect x="1760" y="540" width="100" height="100" rx="10" fill="#ffffff" fill-opacity="0.55"/>
+<text x="1810.0" y="586.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1810.0" y="655" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔄 Reconcile &amp; Dedupe</text>
+<rect x="2240" y="540" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="2240" y="540" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="2290.0" y="586.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="2290.0" y="655" font-size="11.5" text-anchor="middle" fill="#2b2f36">🏆 Competitor Match</text>
+<rect x="2480" y="540" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="2480" y="540" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="2530.0" y="586.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="2530.0" y="655" font-size="11.5" text-anchor="middle" fill="#2b2f36">🎯 ICP Score</text>
+<rect x="3680" y="540" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="3680" y="540" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="3730.0" y="586.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="3730.0" y="655" font-size="11.5" text-anchor="middle" fill="#2b2f36">📋 Build CRM Row</text>
+<rect x="3920" y="540" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="3920" y="540" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="3970.0" y="586.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="3970.0" y="655" font-size="11.5" text-anchor="middle" fill="#2b2f36">📊 Write to CRM</text>
+<rect x="-160" y="900" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="-160" y="900" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="-110.0" y="946.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">sub-flow</text>
+<text x="-110.0" y="960.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">in</text>
+<text x="-110.0" y="1015" font-size="11.5" text-anchor="middle" fill="#2b2f36">🧩 Batch Input</text>
+<rect x="320" y="900" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="320" y="900" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="370.0" y="946.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="370.0" y="1015" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔓 Unpack Leads</text>
+<rect x="4160" y="540" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="4160" y="540" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="4210.0" y="586.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="4210.0" y="655" font-size="11.5" text-anchor="middle" fill="#2b2f36">📤 Return Summary</text>
+<rect x="2720" y="540" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="2720" y="540" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="2770.0" y="586.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="2770.0" y="655" font-size="11.5" text-anchor="middle" fill="#2b2f36">🧠 Prep Claude Prompt</text>
+<rect x="2960" y="540" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="2960" y="540" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="3010.0" y="586.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="3010.0" y="655" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔀 Needs Claude</text>
+<rect x="3200" y="440" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="3200" y="440" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="3250.0" y="486.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="3250.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">🧠 Claude Enrich</text>
+<rect x="3440" y="440" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="3440" y="440" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="3490.0" y="486.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="3490.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">🧠 Parse Claude</text>
+<text x="3490.0" y="568" font-size="11.5" text-anchor="middle" fill="#2b2f36">Result</text>
+<rect x="3680" y="540" width="100" height="100" rx="10" fill="#ffffff" stroke="#7d5bed" stroke-width="3"/>
+<rect x="3680" y="540" width="100" height="100" rx="10" fill="#7d5bed" fill-opacity="0.10"/>
+<text x="3730.0" y="586.0" font-size="11" text-anchor="middle" fill="#7d5bed" font-weight="700">merge</text>
+<text x="3730.0" y="655" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔗 Merge Claude</text>
+<rect x="1800" y="540" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1800" y="540" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1850.0" y="586.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1850.0" y="655" font-size="11.5" text-anchor="middle" fill="#2b2f36">📍 Prep Place Lookup</text>
+<rect x="1950" y="540" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="1950" y="540" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="2000.0" y="586.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="2000.0" y="655" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔀 Need Lookup?</text>
+<rect x="2100" y="440" width="100" height="100" rx="10" fill="#ffffff" stroke="#ff6d5a" stroke-width="3"/>
+<rect x="2100" y="440" width="100" height="100" rx="10" fill="#ff6d5a" fill-opacity="0.10"/>
+<text x="2150.0" y="486.0" font-size="11" text-anchor="middle" fill="#ff6d5a" font-weight="700">sub-flow</text>
+<text x="2150.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">📍 Apify Lookup Run</text>
+<rect x="2280" y="540" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="2280" y="540" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="2330.0" y="586.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="2330.0" y="655" font-size="11.5" text-anchor="middle" fill="#2b2f36">📍 Merge Place Data</text>
+<rect x="2600" y="400" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="2600" y="400" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="2650.0" y="446.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="2650.0" y="515" font-size="11.5" text-anchor="middle" fill="#2b2f36">📝 Prep Review Scrape</text>
+<rect x="2760" y="400" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="2760" y="400" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="2810.0" y="446.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="2810.0" y="515" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔀 Need Reviews?</text>
+<rect x="2910" y="300" width="100" height="100" rx="10" fill="#ffffff" stroke="#ff6d5a" stroke-width="3"/>
+<rect x="2910" y="300" width="100" height="100" rx="10" fill="#ff6d5a" fill-opacity="0.10"/>
+<text x="2960.0" y="346.0" font-size="11" text-anchor="middle" fill="#ff6d5a" font-weight="700">sub-flow</text>
+<text x="2960.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">📝 Apify Review Run</text>
+<rect x="3080" y="400" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="3080" y="400" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="3130.0" y="446.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="3130.0" y="515" font-size="11.5" text-anchor="middle" fill="#2b2f36">📝 Merge Review Data</text>
+<rect x="3440" y="760" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="3440" y="760" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="3490.0" y="806.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="3490.0" y="875" font-size="11.5" text-anchor="middle" fill="#2b2f36">✅ Prep Verify</text>
+<rect x="3580" y="760" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="3580" y="760" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="3630.0" y="806.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="3630.0" y="875" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔀 Need Verify?</text>
+<rect x="3720" y="880" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="3720" y="880" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="3770.0" y="926.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="3770.0" y="995" font-size="11.5" text-anchor="middle" fill="#2b2f36">✅ ZeroBounce</text>
+<text x="3770.0" y="1008" font-size="11.5" text-anchor="middle" fill="#2b2f36">Validate</text>
+<rect x="3860" y="760" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="3860" y="760" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="3910.0" y="806.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="3910.0" y="875" font-size="11.5" text-anchor="middle" fill="#2b2f36">✅ Merge Verify</text>
+<rect x="3140" y="760" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="3140" y="760" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="3190.0" y="806.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="3190.0" y="875" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔍 Prep Enrich</text>
+<rect x="3280" y="760" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="3280" y="760" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="3330.0" y="806.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="3330.0" y="875" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔀 Need Enrich?</text>
+<rect x="3280" y="940" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="3280" y="940" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="3330.0" y="986.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="3330.0" y="1055" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔍 Instantly Search</text>
+<rect x="3440" y="620" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="3440" y="620" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="3490.0" y="666.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="3490.0" y="735" font-size="11.5" text-anchor="middle" fill="#2b2f36">🔍 Merge Enrich</text>
+</svg>

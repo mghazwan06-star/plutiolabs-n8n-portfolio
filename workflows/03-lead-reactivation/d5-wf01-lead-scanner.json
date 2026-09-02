@@ -1,0 +1,408 @@
+{
+  "id": "gqCAEnVRn0BhZ5aH",
+  "name": "D5 — 01 Lead Scanner & Enqueue",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-05-17T21:10:47.431Z",
+  "updatedAt": "2026-08-22T12:53:14.536Z",
+  "isArchived": false,
+  "versionCounter": 11,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "d5wf1-sticky",
+      "name": "D5-WF1 Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        80
+      ],
+      "parameters": {
+        "content": "## D5-WF1 — Lead Scanner & Enqueue\n\nRuns daily at 09:00 GMT/BST. Scans the Clients tab for idle leads (30+ days cold) and writes qualifying leads to the Reactivation Log with status=queued.\n\n**Idle pool:** Status IN (unresponsive, called, voicemail, no-answer)\n**Excludes:** do-not-contact, not-interested, booked, sequence-active, call-initiated, inbound-incomplete, SMS Opt-Out=Y, already active in Reactivation Log\n**Dedup:** Skips phones already in Reactivation Log with active/terminal status — call-failed is intentionally EXCLUDED so those leads can be re-enqueued after a VAPI fire failure\n**Priority:** Sorted by retention deadline (soonest expiry first)\n\nDownstream: D5-WF2 (Voice Engine) polls Reactivation Log for queued leads.",
+        "color": 4,
+        "width": 680,
+        "height": 260
+      }
+    },
+    {
+      "id": "d5wf1-trigger",
+      "name": "Daily 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        80,
+        460
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d5wf1-config",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        300,
+        460
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-01",
+              "name": "sheetId",
+              "value": "YOUR_CRM_SHEET_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-02",
+              "name": "clientsTab",
+              "value": "Clients",
+              "type": "string"
+            },
+            {
+              "id": "cfg-03",
+              "name": "reactivationLogTab",
+              "value": "Reactivation Log",
+              "type": "string"
+            },
+            {
+              "id": "cfg-04",
+              "name": "callbackQueueTab",
+              "value": "D5 Callback Queue",
+              "type": "string"
+            },
+            {
+              "id": "cfg-05",
+              "name": "appointmentLogTab",
+              "value": "Appointment Log",
+              "type": "string"
+            },
+            {
+              "id": "cfg-06",
+              "name": "businessName",
+              "value": "Solarify",
+              "type": "string"
+            },
+            {
+              "id": "cfg-07",
+              "name": "timezone",
+              "value": "Europe/London",
+              "type": "string"
+            },
+            {
+              "id": "cfg-08",
+              "name": "vapiApiKey",
+              "value": "PLACEHOLDER_VAPI_API_KEY",
+              "type": "string"
+            },
+            {
+              "id": "cfg-09",
+              "name": "d5AssistantId",
+              "value": "PLACEHOLDER_D5_ASSISTANT_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-10",
+              "name": "d5WebhookUrl",
+              "value": "PLACEHOLDER_D5_WEBHOOK_URL",
+              "type": "string"
+            },
+            {
+              "id": "cfg-14",
+              "name": "ownerPhone",
+              "value": "PLACEHOLDER_OWNER_PHONE",
+              "type": "string"
+            },
+            {
+              "id": "cfg-15",
+              "name": "twilioFromNumber",
+              "value": "PLACEHOLDER_TWILIO_FROM",
+              "type": "string"
+            },
+            {
+              "id": "cfg-16",
+              "name": "cooldownDays",
+              "value": 30,
+              "type": "number"
+            },
+            {
+              "id": "cfg-17",
+              "name": "maxVoiceAttempts",
+              "value": 2,
+              "type": "number"
+            },
+            {
+              "id": "cfg-18",
+              "name": "maxVoicePerRun",
+              "value": 5,
+              "type": "number"
+            },
+            {
+              "id": "cfg-19",
+              "name": "retentionMonths",
+              "value": 24,
+              "type": "number"
+            },
+            {
+              "id": "cfg-20",
+              "name": "retryDelayHours",
+              "value": 24,
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d5wf1-read-clients",
+      "name": "Read Clients",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        520,
+        460
+      ],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}",
+          "mode": "name"
+        },
+        "range": "A:Z",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "d5wf1-read-reactivation",
+      "name": "Read Reactivation Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        740,
+        460
+      ],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}",
+          "mode": "name"
+        },
+        "range": "A:Z",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "d5wf1-classify",
+      "name": "Filter & Classify Leads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        460
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var config = $('⚙️ Client Config').first().json;\n  var allClients = $('Read Clients').all().map(function(item) { return item.json; });\n  var allReactivation = $('Read Reactivation Log').all().map(function(item) { return item.json; });\n\n  // Leads already in Reactivation Log with these statuses are excluded from re-enqueue.\n  // call-failed is intentionally NOT in this list — VAPI fire failures should be retried\n  // by D5-WF1 on the next daily run (WF2e already logged the failure).\n  var activeStatuses = ['queued', 'call-initiated', 'retry-pending', 'declined-final', 'exhausted', 'interested-callback', 'booked', 'opted-out', 'completed'];\n  var activePhones = {};\n  allReactivation.forEach(function(row) {\n    if (activeStatuses.indexOf(row['Reactivation Status']) !== -1) {\n      activePhones[row['Phone']] = true;\n    }\n  });\n\n  var now = new Date();\n  var cooldownMs = config.cooldownDays * 24 * 60 * 60 * 1000;\n\n  var excludeStatuses = [\n    'do-not-contact', 'not-interested', 'sequence-active',\n    'call-initiated', 'callback-scheduled', 'inbound-incomplete', 'booked'\n  ];\n  var idleStatuses = ['unresponsive', 'called', 'voicemail', 'no-answer'];\n\n  var results = [];\n\n  allClients.forEach(function(lead) {\n    if (!lead['Phone']) return;\n    if (excludeStatuses.indexOf(lead['Status']) !== -1) return;\n    if (idleStatuses.indexOf(lead['Status']) === -1) return;\n    if (lead['SMS Opt-Out'] === 'Y') return;\n    if (activePhones[lead['Phone']]) return;\n\n    var lastContact = lead['Last Contact'] ? new Date(lead['Last Contact']) : null;\n    if (lastContact && (now - lastContact) < cooldownMs) return;\n\n    if (lead['Status'] === 'unresponsive' && lead['Unresponsive Since']) {\n      var unresponsiveSince = new Date(lead['Unresponsive Since']);\n      if ((now - unresponsiveSince) < cooldownMs) return;\n    }\n\n    var createdAt = lead['Created At'] ? new Date(lead['Created At']) : now;\n    var retentionDeadline = new Date(createdAt.getTime() + (config.retentionMonths * 30 * 24 * 60 * 60 * 1000));\n\n    var angle = 'promo';\n    var serviceInterest = (lead['Service Interest'] || '').toLowerCase();\n    if (serviceInterest.indexOf('solar') !== -1) {\n      angle = 'net-metering';\n    } else if (serviceInterest.indexOf('batter') !== -1) {\n      angle = 'battery-storage';\n    }\n\n    results.push({\n      json: {\n        'Phone':                lead['Phone'],\n        'Name':                 lead['Name'] || '',\n        'Email':                lead['Email'] || '',\n        'Service Interest':     lead['Service Interest'] || '',\n        'Pool Type':            'idle',\n        'Channel':              'voice',\n        'Campaign ID':          'auto-' + now.toISOString().split('T')[0],\n        'Reactivation Status':  'queued',\n        'Attempt Count':        0,\n        'Last Touch':           '',\n        'Last Channel':         '',\n        'Next Touch At':        '',\n        'Callback Preference':  '',\n        'Transcript URL':       '',\n        'Call Duration':        '',\n        'Completed At':         '',\n        'Created At':           now.toISOString(),\n        'Import Source':        'auto',\n        'Reactivation Angle':   angle,\n        'Error Notes':          '',\n        'Consent Basis':        'legitimate-interest-prior-enquiry',\n        'Retention Deadline':   retentionDeadline.toISOString(),\n        'Original Lead Date':   lead['Created At'] || ''\n      }\n    });\n  });\n\n  results.sort(function(a, b) {\n    return new Date(a.json['Retention Deadline']) - new Date(b.json['Retention Deadline']);\n  });\n\n  return results.length > 0 ? results : [{ json: { _empty: true } }];\n} catch (e) {\n  return [{ json: { _empty: true, _error: e.message } }];\n}"
+      }
+    },
+    {
+      "id": "d5wf1-if-leads",
+      "name": "Any Leads Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1180,
+        460
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "check-phone",
+              "leftValue": "={{ $json.Phone }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf1-append",
+      "name": "Write to Reactivation Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1400,
+        360
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 09:00": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Read Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Clients": {
+      "main": [
+        [
+          {
+            "node": "Read Reactivation Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Reactivation Log": {
+      "main": [
+        [
+          {
+            "node": "Filter & Classify Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter & Classify Leads": {
+      "main": [
+        [
+          {
+            "node": "Any Leads Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Leads Found?": {
+      "main": [
+        [
+          {
+            "node": "Write to Reactivation Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "tags": [],
+  "activeVersion": null
+}

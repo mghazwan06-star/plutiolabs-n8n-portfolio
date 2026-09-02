@@ -1,0 +1,1559 @@
+{
+  "id": "PDfSH1hD51TST1pK",
+  "name": "D3-WF-C3d: Reschedule Booking",
+  "description": null,
+  "active": true,
+  "activeVersionId": "00238d5e-ef39-4ffa-afca-c5dfdbbd4452",
+  "createdAt": "2026-05-19T13:19:49.548Z",
+  "updatedAt": "2026-08-15T04:05:58.864Z",
+  "isArchived": false,
+  "versionCounter": 23,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "sticky-c3d",
+      "name": "📋 WF-C3d Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        280,
+        40
+      ],
+      "parameters": {
+        "content": "## WF-C3d: Reschedule Booking\nCalled by: WF-C2 (Claude Core) via Execute Workflow node\n\n**Input:** { toolInput: { newDate: 'YYYY-MM-DD', newTime: '9am|11am|1pm|3pm' }, toolUseId, phone }\n**Output:** { toolCallId, result }\n\n1. Reads Appointment Log for phone + status=confirmed\n2. Computes new ISO start/end (BST-aware)\n3. Updates Google Calendar event start/end\n4. Updates Appointment Log: Date, Time, AppointmentTimeISO\n5. Updates Clients: Upcoming Appointment, Last Contact, Last Channel\n\n⚠️ Credentials: Google Sheets OAuth2 (id: 0d40kOfUWlsFuLuB), Google Calendar OAuth2 (id: Vm9SHjOljbABWWKN)",
+        "height": 200,
+        "width": 940
+      }
+    },
+    {
+      "id": "trigger-c3d",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        300,
+        320
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "config-c3d",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        540,
+        320
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c3d-1",
+              "name": "sheetId",
+              "value": "YOUR_CRM_SHEET_ID",
+              "type": "string"
+            },
+            {
+              "id": "c3d-2",
+              "name": "clientsTab",
+              "value": "Clients",
+              "type": "string"
+            },
+            {
+              "id": "c3d-3",
+              "name": "appointmentsTab",
+              "value": "Appointment Log",
+              "type": "string"
+            },
+            {
+              "id": "c3d-4",
+              "name": "calendarId",
+              "value": "owner@example.com",
+              "type": "string"
+            },
+            {
+              "id": "c3d-5",
+              "name": "businessName",
+              "value": "Solarify",
+              "type": "string"
+            },
+            {
+              "id": "c3d-6",
+              "name": "timezone",
+              "value": "Europe/London",
+              "type": "string"
+            },
+            {
+              "id": "c3d-7",
+              "name": "weekdaySlots",
+              "value": "9,10,11,12,13,14,15,16,17",
+              "type": "string"
+            },
+            {
+              "id": "c3d-8",
+              "name": "saturdaySlots",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "c3d-9",
+              "name": "sundaySlots",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "c3d-10",
+              "name": "minNoticeHours",
+              "value": "48",
+              "type": "string"
+            },
+            {
+              "id": "c3d-11",
+              "name": "bankHolidays",
+              "value": "2026-08-31,2026-12-25,2026-12-28,2027-01-01,2027-04-02,2027-04-05,2027-05-03,2027-05-31,2027-08-30,2027-12-27,2027-12-28",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "read-apptlog-c3d",
+      "name": "Read Appointment Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        780,
+        320
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+        },
+        "range": "A:Z",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "find-appt-c3d",
+      "name": "Find Confirmed Appointment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var trigger = $('Execute Workflow Trigger').first().json;\n  var phone = trigger.phone || '';\n  var toolUseId = trigger.toolUseId || '';\n  var toolInput = trigger.toolInput || {};\n\n  var rows = $input.all();\n  var found = null;\n\n  for (var i = 0; i < rows.length; i++) {\n    var row = rows[i].json;\n    if (String(row.Phone).replace(/[^0-9]/g, '') === String(phone).replace(/[^0-9]/g, '') && row.Status === 'confirmed') {\n      found = row;\n      break;\n    }\n  }\n\n  if (found) {\n    return [{\n      json: {\n        hasAppointment: true,\n        calendarEventId: found.CalendarEventId || '',\n        phone: phone,\n        toolUseId: toolUseId,\n        newDate: toolInput.newDate || '',\n        newTime: toolInput.newTime || ''\n      }\n    }];\n  } else {\n    return [{\n      json: {\n        hasAppointment: false,\n        phone: phone,\n        toolUseId: toolUseId,\n        calendarEventId: ''\n      }\n    }];\n  }\n} catch (e) {\n  var fb = $('Execute Workflow Trigger').first().json;\n  return [{\n    json: {\n      hasAppointment: false,\n      phone: fb.phone || '',\n      toolUseId: fb.toolUseId || '',\n      calendarEventId: '',\n      error: e.message\n    }\n  }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "if-has-appt-c3d",
+      "name": "IF Has Confirmed Appointment",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1260,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c3d-cond1",
+              "leftValue": "={{ $json.hasAppointment }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "compute-time-c3d",
+      "name": "Compute New Time",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var appt = $('Find Confirmed Appointment').first().json;\n  var raw = (appt.newDate || '').toString().toLowerCase().trim();\n  var newTime = (appt.newTime || '9am').toLowerCase();\n\n  var timeMap = { '9am': 9, '10am': 10, '11am': 11, '12pm': 12, '1pm': 13, '2pm': 14, '3pm': 15, '4pm': 16, '5pm': 17 };\n  // BUG-R41 — see WF-C3b. Refuse an unmapped time rather than silently using 9am.\n  var localHour = timeMap[newTime];\n  var timeUnrecognised = false;\n  if (localHour === undefined) { localHour = 9; timeUnrecognised = true; }\n\n  var now = new Date();\n  var dateObj = null;\n\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(raw)) {\n    dateObj = new Date(raw + 'T12:00:00Z');\n  } else if (raw === 'today') {\n    dateObj = new Date(now.getTime());\n  } else if (raw === 'tomorrow') {\n    dateObj = new Date(now.getTime());\n    dateObj.setUTCDate(dateObj.getUTCDate() + 1);\n  } else if (raw) {\n    // BUG-R31: an explicit day+month (\"Monday, 17 August\") must beat the weekday name.\n    var monthWords = ['january','february','march','april','may','june','july','august','september','october','november','december'];\n    var mIdx = -1;\n    for (var mw = 0; mw < monthWords.length; mw++) {\n      if (raw.indexOf(monthWords[mw]) !== -1) { mIdx = mw; break; }\n    }\n    var dayNumMatch = raw.match(/(\\d{1,2})\\s*(?:st|nd|rd|th)?/);\n    var dayNum = dayNumMatch ? parseInt(dayNumMatch[1], 10) : 0;\n    if (mIdx !== -1 && dayNum >= 1 && dayNum <= 31) {\n      var yr = now.getUTCFullYear();\n      var cand = new Date(Date.UTC(yr, mIdx, dayNum, 12, 0, 0));\n      if (cand.getTime() < now.getTime() - 86400000) { cand = new Date(Date.UTC(yr + 1, mIdx, dayNum, 12, 0, 0)); }\n      dateObj = cand;\n    }\n    var dayNamesLower = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];\n    var foundIdx = -1;\n    for (var d = 0; d < dayNamesLower.length; d++) {\n      if (raw.indexOf(dayNamesLower[d]) !== -1) { foundIdx = d; break; }\n    }\n    if (dateObj) {\n      foundIdx = -1;\n    }\n    if (foundIdx !== -1) {\n      var currentDay = now.getUTCDay();\n      var daysUntil = (foundIdx - currentDay + 7) % 7;\n      if (daysUntil === 0) { daysUntil = 7; }\n      dateObj = new Date(now.getTime());\n      dateObj.setUTCDate(dateObj.getUTCDate() + daysUntil);\n    } else {\n      var attempt = new Date(raw);\n      // Must not clobber a date already resolved above.\n      if (!dateObj && !isNaN(attempt.getTime())) { dateObj = attempt; }\n    }\n  }\n\n  // V8's legacy parser defaults a yearless string like \"24 august\" to the year 2001.\n  if (dateObj && !isNaN(dateObj.getTime()) && dateObj.getUTCFullYear() < now.getUTCFullYear()) { dateObj = null; }\n\n  if (!dateObj || isNaN(dateObj.getTime())) {\n    dateObj = new Date(now.getTime());\n    dateObj.setUTCDate(dateObj.getUTCDate() + 1);\n  }\n\n  function pad(n) { return n < 10 ? '0' + n : '' + n; }\n  var resolvedDate = dateObj.getUTCFullYear() + '-' + pad(dateObj.getUTCMonth() + 1) + '-' + pad(dateObj.getUTCDate());\n\n  var month = dateObj.getUTCMonth() + 1;\n  var isBST = (month >= 3 && month <= 10);\n  var utcOffset = isBST ? 1 : 0;\n  var utcHour = localHour - utcOffset;\n\n  var startISO = resolvedDate + 'T' + pad(utcHour) + ':00:00.000Z';\n  var endISO = resolvedDate + 'T' + pad(utcHour + 1) + ':00:00.000Z';\n\n  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];\n  var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];\n  var friendlyDate = days[dateObj.getUTCDay()] + ', ' + dateObj.getUTCDate() + ' ' + months[dateObj.getUTCMonth()];\n  var slotLabel = newTime.charAt(0).toUpperCase() + newTime.slice(1);\n\n  // ---- FINDING-R30 write-side gate (mirrors WF-C3b) ----\n  var cfg = $('⚙️ Client Config').first().json;\n  function parseSlots(s) {\n    var out = [];\n    var parts = (s || '').split(',');\n    for (var pi = 0; pi < parts.length; pi++) {\n      var v = parseInt(parts[pi], 10);\n      if (!isNaN(v)) { out.push(v); }\n    }\n    return out;\n  }\n  var dow = dateObj.getUTCDay();\n  var allowed;\n  if (dow === 0) { allowed = parseSlots(cfg.sundaySlots); }\n  else if (dow === 6) { allowed = parseSlots(cfg.saturdaySlots); }\n  else { allowed = parseSlots(cfg.weekdaySlots); }\n\n  var bookable = true;\n  var rejectReason = '';\n  var bankHolidays = (cfg.bankHolidays || '').split(',');\n  for (var bi = 0; bi < bankHolidays.length; bi++) {\n    if (bankHolidays[bi].trim() === resolvedDate) { bookable = false; rejectReason = 'bank-holiday'; break; }\n  }\n  if (bookable && allowed.length === 0) { bookable = false; rejectReason = 'closed-day'; }\n  if (bookable) {\n    var inList = false;\n    for (var ai = 0; ai < allowed.length; ai++) { if (allowed[ai] === localHour) { inList = true; break; } }\n    if (!inList) { bookable = false; rejectReason = 'outside-hours'; }\n  }\n  if (bookable && timeUnrecognised) { bookable = false; rejectReason = 'bad-time'; }\n  if (bookable) {\n    var minNotice = parseInt(cfg.minNoticeHours, 10);\n    if (isNaN(minNotice)) { minNotice = 2; }\n    var startMs = new Date(startISO).getTime();\n    if (isNaN(startMs) || startMs < now.getTime() + (minNotice * 3600000)) { bookable = false; rejectReason = 'too-soon'; }\n  }\n\n  return [{\n    json: {\n      bookable: bookable,\n      rejectReason: rejectReason,\n      calendarEventId: appt.calendarEventId,\n      phone: appt.phone,\n      toolUseId: appt.toolUseId,\n      newDate: resolvedDate,\n      newTime: newTime,\n      startISO: startISO,\n      endISO: endISO,\n      friendlyDate: friendlyDate,\n      slotLabel: slotLabel\n    }\n  }];\n} catch (e) {\n  var fb = $('Find Confirmed Appointment').first().json;\n  return [{\n    json: {\n      calendarEventId: fb.calendarEventId || '',\n      phone: fb.phone || '',\n      toolUseId: fb.toolUseId || '',\n      startISO: '',\n      endISO: '',\n      friendlyDate: '',\n      slotLabel: '',\n      bookable: false,\n      rejectReason: 'error',\n      error: e.message\n    }\n  }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "update-cal-c3d",
+      "name": "Update Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1740,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "resource": "event",
+        "operation": "update",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.calendarId }}"
+        },
+        "eventId": "={{ $('Compute New Time').first().json.calendarEventId }}",
+        "useDefaultReminders": true,
+        "updateFields": {
+          "start": "={{ $('Compute New Time').first().json.startISO }}",
+          "end": "={{ $('Compute New Time').first().json.endISO }}"
+        }
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Calendar OAuth2 API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "if-cal-updated-c3d",
+      "name": "Calendar Updated?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1870,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cal-updated-check",
+              "leftValue": "={{ $json.id ? 'ok' : 'fail' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "update-apptlog-c3d",
+      "name": "Update Appointment Log - Rescheduled",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1980,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "CalendarEventId": "={{ $('Compute New Time').first().json.calendarEventId }}",
+            "Date": "={{ $('Compute New Time').first().json.friendlyDate }}",
+            "Time": "={{ $('Compute New Time').first().json.slotLabel }}",
+            "AppointmentTimeISO": "={{ $('Compute New Time').first().json.startISO }}",
+            "Status": "confirmed",
+            "Notes": "Rescheduled by customer via WhatsApp"
+          },
+          "matchingColumns": [
+            "CalendarEventId"
+          ],
+          "schema": []
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "update-clients-c3d",
+      "name": "Update Clients - Rescheduled",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2220,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Compute New Time').first().json.phone }}",
+            "Upcoming Appointment": "={{ $('Compute New Time').first().json.friendlyDate + ' at ' + $('Compute New Time').first().json.slotLabel }}",
+            "Last Contact": "={{ new Date().toISOString() }}",
+            "Last Channel": "chatbot"
+          },
+          "matchingColumns": [
+            "Phone"
+          ],
+          "schema": []
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "success-c3d",
+      "name": "Build Reschedule Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2460,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var data = $('Compute New Time').first().json;\n  var result = 'Done! Your appointment has been rescheduled to ' + data.friendlyDate + ' at ' + data.slotLabel + '. See you then!';\n\n  return [{\n    json: {\n      toolCallId: data.toolUseId || '',\n      result: result\n    }\n  }];\n} catch (e) {\n  return [{\n    json: {\n      toolCallId: $('Compute New Time').first().json.toolUseId || '',\n      result: 'Your appointment has been successfully rescheduled.'\n    }\n  }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "no-booking-c3d",
+      "name": "Build No Booking Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        460
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  return [{\n    json: {\n      toolCallId: $json.toolUseId || '',\n      result: \"I couldn't find an active booking to reschedule for your number. Would you like to book a new appointment instead?\"\n    }\n  }];\n} catch (e) {\n  return [{\n    json: {\n      toolCallId: '',\n      result: \"I couldn't find an active booking to reschedule.\"\n    }\n  }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "build-cal-update-fail-c3d",
+      "name": "Build Calendar Update Fail Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2120,
+        420
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var data = $('Compute New Time').first().json;\n  return [{ json: { toolCallId: data.toolUseId || '', result: 'I was unable to reschedule your appointment due to a calendar system error. Please try again in a moment, or call us directly to reschedule.' } }];\n} catch(e) {\n  return [{ json: { toolCallId: '', result: 'I was unable to reschedule your appointment due to a technical error. Please try again.' } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "2207b549-4926-4f07-bb7c-2a54eff93ff4",
+      "name": "Re-check New Slot",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1620,
+        200
+      ],
+      "parameters": {
+        "resource": "event",
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.calendarId }}"
+        },
+        "returnAll": true,
+        "timeMin": "={{ $('Compute New Time').first().json.startISO }}",
+        "timeMax": "={{ $('Compute New Time').first().json.endISO }}",
+        "options": {
+          "useN8nTimeZone": true
+        }
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Calendar OAuth2 API"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "e9aea627-3985-4179-a1c1-4ddeeaf6d97d",
+      "name": "Evaluate New Slot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1660,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var events = $input.all();\n  var prep = $('Compute New Time').first().json || {};\n  var startISO = prep.startISO || '';\n  var endISO = prep.endISO || '';\n  var ownEventId = prep.calendarEventId || '';\n\n  // BUG-R4 rule: this Calendar node runs with onError=continueRegularOutput, so a\n  // failed read arrives here as DATA, not as a thrown error. Decide explicitly.\n  var readFailed = false;\n  if (events.length > 0 && events[0].json && events[0].json.error) { readFailed = true; }\n\n  if (readFailed) {\n    // Cannot verify. Mirrors WF-C3b: proceed rather than block, since blocking on a\n    // transient Calendar blip is worse than the rare clash it would prevent.\n    return [{ json: { slotFree: true, verified: false, note: 'calendar re-check failed; proceeding unverified' } }];\n  }\n\n  var newStart = new Date(startISO).getTime();\n  var newEnd = new Date(endISO).getTime();\n  if (isNaN(newStart) || isNaN(newEnd)) {\n    return [{ json: { slotFree: true, verified: false, note: 'could not parse requested slot times' } }];\n  }\n\n  var clash = false;\n  for (var i = 0; i < events.length; i++) {\n    var ev = events[i].json || {};\n    if (ev.status === 'cancelled') { continue; }\n    // The customer's OWN appointment must not count as a clash — rescheduling within\n    // the same hour, or a no-op reschedule, would otherwise be refused.\n    if (ownEventId && ev.id === ownEventId) { continue; }\n    var s = ev.start ? (ev.start.dateTime || ev.start.date) : null;\n    var e = ev.end ? (ev.end.dateTime || ev.end.date) : null;\n    if (!s || !e) { continue; }\n    var evStart = new Date(s).getTime();\n    var evEnd = new Date(e).getTime();\n    if (isNaN(evStart) || isNaN(evEnd)) { continue; }\n    if (evStart < newEnd && evEnd > newStart) { clash = true; break; }\n  }\n\n  return [{ json: { slotFree: !clash, verified: true } }];\n} catch (err) {\n  return [{ json: { slotFree: true, verified: false, note: 'evaluation error: ' + err.message } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "1834117d-104b-4f93-a5de-2b4e937d5ba8",
+      "name": "New Slot Free?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1700,
+        440
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "new-slot-free-1",
+              "leftValue": "={{ $json.slotFree }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c97929bd-e5b0-4fe2-8a5c-4b4c56d7d78c",
+      "name": "Build New Slot Taken Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1700,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var prep = $('Compute New Time').first().json || {};\n  return [{ json: {\n    toolCallId: prep.toolUseId || '',\n    result: 'NEW SLOT NO LONGER AVAILABLE. That time was taken while you were talking. The original appointment has NOT been changed and is still in place. Do NOT tell the customer it was rescheduled. Apologise briefly, confirm their existing booking still stands, then call check_availability again on your next message to offer fresh times.'\n  } }];\n} catch (e) {\n  return [{ json: {\n    toolCallId: '',\n    result: 'NEW SLOT NO LONGER AVAILABLE. The original appointment is unchanged. Do not confirm a reschedule. Apologise and offer to look for other times.'\n  } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "5470742c-0d78-4390-a1f0-561ce3ab1bad",
+      "name": "New Slot Bookable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1580,
+        80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c3d-bookable",
+              "leftValue": "={{ $json.bookable }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "f7d34004-cf7b-4005-a639-b34caa5060cd",
+      "name": "Build Outside Hours Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1580,
+        700
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var d = $('Compute New Time').first().json || {};\n  var reason = d.rejectReason || 'outside-hours';\n  var when = (d.friendlyDate || 'that day') + ' at ' + (d.slotLabel || 'that time');\n  var hours = 'Survey visits run Monday to Friday 9am to 5pm only, with at least 48 hours notice. We do not survey on Saturdays, Sundays or bank holidays.';\n  var tail = ' The existing appointment has NOT been changed and is still in place. Do NOT say it was rescheduled.';\n  var msg;\n\n  if (reason === 'bank-holiday') {\n    msg = 'NOT RESCHEDULED. ' + when + ' falls on a bank holiday and we do not carry out surveys then. ' + hours + tail + ' Offer to check another day.';\n  } else if (reason === 'closed-day') {\n    msg = 'NOT RESCHEDULED. We are closed on ' + (d.friendlyDate || 'that day') + '. ' + hours + tail + ' Offer to check another day.';\n  } else if (reason === 'too-soon') {\n    msg = 'NOT RESCHEDULED. ' + when + ' is inside our 48 hour notice window, and we need at least 48 hours to rearrange a surveyor. ' + tail + ' Offer the next working day.';\n  } else if (reason === 'bad-time') {\n    msg = 'NOT RESCHEDULED. That time was not recognised as one of our bookable slots.' + tail + ' Ask the customer to pick a slot on the hour between 9am and 5pm.';\n  } else if (reason === 'error') {\n    msg = 'NOT RESCHEDULED. A system error stopped the change being processed. ' + tail + ' Ask them to try again shortly.';\n  } else {\n    msg = 'NOT RESCHEDULED. ' + when + ' is outside our survey hours. ' + hours + tail + ' Offer a time inside those hours.';\n  }\n\n  return [{ json: { toolCallId: d.toolUseId || '', result: msg } }];\n} catch (e) {\n  return [{ json: { toolCallId: '', result: 'NOT RESCHEDULED. That time is outside our survey hours and the original appointment still stands. Offer Monday to Friday 9am to 5pm, at least 48 hours ahead, instead.' } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Read Appointment Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Appointment Log": {
+      "main": [
+        [
+          {
+            "node": "Find Confirmed Appointment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Confirmed Appointment": {
+      "main": [
+        [
+          {
+            "node": "IF Has Confirmed Appointment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Has Confirmed Appointment": {
+      "main": [
+        [
+          {
+            "node": "Compute New Time",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build No Booking Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Calendar Updated?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendar Updated?": {
+      "main": [
+        [
+          {
+            "node": "Update Appointment Log - Rescheduled",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Calendar Update Fail Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Appointment Log - Rescheduled": {
+      "main": [
+        [
+          {
+            "node": "Update Clients - Rescheduled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Clients - Rescheduled": {
+      "main": [
+        [
+          {
+            "node": "Build Reschedule Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-check New Slot": {
+      "main": [
+        [
+          {
+            "node": "Evaluate New Slot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate New Slot": {
+      "main": [
+        [
+          {
+            "node": "New Slot Free?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New Slot Free?": {
+      "main": [
+        [
+          {
+            "node": "Update Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build New Slot Taken Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute New Time": {
+      "main": [
+        [
+          {
+            "node": "New Slot Bookable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New Slot Bookable?": {
+      "main": [
+        [
+          {
+            "node": "Re-check New Slot",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Outside Hours Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London"
+  },
+  "tags": [],
+  "activeVersion": {
+    "versionId": "00238d5e-ef39-4ffa-afca-c5dfdbbd4452",
+    "workflowId": "PDfSH1hD51TST1pK",
+    "nodes": [
+      {
+        "id": "sticky-c3d",
+        "name": "📋 WF-C3d Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          280,
+          40
+        ],
+        "parameters": {
+          "content": "## WF-C3d: Reschedule Booking\nCalled by: WF-C2 (Claude Core) via Execute Workflow node\n\n**Input:** { toolInput: { newDate: 'YYYY-MM-DD', newTime: '9am|11am|1pm|3pm' }, toolUseId, phone }\n**Output:** { toolCallId, result }\n\n1. Reads Appointment Log for phone + status=confirmed\n2. Computes new ISO start/end (BST-aware)\n3. Updates Google Calendar event start/end\n4. Updates Appointment Log: Date, Time, AppointmentTimeISO\n5. Updates Clients: Upcoming Appointment, Last Contact, Last Channel\n\n⚠️ Credentials: Google Sheets OAuth2 (id: 0d40kOfUWlsFuLuB), Google Calendar OAuth2 (id: Vm9SHjOljbABWWKN)",
+          "height": 200,
+          "width": 940
+        }
+      },
+      {
+        "id": "trigger-c3d",
+        "name": "Execute Workflow Trigger",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          300,
+          320
+        ],
+        "parameters": {
+          "inputSource": "passthrough"
+        }
+      },
+      {
+        "id": "config-c3d",
+        "name": "⚙️ Client Config",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          540,
+          320
+        ],
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "c3d-1",
+                "name": "sheetId",
+                "value": "YOUR_CRM_SHEET_ID",
+                "type": "string"
+              },
+              {
+                "id": "c3d-2",
+                "name": "clientsTab",
+                "value": "Clients",
+                "type": "string"
+              },
+              {
+                "id": "c3d-3",
+                "name": "appointmentsTab",
+                "value": "Appointment Log",
+                "type": "string"
+              },
+              {
+                "id": "c3d-4",
+                "name": "calendarId",
+                "value": "owner@example.com",
+                "type": "string"
+              },
+              {
+                "id": "c3d-5",
+                "name": "businessName",
+                "value": "Solarify",
+                "type": "string"
+              },
+              {
+                "id": "c3d-6",
+                "name": "timezone",
+                "value": "Europe/London",
+                "type": "string"
+              },
+              {
+                "id": "c3d-7",
+                "name": "weekdaySlots",
+                "value": "9,10,11,12,13,14,15,16,17",
+                "type": "string"
+              },
+              {
+                "id": "c3d-8",
+                "name": "saturdaySlots",
+                "value": "",
+                "type": "string"
+              },
+              {
+                "id": "c3d-9",
+                "name": "sundaySlots",
+                "value": "",
+                "type": "string"
+              },
+              {
+                "id": "c3d-10",
+                "name": "minNoticeHours",
+                "value": "48",
+                "type": "string"
+              },
+              {
+                "id": "c3d-11",
+                "name": "bankHolidays",
+                "value": "2026-08-31,2026-12-25,2026-12-28,2027-01-01,2027-04-02,2027-04-05,2027-05-03,2027-05-31,2027-08-30,2027-12-27,2027-12-28",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "read-apptlog-c3d",
+        "name": "Read Appointment Log",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.5,
+        "position": [
+          780,
+          320
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "alwaysOutputData": true,
+        "parameters": {
+          "operation": "read",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+          },
+          "range": "A:Z",
+          "options": {}
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "find-appt-c3d",
+        "name": "Find Confirmed Appointment",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1020,
+          320
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var trigger = $('Execute Workflow Trigger').first().json;\n  var phone = trigger.phone || '';\n  var toolUseId = trigger.toolUseId || '';\n  var toolInput = trigger.toolInput || {};\n\n  var rows = $input.all();\n  var found = null;\n\n  for (var i = 0; i < rows.length; i++) {\n    var row = rows[i].json;\n    if (String(row.Phone).replace(/[^0-9]/g, '') === String(phone).replace(/[^0-9]/g, '') && row.Status === 'confirmed') {\n      found = row;\n      break;\n    }\n  }\n\n  if (found) {\n    return [{\n      json: {\n        hasAppointment: true,\n        calendarEventId: found.CalendarEventId || '',\n        phone: phone,\n        toolUseId: toolUseId,\n        newDate: toolInput.newDate || '',\n        newTime: toolInput.newTime || ''\n      }\n    }];\n  } else {\n    return [{\n      json: {\n        hasAppointment: false,\n        phone: phone,\n        toolUseId: toolUseId,\n        calendarEventId: ''\n      }\n    }];\n  }\n} catch (e) {\n  var fb = $('Execute Workflow Trigger').first().json;\n  return [{\n    json: {\n      hasAppointment: false,\n      phone: fb.phone || '',\n      toolUseId: fb.toolUseId || '',\n      calendarEventId: '',\n      error: e.message\n    }\n  }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "if-has-appt-c3d",
+        "name": "IF Has Confirmed Appointment",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1260,
+          320
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "c3d-cond1",
+                "leftValue": "={{ $json.hasAppointment }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "compute-time-c3d",
+        "name": "Compute New Time",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1500,
+          200
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var appt = $('Find Confirmed Appointment').first().json;\n  var raw = (appt.newDate || '').toString().toLowerCase().trim();\n  var newTime = (appt.newTime || '9am').toLowerCase();\n\n  var timeMap = { '9am': 9, '10am': 10, '11am': 11, '12pm': 12, '1pm': 13, '2pm': 14, '3pm': 15, '4pm': 16, '5pm': 17 };\n  // BUG-R41 — see WF-C3b. Refuse an unmapped time rather than silently using 9am.\n  var localHour = timeMap[newTime];\n  var timeUnrecognised = false;\n  if (localHour === undefined) { localHour = 9; timeUnrecognised = true; }\n\n  var now = new Date();\n  var dateObj = null;\n\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(raw)) {\n    dateObj = new Date(raw + 'T12:00:00Z');\n  } else if (raw === 'today') {\n    dateObj = new Date(now.getTime());\n  } else if (raw === 'tomorrow') {\n    dateObj = new Date(now.getTime());\n    dateObj.setUTCDate(dateObj.getUTCDate() + 1);\n  } else if (raw) {\n    // BUG-R31: an explicit day+month (\"Monday, 17 August\") must beat the weekday name.\n    var monthWords = ['january','february','march','april','may','june','july','august','september','october','november','december'];\n    var mIdx = -1;\n    for (var mw = 0; mw < monthWords.length; mw++) {\n      if (raw.indexOf(monthWords[mw]) !== -1) { mIdx = mw; break; }\n    }\n    var dayNumMatch = raw.match(/(\\d{1,2})\\s*(?:st|nd|rd|th)?/);\n    var dayNum = dayNumMatch ? parseInt(dayNumMatch[1], 10) : 0;\n    if (mIdx !== -1 && dayNum >= 1 && dayNum <= 31) {\n      var yr = now.getUTCFullYear();\n      var cand = new Date(Date.UTC(yr, mIdx, dayNum, 12, 0, 0));\n      if (cand.getTime() < now.getTime() - 86400000) { cand = new Date(Date.UTC(yr + 1, mIdx, dayNum, 12, 0, 0)); }\n      dateObj = cand;\n    }\n    var dayNamesLower = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];\n    var foundIdx = -1;\n    for (var d = 0; d < dayNamesLower.length; d++) {\n      if (raw.indexOf(dayNamesLower[d]) !== -1) { foundIdx = d; break; }\n    }\n    if (dateObj) {\n      foundIdx = -1;\n    }\n    if (foundIdx !== -1) {\n      var currentDay = now.getUTCDay();\n      var daysUntil = (foundIdx - currentDay + 7) % 7;\n      if (daysUntil === 0) { daysUntil = 7; }\n      dateObj = new Date(now.getTime());\n      dateObj.setUTCDate(dateObj.getUTCDate() + daysUntil);\n    } else {\n      var attempt = new Date(raw);\n      // Must not clobber a date already resolved above.\n      if (!dateObj && !isNaN(attempt.getTime())) { dateObj = attempt; }\n    }\n  }\n\n  // V8's legacy parser defaults a yearless string like \"24 august\" to the year 2001.\n  if (dateObj && !isNaN(dateObj.getTime()) && dateObj.getUTCFullYear() < now.getUTCFullYear()) { dateObj = null; }\n\n  if (!dateObj || isNaN(dateObj.getTime())) {\n    dateObj = new Date(now.getTime());\n    dateObj.setUTCDate(dateObj.getUTCDate() + 1);\n  }\n\n  function pad(n) { return n < 10 ? '0' + n : '' + n; }\n  var resolvedDate = dateObj.getUTCFullYear() + '-' + pad(dateObj.getUTCMonth() + 1) + '-' + pad(dateObj.getUTCDate());\n\n  var month = dateObj.getUTCMonth() + 1;\n  var isBST = (month >= 3 && month <= 10);\n  var utcOffset = isBST ? 1 : 0;\n  var utcHour = localHour - utcOffset;\n\n  var startISO = resolvedDate + 'T' + pad(utcHour) + ':00:00.000Z';\n  var endISO = resolvedDate + 'T' + pad(utcHour + 1) + ':00:00.000Z';\n\n  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];\n  var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];\n  var friendlyDate = days[dateObj.getUTCDay()] + ', ' + dateObj.getUTCDate() + ' ' + months[dateObj.getUTCMonth()];\n  var slotLabel = newTime.charAt(0).toUpperCase() + newTime.slice(1);\n\n  // ---- FINDING-R30 write-side gate (mirrors WF-C3b) ----\n  var cfg = $('⚙️ Client Config').first().json;\n  function parseSlots(s) {\n    var out = [];\n    var parts = (s || '').split(',');\n    for (var pi = 0; pi < parts.length; pi++) {\n      var v = parseInt(parts[pi], 10);\n      if (!isNaN(v)) { out.push(v); }\n    }\n    return out;\n  }\n  var dow = dateObj.getUTCDay();\n  var allowed;\n  if (dow === 0) { allowed = parseSlots(cfg.sundaySlots); }\n  else if (dow === 6) { allowed = parseSlots(cfg.saturdaySlots); }\n  else { allowed = parseSlots(cfg.weekdaySlots); }\n\n  var bookable = true;\n  var rejectReason = '';\n  var bankHolidays = (cfg.bankHolidays || '').split(',');\n  for (var bi = 0; bi < bankHolidays.length; bi++) {\n    if (bankHolidays[bi].trim() === resolvedDate) { bookable = false; rejectReason = 'bank-holiday'; break; }\n  }\n  if (bookable && allowed.length === 0) { bookable = false; rejectReason = 'closed-day'; }\n  if (bookable) {\n    var inList = false;\n    for (var ai = 0; ai < allowed.length; ai++) { if (allowed[ai] === localHour) { inList = true; break; } }\n    if (!inList) { bookable = false; rejectReason = 'outside-hours'; }\n  }\n  if (bookable && timeUnrecognised) { bookable = false; rejectReason = 'bad-time'; }\n  if (bookable) {\n    var minNotice = parseInt(cfg.minNoticeHours, 10);\n    if (isNaN(minNotice)) { minNotice = 2; }\n    var startMs = new Date(startISO).getTime();\n    if (isNaN(startMs) || startMs < now.getTime() + (minNotice * 3600000)) { bookable = false; rejectReason = 'too-soon'; }\n  }\n\n  return [{\n    json: {\n      bookable: bookable,\n      rejectReason: rejectReason,\n      calendarEventId: appt.calendarEventId,\n      phone: appt.phone,\n      toolUseId: appt.toolUseId,\n      newDate: resolvedDate,\n      newTime: newTime,\n      startISO: startISO,\n      endISO: endISO,\n      friendlyDate: friendlyDate,\n      slotLabel: slotLabel\n    }\n  }];\n} catch (e) {\n  var fb = $('Find Confirmed Appointment').first().json;\n  return [{\n    json: {\n      calendarEventId: fb.calendarEventId || '',\n      phone: fb.phone || '',\n      toolUseId: fb.toolUseId || '',\n      startISO: '',\n      endISO: '',\n      friendlyDate: '',\n      slotLabel: '',\n      bookable: false,\n      rejectReason: 'error',\n      error: e.message\n    }\n  }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "update-cal-c3d",
+        "name": "Update Calendar Event",
+        "type": "n8n-nodes-base.googleCalendar",
+        "typeVersion": 1.3,
+        "position": [
+          1740,
+          200
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "parameters": {
+          "resource": "event",
+          "operation": "update",
+          "calendar": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.calendarId }}"
+          },
+          "eventId": "={{ $('Compute New Time').first().json.calendarEventId }}",
+          "useDefaultReminders": true,
+          "updateFields": {
+            "start": "={{ $('Compute New Time').first().json.startISO }}",
+            "end": "={{ $('Compute New Time').first().json.endISO }}"
+          }
+        },
+        "credentials": {
+          "googleCalendarOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Calendar OAuth2 API"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "if-cal-updated-c3d",
+        "name": "Calendar Updated?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1870,
+          200
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "cal-updated-check",
+                "leftValue": "={{ $json.id ? 'ok' : 'fail' }}",
+                "rightValue": "ok",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "update-apptlog-c3d",
+        "name": "Update Appointment Log - Rescheduled",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.5,
+        "position": [
+          1980,
+          200
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "CalendarEventId": "={{ $('Compute New Time').first().json.calendarEventId }}",
+              "Date": "={{ $('Compute New Time').first().json.friendlyDate }}",
+              "Time": "={{ $('Compute New Time').first().json.slotLabel }}",
+              "AppointmentTimeISO": "={{ $('Compute New Time').first().json.startISO }}",
+              "Status": "confirmed",
+              "Notes": "Rescheduled by customer via WhatsApp"
+            },
+            "matchingColumns": [
+              "CalendarEventId"
+            ],
+            "schema": []
+          },
+          "options": {
+            "cellFormat": "RAW"
+          }
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "update-clients-c3d",
+        "name": "Update Clients - Rescheduled",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.5,
+        "position": [
+          2220,
+          200
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "Phone": "={{ $('Compute New Time').first().json.phone }}",
+              "Upcoming Appointment": "={{ $('Compute New Time').first().json.friendlyDate + ' at ' + $('Compute New Time').first().json.slotLabel }}",
+              "Last Contact": "={{ new Date().toISOString() }}",
+              "Last Channel": "chatbot"
+            },
+            "matchingColumns": [
+              "Phone"
+            ],
+            "schema": []
+          },
+          "options": {
+            "cellFormat": "RAW"
+          }
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "success-c3d",
+        "name": "Build Reschedule Success",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2460,
+          200
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var data = $('Compute New Time').first().json;\n  var result = 'Done! Your appointment has been rescheduled to ' + data.friendlyDate + ' at ' + data.slotLabel + '. See you then!';\n\n  return [{\n    json: {\n      toolCallId: data.toolUseId || '',\n      result: result\n    }\n  }];\n} catch (e) {\n  return [{\n    json: {\n      toolCallId: $('Compute New Time').first().json.toolUseId || '',\n      result: 'Your appointment has been successfully rescheduled.'\n    }\n  }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "no-booking-c3d",
+        "name": "Build No Booking Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1500,
+          460
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  return [{\n    json: {\n      toolCallId: $json.toolUseId || '',\n      result: \"I couldn't find an active booking to reschedule for your number. Would you like to book a new appointment instead?\"\n    }\n  }];\n} catch (e) {\n  return [{\n    json: {\n      toolCallId: '',\n      result: \"I couldn't find an active booking to reschedule.\"\n    }\n  }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "build-cal-update-fail-c3d",
+        "name": "Build Calendar Update Fail Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2120,
+          420
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var data = $('Compute New Time').first().json;\n  return [{ json: { toolCallId: data.toolUseId || '', result: 'I was unable to reschedule your appointment due to a calendar system error. Please try again in a moment, or call us directly to reschedule.' } }];\n} catch(e) {\n  return [{ json: { toolCallId: '', result: 'I was unable to reschedule your appointment due to a technical error. Please try again.' } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "2207b549-4926-4f07-bb7c-2a54eff93ff4",
+        "name": "Re-check New Slot",
+        "type": "n8n-nodes-base.googleCalendar",
+        "typeVersion": 1.3,
+        "position": [
+          1620,
+          200
+        ],
+        "parameters": {
+          "resource": "event",
+          "operation": "getAll",
+          "calendar": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.calendarId }}"
+          },
+          "returnAll": true,
+          "timeMin": "={{ $('Compute New Time').first().json.startISO }}",
+          "timeMax": "={{ $('Compute New Time').first().json.endISO }}",
+          "options": {
+            "useN8nTimeZone": true
+          }
+        },
+        "credentials": {
+          "googleCalendarOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Calendar OAuth2 API"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "alwaysOutputData": true
+      },
+      {
+        "id": "e9aea627-3985-4179-a1c1-4ddeeaf6d97d",
+        "name": "Evaluate New Slot",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1660,
+          320
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var events = $input.all();\n  var prep = $('Compute New Time').first().json || {};\n  var startISO = prep.startISO || '';\n  var endISO = prep.endISO || '';\n  var ownEventId = prep.calendarEventId || '';\n\n  // BUG-R4 rule: this Calendar node runs with onError=continueRegularOutput, so a\n  // failed read arrives here as DATA, not as a thrown error. Decide explicitly.\n  var readFailed = false;\n  if (events.length > 0 && events[0].json && events[0].json.error) { readFailed = true; }\n\n  if (readFailed) {\n    // Cannot verify. Mirrors WF-C3b: proceed rather than block, since blocking on a\n    // transient Calendar blip is worse than the rare clash it would prevent.\n    return [{ json: { slotFree: true, verified: false, note: 'calendar re-check failed; proceeding unverified' } }];\n  }\n\n  var newStart = new Date(startISO).getTime();\n  var newEnd = new Date(endISO).getTime();\n  if (isNaN(newStart) || isNaN(newEnd)) {\n    return [{ json: { slotFree: true, verified: false, note: 'could not parse requested slot times' } }];\n  }\n\n  var clash = false;\n  for (var i = 0; i < events.length; i++) {\n    var ev = events[i].json || {};\n    if (ev.status === 'cancelled') { continue; }\n    // The customer's OWN appointment must not count as a clash — rescheduling within\n    // the same hour, or a no-op reschedule, would otherwise be refused.\n    if (ownEventId && ev.id === ownEventId) { continue; }\n    var s = ev.start ? (ev.start.dateTime || ev.start.date) : null;\n    var e = ev.end ? (ev.end.dateTime || ev.end.date) : null;\n    if (!s || !e) { continue; }\n    var evStart = new Date(s).getTime();\n    var evEnd = new Date(e).getTime();\n    if (isNaN(evStart) || isNaN(evEnd)) { continue; }\n    if (evStart < newEnd && evEnd > newStart) { clash = true; break; }\n  }\n\n  return [{ json: { slotFree: !clash, verified: true } }];\n} catch (err) {\n  return [{ json: { slotFree: true, verified: false, note: 'evaluation error: ' + err.message } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "1834117d-104b-4f93-a5de-2b4e937d5ba8",
+        "name": "New Slot Free?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1700,
+          440
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "new-slot-free-1",
+                "leftValue": "={{ $json.slotFree }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "c97929bd-e5b0-4fe2-8a5c-4b4c56d7d78c",
+        "name": "Build New Slot Taken Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1700,
+          600
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var prep = $('Compute New Time').first().json || {};\n  return [{ json: {\n    toolCallId: prep.toolUseId || '',\n    result: 'NEW SLOT NO LONGER AVAILABLE. That time was taken while you were talking. The original appointment has NOT been changed and is still in place. Do NOT tell the customer it was rescheduled. Apologise briefly, confirm their existing booking still stands, then call check_availability again on your next message to offer fresh times.'\n  } }];\n} catch (e) {\n  return [{ json: {\n    toolCallId: '',\n    result: 'NEW SLOT NO LONGER AVAILABLE. The original appointment is unchanged. Do not confirm a reschedule. Apologise and offer to look for other times.'\n  } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "5470742c-0d78-4390-a1f0-561ce3ab1bad",
+        "name": "New Slot Bookable?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1580,
+          80
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "c3d-bookable",
+                "leftValue": "={{ $json.bookable }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "f7d34004-cf7b-4005-a639-b34caa5060cd",
+        "name": "Build Outside Hours Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1580,
+          700
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var d = $('Compute New Time').first().json || {};\n  var reason = d.rejectReason || 'outside-hours';\n  var when = (d.friendlyDate || 'that day') + ' at ' + (d.slotLabel || 'that time');\n  var hours = 'Survey visits run Monday to Friday 9am to 5pm only, with at least 48 hours notice. We do not survey on Saturdays, Sundays or bank holidays.';\n  var tail = ' The existing appointment has NOT been changed and is still in place. Do NOT say it was rescheduled.';\n  var msg;\n\n  if (reason === 'bank-holiday') {\n    msg = 'NOT RESCHEDULED. ' + when + ' falls on a bank holiday and we do not carry out surveys then. ' + hours + tail + ' Offer to check another day.';\n  } else if (reason === 'closed-day') {\n    msg = 'NOT RESCHEDULED. We are closed on ' + (d.friendlyDate || 'that day') + '. ' + hours + tail + ' Offer to check another day.';\n  } else if (reason === 'too-soon') {\n    msg = 'NOT RESCHEDULED. ' + when + ' is inside our 48 hour notice window, and we need at least 48 hours to rearrange a surveyor. ' + tail + ' Offer the next working day.';\n  } else if (reason === 'bad-time') {\n    msg = 'NOT RESCHEDULED. That time was not recognised as one of our bookable slots.' + tail + ' Ask the customer to pick a slot on the hour between 9am and 5pm.';\n  } else if (reason === 'error') {\n    msg = 'NOT RESCHEDULED. A system error stopped the change being processed. ' + tail + ' Ask them to try again shortly.';\n  } else {\n    msg = 'NOT RESCHEDULED. ' + when + ' is outside our survey hours. ' + hours + tail + ' Offer a time inside those hours.';\n  }\n\n  return [{ json: { toolCallId: d.toolUseId || '', result: msg } }];\n} catch (e) {\n  return [{ json: { toolCallId: '', result: 'NOT RESCHEDULED. That time is outside our survey hours and the original appointment still stands. Offer Monday to Friday 9am to 5pm, at least 48 hours ahead, instead.' } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      }
+    ],
+    "connections": {
+      "Execute Workflow Trigger": {
+        "main": [
+          [
+            {
+              "node": "⚙️ Client Config",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⚙️ Client Config": {
+        "main": [
+          [
+            {
+              "node": "Read Appointment Log",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Appointment Log": {
+        "main": [
+          [
+            {
+              "node": "Find Confirmed Appointment",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Find Confirmed Appointment": {
+        "main": [
+          [
+            {
+              "node": "IF Has Confirmed Appointment",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF Has Confirmed Appointment": {
+        "main": [
+          [
+            {
+              "node": "Compute New Time",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build No Booking Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Calendar Event": {
+        "main": [
+          [
+            {
+              "node": "Calendar Updated?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Calendar Updated?": {
+        "main": [
+          [
+            {
+              "node": "Update Appointment Log - Rescheduled",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build Calendar Update Fail Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Appointment Log - Rescheduled": {
+        "main": [
+          [
+            {
+              "node": "Update Clients - Rescheduled",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Clients - Rescheduled": {
+        "main": [
+          [
+            {
+              "node": "Build Reschedule Success",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Re-check New Slot": {
+        "main": [
+          [
+            {
+              "node": "Evaluate New Slot",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Evaluate New Slot": {
+        "main": [
+          [
+            {
+              "node": "New Slot Free?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "New Slot Free?": {
+        "main": [
+          [
+            {
+              "node": "Update Calendar Event",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build New Slot Taken Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Compute New Time": {
+        "main": [
+          [
+            {
+              "node": "New Slot Bookable?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "New Slot Bookable?": {
+        "main": [
+          [
+            {
+              "node": "Re-check New Slot",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build Outside Hours Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Muhammad Ghazwan",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-08-15T04:05:58.865Z",
+    "updatedAt": "2026-08-15T04:05:58.865Z",
+    "workflowPublishHistory": [
+      {
+        "id": 182,
+        "workflowId": "PDfSH1hD51TST1pK",
+        "versionId": "00238d5e-ef39-4ffa-afca-c5dfdbbd4452",
+        "event": "activated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-15T04:05:58.976Z"
+      },
+      {
+        "id": 181,
+        "workflowId": "PDfSH1hD51TST1pK",
+        "versionId": "00238d5e-ef39-4ffa-afca-c5dfdbbd4452",
+        "event": "deactivated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-15T04:05:58.970Z"
+      }
+    ]
+  }
+}

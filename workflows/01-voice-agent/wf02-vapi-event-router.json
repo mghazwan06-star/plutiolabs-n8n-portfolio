@@ -1,0 +1,801 @@
+{
+  "id": "nv93JKGcINDyOGFH",
+  "name": "Voice Agent — 02 VAPI Event Router",
+  "description": null,
+  "active": true,
+  "activeVersionId": "03221908-9d88-4ac9-96c3-ccc82a44a1ae",
+  "createdAt": "2026-03-13T19:52:23.585Z",
+  "updatedAt": "2026-08-21T22:46:04.134Z",
+  "isArchived": false,
+  "versionCounter": 20,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WF2 — VAPI Event Router\n\nSingle webhook URL given to VAPI. Receives ALL events and routes them.\n\n**Routing:**\n- `tool-calls` → WF3 Tool Dispatcher (synchronous — waits for response)\n- `end-of-call-report` → WF4 Post-Call Processor (async — fire and forget)\n- Everything else → 200 OK, ignored\n\n**Setup:**\n1. Activate this workflow\n2. Copy the Production webhook URL from the Webhook node\n3. Paste it into VAPI assistant → Server URL\n\n**Upstream:** VAPI (all events)\n**Downstream:** WF3 (tool calls), WF4 (post-call)",
+        "height": 472,
+        "width": 380,
+        "color": 7
+      },
+      "id": "sticky-wf2",
+      "name": "📋 WF2 Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vapi-events",
+        "responseMode": "responseNode",
+        "options": {},
+        "authentication": "headerAuth"
+      },
+      "id": "wf2-webhook",
+      "name": "VAPI Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        208
+      ],
+      "webhookId": "76e593c1-1674-49a1-9177-2007950fe69b",
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENTIAL_ID",
+          "name": "D2 VAPI — webhook shared secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-wf3",
+              "name": "wf3Id",
+              "value": "Dy8Md4sv3QE7eIXp",
+              "type": "string"
+            },
+            {
+              "id": "cfg-wf4",
+              "name": "wf4Id",
+              "value": "U6ZSilzcV6W8e8Uc",
+              "type": "string"
+            },
+            {
+              "id": "cfg-biz",
+              "name": "businessName",
+              "value": "Solarify",
+              "type": "string"
+            },
+            {
+              "id": "cfg-tz",
+              "name": "timezone",
+              "value": "Europe/London",
+              "type": "string"
+            },
+            {
+              "id": "cfg-fallback",
+              "name": "toolErrorMessage",
+              "value": "I'm having a technical issue right now. Let me take your details and someone from our team will call you back shortly.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {},
+        "includeOtherFields": true
+      },
+      "id": "wf2-config",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "rule-tool",
+                    "leftValue": "={{ $json.body.message.type }}",
+                    "rightValue": "tool-calls",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "tool-calls"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "rule-eoc",
+                    "leftValue": "={{ $json.body.message.type }}",
+                    "rightValue": "end-of-call-report",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "end-of-call"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "wf2-switch",
+      "name": "Route by Event Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        208
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "**Tool-Calls Branch**\n\nVAPI needs a response within 5 seconds.\nCalls WF3 synchronously, waits for completion,\nthen returns `{ results: [...] }` directly to VAPI.\n\nWF3 handles all 7 tools internally.\n\n**Error Handling:** If WF3 crashes, Handle WF3 Response builds a graceful fallback using the original toolCallIds — VAPI never times out silently.",
+        "height": 304,
+        "width": 300,
+        "color": 4
+      },
+      "id": "sticky-tools",
+      "name": "📞 Tool-Calls Branch",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        720,
+        -336
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.wf3Id }}"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "wf2-call-wf3",
+      "name": "Call WF3 Tool Dispatcher",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        720,
+        80
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        },
+        "respondWith": "firstIncomingItem"
+      },
+      "id": "wf2-respond-tools",
+      "name": "Return Tool Results to VAPI",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1200,
+        80
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "**End-of-Call Branch**\n\nFires WF4 asynchronously — does NOT wait.\nResponds 200 OK to VAPI immediately.\n\nWF4 handles: CRM update, Clients tab update,\nSMS confirmation, urgency alerts.\n\n⚠️ Update wf4Id in Client Config when WF4 is built.",
+        "height": 260,
+        "width": 300,
+        "color": 5
+      },
+      "id": "sticky-eoc",
+      "name": "📊 End-of-Call Branch",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1376,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.wf4Id }}"
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "id": "wf2-fire-wf4",
+      "name": "Fire WF4 Post-Call",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        720,
+        448
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "wf2-respond-eoc",
+      "name": "Acknowledge End-of-Call",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        960,
+        448
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "wf2-respond-default",
+      "name": "Acknowledge Other Events",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        720,
+        640
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if WF3 returned valid results or if it errored\nvar inputData = $input.first().json;\nvar fallbackMsg = $('⚙️ Client Config').first().json.toolErrorMessage || \"I'm having a technical issue. Someone from our team will call you back shortly.\";\n\n// Success path: WF3 returned results array\nif (inputData.results && Array.isArray(inputData.results) && inputData.results.length > 0) {\n  return [{ json: inputData }];\n}\n\n// Error path: WF3 crashed or returned empty — build graceful VAPI fallback\nvar results = [];\ntry {\n  var msg = $('VAPI Webhook').first().json.body.message;\n  if (msg && msg.toolCallList && msg.toolCallList.length > 0) {\n    var i;\n    for (i = 0; i < msg.toolCallList.length; i++) {\n      results.push({\n        toolCallId: msg.toolCallList[i].id,\n        result: fallbackMsg\n      });\n    }\n  }\n} catch(e) {}\n\nif (results.length === 0) {\n  results.push({\n    toolCallId: \"unknown\",\n    result: fallbackMsg\n  });\n}\n\nreturn [{ json: { results: results } }];"
+      },
+      "id": "wf2-wf3-handler",
+      "name": "Handle WF3 Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        80
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "VAPI Webhook": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Route by Event Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Event Type": {
+      "main": [
+        [
+          {
+            "node": "Call WF3 Tool Dispatcher",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fire WF4 Post-Call",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Acknowledge Other Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fire WF4 Post-Call": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge End-of-Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call WF3 Tool Dispatcher": {
+      "main": [
+        [
+          {
+            "node": "Handle WF3 Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle WF3 Response": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Results to VAPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": [],
+  "activeVersion": {
+    "versionId": "03221908-9d88-4ac9-96c3-ccc82a44a1ae",
+    "workflowId": "nv93JKGcINDyOGFH",
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## WF2 — VAPI Event Router\n\nSingle webhook URL given to VAPI. Receives ALL events and routes them.\n\n**Routing:**\n- `tool-calls` → WF3 Tool Dispatcher (synchronous — waits for response)\n- `end-of-call-report` → WF4 Post-Call Processor (async — fire and forget)\n- Everything else → 200 OK, ignored\n\n**Setup:**\n1. Activate this workflow\n2. Copy the Production webhook URL from the Webhook node\n3. Paste it into VAPI assistant → Server URL\n\n**Upstream:** VAPI (all events)\n**Downstream:** WF3 (tool calls), WF4 (post-call)",
+          "height": 472,
+          "width": 380,
+          "color": 7
+        },
+        "id": "sticky-wf2",
+        "name": "📋 WF2 Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -320,
+          -400
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "vapi-events",
+          "responseMode": "responseNode",
+          "options": {},
+          "authentication": "headerAuth"
+        },
+        "id": "wf2-webhook",
+        "name": "VAPI Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          208
+        ],
+        "webhookId": "76e593c1-1674-49a1-9177-2007950fe69b",
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "CREDENTIAL_ID",
+            "name": "D2 VAPI — webhook shared secret"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "cfg-wf3",
+                "name": "wf3Id",
+                "value": "Dy8Md4sv3QE7eIXp",
+                "type": "string"
+              },
+              {
+                "id": "cfg-wf4",
+                "name": "wf4Id",
+                "value": "U6ZSilzcV6W8e8Uc",
+                "type": "string"
+              },
+              {
+                "id": "cfg-biz",
+                "name": "businessName",
+                "value": "Solarify",
+                "type": "string"
+              },
+              {
+                "id": "cfg-tz",
+                "name": "timezone",
+                "value": "Europe/London",
+                "type": "string"
+              },
+              {
+                "id": "cfg-fallback",
+                "name": "toolErrorMessage",
+                "value": "I'm having a technical issue right now. Let me take your details and someone from our team will call you back shortly.",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {},
+          "includeOtherFields": true
+        },
+        "id": "wf2-config",
+        "name": "⚙️ Client Config",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          240,
+          208
+        ]
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "combinator": "and",
+                  "conditions": [
+                    {
+                      "id": "rule-tool",
+                      "leftValue": "={{ $json.body.message.type }}",
+                      "rightValue": "tool-calls",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ]
+                },
+                "renameOutput": true,
+                "outputKey": "tool-calls"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "combinator": "and",
+                  "conditions": [
+                    {
+                      "id": "rule-eoc",
+                      "leftValue": "={{ $json.body.message.type }}",
+                      "rightValue": "end-of-call-report",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ]
+                },
+                "renameOutput": true,
+                "outputKey": "end-of-call"
+              }
+            ]
+          },
+          "options": {
+            "fallbackOutput": "extra"
+          }
+        },
+        "id": "wf2-switch",
+        "name": "Route by Event Type",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.4,
+        "position": [
+          480,
+          208
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "content": "**Tool-Calls Branch**\n\nVAPI needs a response within 5 seconds.\nCalls WF3 synchronously, waits for completion,\nthen returns `{ results: [...] }` directly to VAPI.\n\nWF3 handles all 7 tools internally.\n\n**Error Handling:** If WF3 crashes, Handle WF3 Response builds a graceful fallback using the original toolCallIds — VAPI never times out silently.",
+          "height": 304,
+          "width": 300,
+          "color": 4
+        },
+        "id": "sticky-tools",
+        "name": "📞 Tool-Calls Branch",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          720,
+          -336
+        ]
+      },
+      {
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.wf3Id }}"
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "id": "wf2-call-wf3",
+        "name": "Call WF3 Tool Dispatcher",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          720,
+          80
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "options": {
+            "responseCode": 200
+          },
+          "respondWith": "firstIncomingItem"
+        },
+        "id": "wf2-respond-tools",
+        "name": "Return Tool Results to VAPI",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          1200,
+          80
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "content": "**End-of-Call Branch**\n\nFires WF4 asynchronously — does NOT wait.\nResponds 200 OK to VAPI immediately.\n\nWF4 handles: CRM update, Clients tab update,\nSMS confirmation, urgency alerts.\n\n⚠️ Update wf4Id in Client Config when WF4 is built.",
+          "height": 260,
+          "width": 300,
+          "color": 5
+        },
+        "id": "sticky-eoc",
+        "name": "📊 End-of-Call Branch",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          1376,
+          256
+        ]
+      },
+      {
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.wf4Id }}"
+          },
+          "options": {
+            "waitForSubWorkflow": false
+          }
+        },
+        "id": "wf2-fire-wf4",
+        "name": "Fire WF4 Post-Call",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          720,
+          448
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "respondWith": "noData",
+          "options": {
+            "responseCode": 200
+          }
+        },
+        "id": "wf2-respond-eoc",
+        "name": "Acknowledge End-of-Call",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          960,
+          448
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "respondWith": "noData",
+          "options": {
+            "responseCode": 200
+          }
+        },
+        "id": "wf2-respond-default",
+        "name": "Acknowledge Other Events",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          720,
+          640
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Check if WF3 returned valid results or if it errored\nvar inputData = $input.first().json;\nvar fallbackMsg = $('⚙️ Client Config').first().json.toolErrorMessage || \"I'm having a technical issue. Someone from our team will call you back shortly.\";\n\n// Success path: WF3 returned results array\nif (inputData.results && Array.isArray(inputData.results) && inputData.results.length > 0) {\n  return [{ json: inputData }];\n}\n\n// Error path: WF3 crashed or returned empty — build graceful VAPI fallback\nvar results = [];\ntry {\n  var msg = $('VAPI Webhook').first().json.body.message;\n  if (msg && msg.toolCallList && msg.toolCallList.length > 0) {\n    var i;\n    for (i = 0; i < msg.toolCallList.length; i++) {\n      results.push({\n        toolCallId: msg.toolCallList[i].id,\n        result: fallbackMsg\n      });\n    }\n  }\n} catch(e) {}\n\nif (results.length === 0) {\n  results.push({\n    toolCallId: \"unknown\",\n    result: fallbackMsg\n  });\n}\n\nreturn [{ json: { results: results } }];"
+        },
+        "id": "wf2-wf3-handler",
+        "name": "Handle WF3 Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          960,
+          80
+        ],
+        "onError": "continueRegularOutput"
+      }
+    ],
+    "connections": {
+      "VAPI Webhook": {
+        "main": [
+          [
+            {
+              "node": "⚙️ Client Config",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⚙️ Client Config": {
+        "main": [
+          [
+            {
+              "node": "Route by Event Type",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Route by Event Type": {
+        "main": [
+          [
+            {
+              "node": "Call WF3 Tool Dispatcher",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Fire WF4 Post-Call",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Acknowledge Other Events",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fire WF4 Post-Call": {
+        "main": [
+          [
+            {
+              "node": "Acknowledge End-of-Call",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call WF3 Tool Dispatcher": {
+        "main": [
+          [
+            {
+              "node": "Handle WF3 Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Handle WF3 Response": {
+        "main": [
+          [
+            {
+              "node": "Return Tool Results to VAPI",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Muhammad Ghazwan",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-08-21T22:46:04.136Z",
+    "updatedAt": "2026-08-21T22:46:04.136Z",
+    "workflowPublishHistory": [
+      {
+        "id": 374,
+        "workflowId": "nv93JKGcINDyOGFH",
+        "versionId": "03221908-9d88-4ac9-96c3-ccc82a44a1ae",
+        "event": "activated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-21T22:46:04.237Z"
+      }
+    ]
+  }
+}

@@ -1,0 +1,239 @@
+{
+  "id": "Wk6CRHmJ9H8Rl8ri",
+  "name": "PlutioLabs — Utility: Route Recompute",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-08-20T21:03:26.552Z",
+  "updatedAt": "2026-08-20T21:03:26.552Z",
+  "isArchived": false,
+  "versionCounter": 1,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Run",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "path": "route-recompute",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "c583e7a6-ad5b-4f60-9e2d-c734188edf63"
+    },
+    {
+      "id": "s",
+      "name": "Read Sheet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        200,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "GET",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/YOUR_SCRAPER_SHEET_ID/values/{{ encodeURIComponent(\"'Outreach CRM'!A:BG\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "c",
+      "name": "Compute Routes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "// Recomputes Template Route + Email 2 Route from data ALREADY in the sheet.\n// No Apify, no Claude, no cost. Route depends only on Priority, Competitor\n// Reviews, Review Count, Top Complaint and Best Review Quote - all stored - so\n// when the ROUTING RULE changes (Levers 3 & 4), existing rows can be upgraded\n// without re-enriching anything.\n//\n// Writes ONLY the two route columns, so it cannot touch the Claude fields and is\n// immune to HAZARD-1.\ntry {\n  var apply = false;\n  try { apply = ($('Run').first().json.body || {}).apply === true; } catch (eA) { }\n\n  var values = ($input.first().json || {}).values || [];\n  if (values.length < 2) { return [{ json: { error: 'Sheet read returned no rows' } }]; }\n  var H = values[0], I = {};\n  for (var h = 0; h < H.length; h++) { I[String(H[h]).trim()] = h; }\n  function c(r, n) { var i = I[n]; if (i === undefined) { return ''; } var x = r[i]; return (x === undefined || x === null) ? '' : String(x).trim(); }\n  function N(r, n) { var x = c(r, n); if (x === '') { return 0; } var y = Number(x); return isNaN(y) ? 0 : y; }\n  function B(x) { var s = String(x).toLowerCase(); return s === 'true' || s === 'yes' || s === '1'; }\n\n  // Kept in lockstep with '📋 Build CRM Row' in the CHILD workflow.\n  var KW = ['call','phone','response','respons','unrespon','respond','reply','answer','rang','reach','voicemail','contact','get back','get hold','get through','pickup','pick up','available','message','communic','follow','appointment','schedul','no-show','no show','turn up','turned up','show up','showed up','never came','never turned','chase','chasing','ignore','missed'];\n  function isCall(x) { if (!x) { return false; } var s = String(x).toLowerCase(); for (var i = 0; i < KW.length; i++) { if (s.indexOf(KW[i]) !== -1) { return true; } } return false; }\n  function route1(p, cr, rc, tc, bq) {\n    var gap = cr - rc;\n    if ((p === '1' && gap >= 10) || gap >= 30) {\n      if (tc && isCall(tc)) { return 'A'; }\n      if (bq) { return 'A-v2'; }\n      return 'A-lite';\n    }\n    if (tc && isCall(tc)) { return 'B'; }\n    return 'D';\n  }\n  function route2(r, hg, cw, ct) {\n    if (r === 'A' || r === 'A-v2' || r === 'A-lite') { if (hg && cw && ct) { return 'E1'; } return 'E2'; }\n    return 'E3';\n  }\n\n  var tIdx = I['Template Route'], uIdx = I['Email 2 Route'];\n  if (tIdx === undefined || uIdx === undefined) { return [{ json: { error: 'route columns not found' } }]; }\n  if (uIdx !== tIdx + 1) { return [{ json: { error: 'Template Route and Email 2 Route are not adjacent - aborting rather than writing the wrong columns' } }]; }\n  function colLetter(n) { var s = ''; var x = n + 1; while (x > 0) { var m = (x - 1) % 26; s = String.fromCharCode(65 + m) + s; x = Math.floor((x - 1) / 26); } return s; }\n\n  var rows = values.slice(1);\n  var out = [], changed = 0, changed2 = 0, byPair = {}, samples = [];\n  for (var i = 0; i < rows.length; i++) {\n    var row = rows[i];\n    var oldR = c(row, 'Template Route'), oldR2 = c(row, 'Email 2 Route');\n    var nr = route1(c(row, 'Priority'), N(row, 'Competitor Reviews'), N(row, 'Review Count'), c(row, 'Top Complaint'), c(row, 'Best Review Quote'));\n    var nr2 = route2(nr, B(c(row, 'Hours Gap')), B(c(row, 'Competitor Has Weekend')), c(row, 'Closing Time'));\n    if (nr !== oldR) {\n      changed++;\n      var k = (oldR || '(blank)') + ' -> ' + nr;\n      byPair[k] = (byPair[k] || 0) + 1;\n      if (samples.length < 5) { samples.push({ row: i + 2, company: c(row, 'Company Name'), from: oldR, to: nr, priority: c(row, 'Priority'), gap: N(row, 'Competitor Reviews') - N(row, 'Review Count') }); }\n    }\n    if (nr2 !== oldR2) { changed2++; }\n    out.push([nr, nr2]);\n  }\n\n  return [{ json: {\n    apply: apply,\n    mode: apply ? 'APPLY - will write to the sheet' : 'DRY RUN - nothing written. POST {\"apply\":true} to commit.',\n    rowsProcessed: rows.length,\n    templateRouteChanges: changed,\n    email2RouteChanges: changed2,\n    byTransition: byPair,\n    samples: samples,\n    _range: \"'Outreach CRM'!\" + colLetter(tIdx) + '2:' + colLetter(uIdx) + (rows.length + 1),\n    _values: out\n  }}];\n} catch (e) { return [{ json: { error: 'Compute failed: ' + e.message } }]; }"
+      }
+    },
+    {
+      "id": "i",
+      "name": "Apply?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ap",
+              "leftValue": "={{ $json.apply === true && !$json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "w",
+      "name": "Write Routes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        800,
+        200
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/YOUR_SCRAPER_SHEET_ID/values/{{ encodeURIComponent($json._range) }}?valueInputOption=RAW",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: $json._values }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "r",
+      "name": "Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "// Strips the bulky _values payload out of the response and reports the outcome.\ntry {\n  var comp = $('Compute Routes').first().json;\n  var written = null;\n  try {\n    var w = $('Write Routes').first().json;\n    if (w && w.updatedCells !== undefined) { written = { updatedRange: w.updatedRange, updatedRows: w.updatedRows, updatedCells: w.updatedCells }; }\n    else if (w && w.error) { written = { error: w.error }; }\n  } catch (e) { }\n\n  return [{ json: {\n    mode: comp.mode,\n    rowsProcessed: comp.rowsProcessed,\n    templateRouteChanges: comp.templateRouteChanges,\n    email2RouteChanges: comp.email2RouteChanges,\n    byTransition: comp.byTransition,\n    samples: comp.samples,\n    targetRange: comp._range,\n    sheetWrite: written || 'not attempted (dry run)',\n    error: comp.error || null\n  }}];\n} catch (e) { return [{ json: { error: 'Report failed: ' + e.message } }]; }"
+      }
+    },
+    {
+      "id": "n",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        40
+      ],
+      "parameters": {
+        "width": 1120,
+        "height": 200,
+        "content": "## Route Recompute (free lead-quality upgrade)\n\n`POST /webhook/route-recompute`  -> **dry run**, reports what would change, writes nothing\n`POST /webhook/route-recompute {\"apply\":true}` -> commits\n\n**Why it exists:** Template Route is derived ONLY from columns already in the sheet (Priority,\nCompetitor Reviews, Review Count, Top Complaint, Best Review Quote). So when the routing RULE\nchanges - as it did with Lever 3 (P2 + gap>=30 qualifies for A-lite) and Lever 4 (wider complaint\nkeywords) - existing rows can be upgraded with **no Apify and no Claude spend**.\n\n**Safety:** writes ONLY the two adjacent route columns (T:U), so it cannot touch the Claude fields\nand is immune to HAZARD-1. Aborts if those two columns are ever not adjacent.\n\nKeep the rule in this node in lockstep with `computeTemplateRoute()` in the CHILD's Build CRM Row."
+      }
+    }
+  ],
+  "connections": {
+    "Run": {
+      "main": [
+        [
+          {
+            "node": "Read Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Sheet": {
+      "main": [
+        [
+          {
+            "node": "Compute Routes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Routes": {
+      "main": [
+        [
+          {
+            "node": "Apply?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply?": {
+      "main": [
+        [
+          {
+            "node": "Write Routes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Routes": {
+      "main": [
+        [
+          {
+            "node": "Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "activeVersion": null
+}

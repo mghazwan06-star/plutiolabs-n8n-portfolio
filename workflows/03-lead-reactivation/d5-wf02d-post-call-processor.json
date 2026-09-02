@@ -1,0 +1,1339 @@
+{
+  "id": "wd6OVv9aMwmHVddB",
+  "name": "D5 — 02d Post-Call Processor",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-05-22T16:34:35.980Z",
+  "updatedAt": "2026-08-22T12:52:39.000Z",
+  "isArchived": false,
+  "versionCounter": 9,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "d5wf2d-sticky1",
+      "name": "D5-WF2d Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        80
+      ],
+      "parameters": {
+        "content": "## D5-WF2d — Post-Call Processor (End-of-Call Handler)\n\nCalled **asynchronously** by D5-WF2b after VAPI fires end-of-call-report. No VAPI response needed.\n\n**Outcome routing:**\n- interested-callback → Reactivation Log (interested-callback) + D5 Callback Queue + Alert owner\n- not-interested → Reactivation Log (declined-final)\n- strong-dnc → Reactivation Log (opted-out) + Clients (do-not-contact, SMS Opt-Out=Y, Upcoming Appointment cleared) + Alert owner\n- no-answer → Retry logic (retry-pending if currentAttemptCount < maxAttempts, else exhausted)\n- already-terminal (booked/opted-out/interested-callback/declined-final/exhausted/completed) → update transcript URL only\n- unknown → log error\n\n**Attempt Count ownership:** WF2 is the sole incrementer. WF2d never writes Attempt Count.",
+        "color": 4,
+        "width": 760,
+        "height": 300
+      }
+    },
+    {
+      "id": "d5wf2d-sticky2",
+      "name": "Outcome Branches",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1460,
+        80
+      ],
+      "parameters": {
+        "content": "## Outcome Branch Notes\n\n**DNC write rule:** Only strong-dnc propagates to Clients. not-interested stays in D5 only.\n**Retry rule:** condition is currentAttemptCount < maxAttempts (WF2 already set count=1 after first call, so 1<2=retry, 2<2=exhausted).\n**Composite key:** Reactivation Log always matched on [Phone + Campaign ID].",
+        "color": 5,
+        "width": 400,
+        "height": 200
+      }
+    },
+    {
+      "id": "d5wf2d-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        480
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d5wf2d-config",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        300,
+        480
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-sheetId",
+              "name": "sheetId",
+              "value": "YOUR_CRM_SHEET_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-reactTab",
+              "name": "reactivationLogTab",
+              "value": "Reactivation Log",
+              "type": "string"
+            },
+            {
+              "id": "cfg-clientsTab",
+              "name": "clientsTab",
+              "value": "Clients",
+              "type": "string"
+            },
+            {
+              "id": "cfg-cbQueueTab",
+              "name": "callbackQueueTab",
+              "value": "D5 Callback Queue",
+              "type": "string"
+            },
+            {
+              "id": "cfg-twilioFrom",
+              "name": "twilioFromNumber",
+              "value": "PLACEHOLDER_TWILIO_FROM",
+              "type": "string"
+            },
+            {
+              "id": "cfg-ownerPhone",
+              "name": "ownerPhone",
+              "value": "PLACEHOLDER_OWNER_PHONE",
+              "type": "string"
+            },
+            {
+              "id": "cfg-maxAttempts",
+              "name": "maxVoiceAttempts",
+              "value": "2",
+              "type": "number"
+            },
+            {
+              "id": "cfg-retryHours",
+              "name": "retryDelayHours",
+              "value": "24",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {
+          "includeOtherFields": true
+        },
+        "includeOtherFields": true
+      }
+    },
+    {
+      "id": "d5wf2d-extract",
+      "name": "Extract Call Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        480
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "try {\n  var body = $input.first().json.body || $input.first().json;\n  var msg = body.message || {};\n  var call = msg.call || {};\n  var analysis = msg.analysis || {};\n  var structured = analysis.structuredData || {};\n  var phone = (call.customer && call.customer.number) ? call.customer.number : '';\n  var meta = call.metadata || {};\n  var campaignId = meta.campaignId || '';\n  var name = meta.name || '';\n  var attemptCount = parseInt(meta.attemptCount || 0);\n  var callId = call.id || '';\n  var interestLevel = structured.interest_level || 'no-answer';\n  var callbackPreference = structured.callback_preference || '';\n  var transcriptUrl = msg.recordingUrl || msg.stereoRecordingUrl || '';\n  var callDuration = Math.round(parseFloat(msg.durationSeconds || 0));\n  var serviceInterest = meta.serviceInterest || '';\n  return [{ json: { phone: phone, campaignId: campaignId, name: name, attemptCount: attemptCount, callId: callId, interestLevel: interestLevel, callbackPreference: callbackPreference, transcriptUrl: transcriptUrl, callDuration: callDuration, serviceInterest: serviceInterest } }];\n} catch(e) {\n  return [{ json: { phone: '', campaignId: '', name: '', attemptCount: 0, callId: '', interestLevel: 'no-answer', callbackPreference: '', transcriptUrl: '', callDuration: 0, serviceInterest: '', _error: e.message } }];\n}"
+      }
+    },
+    {
+      "id": "d5wf2d-phone-gate",
+      "name": "Phone Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        740,
+        480
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check-phone",
+              "leftValue": "={{ $json.phone }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d5wf2d-read-log",
+      "name": "Read Reactivation Log Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        960,
+        380
+      ],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}"
+        },
+        "filtersUI": {
+          "conditions": [
+            {
+              "keyName": "Phone",
+              "condition": "equals",
+              "value": "={{ $('Extract Call Result').first().json.phone }}"
+            },
+            {
+              "keyName": "Campaign ID",
+              "condition": "equals",
+              "value": "={{ $('Extract Call Result').first().json.campaignId }}"
+            }
+          ]
+        },
+        "returnFirstMatch": true,
+        "range": "A:Z",
+        "options": {}
+      }
+    },
+    {
+      "id": "d5wf2d-terminal-check",
+      "name": "Check Terminal State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        380
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "try {\n  var row = $input.first().json;\n  var extracted = $('Extract Call Result').first().json;\n  // exhausted and completed added — stale EOC events for these leads should only update transcript\n  var terminalStatuses = ['booked', 'opted-out', 'interested-callback', 'declined-final', 'exhausted', 'completed'];\n  var currentStatus = row['Reactivation Status'] || '';\n  var isTerminal = terminalStatuses.indexOf(currentStatus) !== -1;\n  var currentAttemptCount = parseInt(row['Attempt Count'] || extracted.attemptCount || 0);\n  var serviceInterest = row['Service Interest'] || extracted.serviceInterest || '';\n  return [{ json: { alreadyTerminal: isTerminal, currentStatus: currentStatus, currentAttemptCount: currentAttemptCount, serviceInterest: serviceInterest, phone: extracted.phone, campaignId: extracted.campaignId, name: extracted.name, interestLevel: extracted.interestLevel, callbackPreference: extracted.callbackPreference, transcriptUrl: extracted.transcriptUrl, callDuration: extracted.callDuration } }];\n} catch(e) {\n  var ex = $('Extract Call Result').first().json;\n  return [{ json: { alreadyTerminal: false, currentStatus: '', currentAttemptCount: ex.attemptCount || 0, serviceInterest: ex.serviceInterest || '', phone: ex.phone, campaignId: ex.campaignId, name: ex.name, interestLevel: ex.interestLevel, callbackPreference: ex.callbackPreference, transcriptUrl: ex.transcriptUrl, callDuration: ex.callDuration } }];\n}"
+      }
+    },
+    {
+      "id": "d5wf2d-terminal-gate",
+      "name": "Already Terminal?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1440,
+        380
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check-terminal",
+              "leftValue": "={{ $json.alreadyTerminal }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d5wf2d-update-transcript",
+      "name": "Update Transcript Only",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1680,
+        240
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $json.phone }}",
+            "Campaign ID": "={{ $json.campaignId }}",
+            "Transcript URL": "={{ $json.transcriptUrl }}",
+            "Call Duration": "={{ $json.callDuration }}",
+            "Last Touch": "={{ new Date().toISOString() }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Campaign ID",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Transcript URL",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Call Duration",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Touch",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone",
+            "Campaign ID"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      }
+    },
+    {
+      "id": "d5wf2d-route-outcome",
+      "name": "Route by Outcome",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1680,
+        500
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "mode": "rules",
+        "options": {
+          "fallbackOutput": "extra"
+        },
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "loose",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "id": "rule-interested",
+                    "leftValue": "={{ $json.interestLevel }}",
+                    "rightValue": "interested-callback",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "loose",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "id": "rule-not-interested",
+                    "leftValue": "={{ $json.interestLevel }}",
+                    "rightValue": "not-interested",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "loose",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "id": "rule-dnc",
+                    "leftValue": "={{ $json.interestLevel }}",
+                    "rightValue": "strong-dnc",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "loose",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "id": "rule-no-answer",
+                    "leftValue": "={{ $json.interestLevel }}",
+                    "rightValue": "no-answer",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d5wf2d-update-interested",
+      "name": "Update Log — Interested",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1940,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $json.phone }}",
+            "Campaign ID": "={{ $json.campaignId }}",
+            "Reactivation Status": "interested-callback",
+            "Last Touch": "={{ new Date().toISOString() }}",
+            "Callback Preference": "={{ $json.callbackPreference }}",
+            "Transcript URL": "={{ $json.transcriptUrl }}",
+            "Call Duration": "={{ $json.callDuration }}",
+            "Last Channel": "voice"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Campaign ID",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reactivation Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Touch",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Callback Preference",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Transcript URL",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Call Duration",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Channel",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone",
+            "Campaign ID"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      }
+    },
+    {
+      "id": "d5wf2d-alert-interested",
+      "name": "Alert Owner — Interested",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2420,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('⚙️ Client Config').first().json.ownerPhone }}",
+        "message": "={{ 'D5 WARM LEAD: ' + $('Check Terminal State').first().json.name + ' (' + $('Check Terminal State').first().json.phone + ') is interested! Callback preference: ' + ($('Check Terminal State').first().json.callbackPreference || 'not specified') + '. Service: ' + $('Check Terminal State').first().json.serviceInterest + '. Added to Callback Queue.' }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "d5wf2d-update-declined",
+      "name": "Update Log — Declined",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1940,
+        480
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $json.phone }}",
+            "Campaign ID": "={{ $json.campaignId }}",
+            "Reactivation Status": "declined-final",
+            "Last Touch": "={{ new Date().toISOString() }}",
+            "Completed At": "={{ new Date().toISOString() }}",
+            "Transcript URL": "={{ $json.transcriptUrl }}",
+            "Call Duration": "={{ $json.callDuration }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Campaign ID",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reactivation Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Touch",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Completed At",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Transcript URL",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Call Duration",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone",
+            "Campaign ID"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      }
+    },
+    {
+      "id": "d5wf2d-update-opted-out",
+      "name": "Update Log — Opted Out",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1940,
+        660
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $json.phone }}",
+            "Campaign ID": "={{ $json.campaignId }}",
+            "Reactivation Status": "opted-out",
+            "Last Touch": "={{ new Date().toISOString() }}",
+            "Completed At": "={{ new Date().toISOString() }}",
+            "Transcript URL": "={{ $json.transcriptUrl }}",
+            "Call Duration": "={{ $json.callDuration }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Campaign ID",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reactivation Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Touch",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Completed At",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Transcript URL",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Call Duration",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone",
+            "Campaign ID"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      }
+    },
+    {
+      "id": "d5wf2d-update-clients-dnc",
+      "name": "Update Clients — DNC",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2180,
+        660
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Check Terminal State').first().json.phone }}",
+            "Status": "do-not-contact",
+            "Last Outcome": "do-not-contact",
+            "SMS Opt-Out": "Y",
+            "Upcoming Appointment": "",
+            "Last Channel": "voice",
+            "Last Contact": "={{ new Date().toISOString() }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Outcome",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "SMS Opt-Out",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Upcoming Appointment",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Channel",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Contact",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      }
+    },
+    {
+      "id": "d5wf2d-alert-dnc",
+      "name": "Alert Owner — DNC",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2420,
+        660
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('⚙️ Client Config').first().json.ownerPhone }}",
+        "message": "={{ 'D5 DNC: ' + $('Check Terminal State').first().json.name + ' (' + $('Check Terminal State').first().json.phone + ') said never call again. Status set to do-not-contact in CRM.' }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "d5wf2d-retry-logic",
+      "name": "Retry Logic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1940,
+        840
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "try {\n  var cfg = $('⚙️ Client Config').first().json;\n  var data = $input.first().json;\n  var maxAttempts = cfg.maxVoiceAttempts || 2;\n  var retryHours = cfg.retryDelayHours || 24;\n  // WF2 increments Attempt Count on every call-initiated write.\n  // currentAttemptCount=1 means first call already fired. 1<2 → retry. 2<2 → exhausted.\n  var currentAttemptCount = data.currentAttemptCount || 0;\n  var newStatus, nextTouchAt, completedAt;\n  if (currentAttemptCount < maxAttempts) {\n    newStatus = 'retry-pending';\n    nextTouchAt = new Date(Date.now() + retryHours * 60 * 60 * 1000).toISOString();\n    completedAt = '';\n  } else {\n    newStatus = 'exhausted';\n    nextTouchAt = '';\n    completedAt = new Date().toISOString();\n  }\n  return [{ json: { phone: data.phone, campaignId: data.campaignId, newStatus: newStatus, nextTouchAt: nextTouchAt, completedAt: completedAt, transcriptUrl: data.transcriptUrl, callDuration: data.callDuration } }];\n} catch(e) {\n  var d = $input.first().json;\n  return [{ json: { phone: d.phone || '', campaignId: d.campaignId || '', newStatus: 'exhausted', nextTouchAt: '', completedAt: new Date().toISOString(), transcriptUrl: d.transcriptUrl || '', callDuration: d.callDuration || 0 } }];\n}"
+      }
+    },
+    {
+      "id": "d5wf2d-update-no-answer",
+      "name": "Update Log — No Answer",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2180,
+        840
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $json.phone }}",
+            "Campaign ID": "={{ $json.campaignId }}",
+            "Reactivation Status": "={{ $json.newStatus }}",
+            "Last Touch": "={{ new Date().toISOString() }}",
+            "Next Touch At": "={{ $json.nextTouchAt }}",
+            "Transcript URL": "={{ $json.transcriptUrl }}",
+            "Call Duration": "={{ $json.callDuration }}",
+            "Completed At": "={{ $json.completedAt }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Campaign ID",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reactivation Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Touch",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Next Touch At",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Transcript URL",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Call Duration",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Completed At",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone",
+            "Campaign ID"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      }
+    },
+    {
+      "id": "d5wf2d-update-unknown",
+      "name": "Update Log — Unknown Outcome",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1940,
+        1020
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $json.phone }}",
+            "Campaign ID": "={{ $json.campaignId }}",
+            "Last Touch": "={{ new Date().toISOString() }}",
+            "Error Notes": "={{ 'Unrecognised interest_level: ' + $json.interestLevel }}",
+            "Transcript URL": "={{ $json.transcriptUrl }}",
+            "Call Duration": "={{ $json.callDuration }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Campaign ID",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last Touch",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Error Notes",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Transcript URL",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Call Duration",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone",
+            "Campaign ID"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      }
+    },
+    {
+      "id": "write-to-callback-queue-hdr",
+      "name": "Write to Callback Queue · Headers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2180,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + ($('⚙️ Client Config').first().json.sheetId) + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.callbackQueueTab) + '!1:1' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": false,
+        "options": {
+          "timeout": 10000
+        }
+      }
+    },
+    {
+      "id": "write-to-callback-queue-build",
+      "name": "Write to Callback Queue · Build Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2350,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "try {\n  var hdrResp = $input.first().json || {};\n  var headers = (hdrResp.values && hdrResp.values[0] && hdrResp.values[0].length) ? hdrResp.values[0] : null;\n  var usedFallback = false;\n  if (!headers) { headers = [\"Phone\", \"Name\", \"Service Interest\", \"Callback Preference\", \"Reactivated Via\", \"Reactivated At\", \"Callback Status\", \"Notes\"]; usedFallback = true; }\n  var vals = {\n    \"Phone\": ($('Check Terminal State').first().json.phone),\n    \"Name\": ($('Check Terminal State').first().json.name),\n    \"Service Interest\": ($('Check Terminal State').first().json.serviceInterest),\n    \"Callback Preference\": ($('Check Terminal State').first().json.callbackPreference),\n    \"Reactivated Via\": \"voice\",\n    \"Reactivated At\": (new Date().toISOString()),\n    \"Callback Status\": \"pending\",\n    \"Notes\": \"\"\n  };\n  var row = [];\n  for (var i = 0; i < headers.length; i++) {\n    var h = String(headers[i] || '').trim();\n    row.push(Object.prototype.hasOwnProperty.call(vals, h) ? vals[h] : '');\n  }\n  return [{ json: { row: row, headersVerified: !usedFallback } }];\n} catch(e) { return [{ json: { row: [], headersVerified: false, buildError: e.message } }]; }"
+      }
+    },
+    {
+      "id": "write-to-callback-queue-app",
+      "name": "Write to Callback Queue · Atomic Append",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2520,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + ($('⚙️ Client Config').first().json.sheetId) + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.callbackQueueTab) + '!A:Z:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ values: [ $json.row ] }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Extract Call Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Call Result": {
+      "main": [
+        [
+          {
+            "node": "Phone Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phone Found?": {
+      "main": [
+        [
+          {
+            "node": "Read Reactivation Log Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Read Reactivation Log Row": {
+      "main": [
+        [
+          {
+            "node": "Check Terminal State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Terminal State": {
+      "main": [
+        [
+          {
+            "node": "Already Terminal?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Terminal?": {
+      "main": [
+        [
+          {
+            "node": "Update Transcript Only",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Route by Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Outcome": {
+      "main": [
+        [
+          {
+            "node": "Update Log — Interested",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Log — Declined",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Log — Opted Out",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retry Logic",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Log — Unknown Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Log — Interested": {
+      "main": [
+        [
+          {
+            "node": "Write to Callback Queue · Headers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Log — Opted Out": {
+      "main": [
+        [
+          {
+            "node": "Update Clients — DNC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Clients — DNC": {
+      "main": [
+        [
+          {
+            "node": "Alert Owner — DNC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Logic": {
+      "main": [
+        [
+          {
+            "node": "Update Log — No Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write to Callback Queue · Headers": {
+      "main": [
+        [
+          {
+            "node": "Write to Callback Queue · Build Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write to Callback Queue · Build Row": {
+      "main": [
+        [
+          {
+            "node": "Write to Callback Queue · Atomic Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write to Callback Queue · Atomic Append": {
+      "main": [
+        [
+          {
+            "node": "Alert Owner — Interested",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveManualExecutions": true
+  },
+  "tags": [],
+  "activeVersion": null
+}

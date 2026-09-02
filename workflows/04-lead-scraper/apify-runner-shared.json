@@ -1,0 +1,551 @@
+{
+  "id": "MBKrssJNgd1tBaLF",
+  "name": "PlutioLabs — Apify Runner (shared)",
+  "description": null,
+  "active": true,
+  "activeVersionId": "ac3b0346-9553-4249-bedd-486616b63a4c",
+  "createdAt": "2026-08-19T21:44:49.901Z",
+  "updatedAt": "2026-08-19T21:46:06.371Z",
+  "isArchived": false,
+  "versionCounter": 2,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "runner-trigger",
+      "name": "🧩 Runner Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "runner-start",
+      "name": "🚀 Start Apify Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/compass~crawler-google-places/runs?waitForFinish=60",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.actorInput) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENTIAL_ID",
+          "name": "Apify API"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "id": "runner-check-if",
+      "name": "🔀 Run Finished?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "finished",
+              "leftValue": "={{ ['RUNNING','READY'].indexOf($json.data.status) === -1 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "runner-wait",
+      "name": "⏳ Wait 20s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        500
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 20,
+        "unit": "seconds"
+      },
+      "webhookId": "df1bfbdd-f45c-4c1d-b91b-37670e886d62"
+    },
+    {
+      "id": "runner-status",
+      "name": "🔎 Check Run Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        660,
+        500
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apify.com/v2/actor-runs/{{ $json.data.id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENTIAL_ID",
+          "name": "Apify API"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "id": "runner-fetch",
+      "name": "📦 Fetch Dataset Items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.apify.com/v2/datasets/{{ $json.data.defaultDatasetId }}/items?format=json&limit=1000",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENTIAL_ID",
+          "name": "Apify API"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "runner-return",
+      "name": "📤 Return Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Collapse the dataset rows into ONE item so the caller gets a single blob.\n// Also surface the Apify run status so a FAILED run is visible rather than\n// silently looking like a zero-match run.\nvar status = 'UNKNOWN';\nvar runId = '';\ntry {\n  var f = $('🔀 Run Finished?').first().json;\n  status = (f.data && f.data.status) || 'UNKNOWN';\n  runId = (f.data && f.data.id) || '';\n} catch (e) { /* status stays UNKNOWN */ }\n\nvar rows = [];\ntry {\n  var items = $input.all();\n  for (var i = 0; i < items.length; i++) {\n    var j = items[i].json;\n    if (!j) { continue; }\n    // A failed HTTP fetch surfaces as an { error: ... } item - do not treat as data.\n    if (j.error && !j.searchString) { continue; }\n    rows.push(j);\n  }\n} catch (e2) { /* leave rows empty */ }\n\nreturn [{ json: { status: status, runId: runId, count: rows.length, items: rows } }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "runner-note",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        60
+      ],
+      "parameters": {
+        "width": 1300,
+        "height": 180,
+        "content": "## Apify Runner (shared sub-workflow)\n\nCalled by the CHILD enrich workflow for BOTH the place lookup and the review scrape.\n\n**Why it exists:** Code nodes on this n8n version have no `$helpers.httpRequest` (bug F-R15), so every Apify call must go through an HTTP Request node. Rather than duplicate start/poll/fetch twice, both callers share this.\n\n**Input:** `{ actorInput: { ...Google Places actor input... } }`\n**Output:** `{ status, runId, count, items: [ ...dataset rows... ] }`\n\nAuth is the **Apify API** credential (httpHeaderAuth, locked to api.apify.com). The key is NOT in any workflow config.\n\nPoll loop: start with `waitForFinish=60`, then Wait 20s → status → repeat. Bounded by the workflow execution timeout (30 min)."
+      }
+    }
+  ],
+  "connections": {
+    "🧩 Runner Input": {
+      "main": [
+        [
+          {
+            "node": "🚀 Start Apify Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🚀 Start Apify Run": {
+      "main": [
+        [
+          {
+            "node": "🔀 Run Finished?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 Run Finished?": {
+      "main": [
+        [
+          {
+            "node": "📦 Fetch Dataset Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "⏳ Wait 20s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⏳ Wait 20s": {
+      "main": [
+        [
+          {
+            "node": "🔎 Check Run Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔎 Check Run Status": {
+      "main": [
+        [
+          {
+            "node": "🔀 Run Finished?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📦 Fetch Dataset Items": {
+      "main": [
+        [
+          {
+            "node": "📤 Return Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 1800
+  },
+  "tags": [],
+  "activeVersion": {
+    "versionId": "ac3b0346-9553-4249-bedd-486616b63a4c",
+    "workflowId": "MBKrssJNgd1tBaLF",
+    "nodes": [
+      {
+        "id": "runner-trigger",
+        "name": "🧩 Runner Input",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          0,
+          300
+        ],
+        "parameters": {
+          "inputSource": "passthrough"
+        }
+      },
+      {
+        "id": "runner-start",
+        "name": "🚀 Start Apify Run",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          220,
+          300
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.apify.com/v2/acts/compass~crawler-google-places/runs?waitForFinish=60",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "httpHeaderAuth",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.actorInput) }}",
+          "options": {
+            "timeout": 120000
+          }
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "CREDENTIAL_ID",
+            "name": "Apify API"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 3000
+      },
+      {
+        "id": "runner-check-if",
+        "name": "🔀 Run Finished?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          440,
+          300
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "finished",
+                "leftValue": "={{ ['RUNNING','READY'].indexOf($json.data.status) === -1 }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "runner-wait",
+        "name": "⏳ Wait 20s",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          440,
+          500
+        ],
+        "parameters": {
+          "resume": "timeInterval",
+          "amount": 20,
+          "unit": "seconds"
+        },
+        "webhookId": "df1bfbdd-f45c-4c1d-b91b-37670e886d62"
+      },
+      {
+        "id": "runner-status",
+        "name": "🔎 Check Run Status",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          660,
+          500
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "=https://api.apify.com/v2/actor-runs/{{ $json.data.id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "httpHeaderAuth",
+          "options": {
+            "timeout": 60000
+          }
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "CREDENTIAL_ID",
+            "name": "Apify API"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 3000
+      },
+      {
+        "id": "runner-fetch",
+        "name": "📦 Fetch Dataset Items",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          880,
+          300
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "=https://api.apify.com/v2/datasets/{{ $json.data.defaultDatasetId }}/items?format=json&limit=1000",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "httpHeaderAuth",
+          "options": {
+            "timeout": 120000
+          }
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "CREDENTIAL_ID",
+            "name": "Apify API"
+          }
+        },
+        "alwaysOutputData": true,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "runner-return",
+        "name": "📤 Return Items",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1100,
+          300
+        ],
+        "parameters": {
+          "jsCode": "// Collapse the dataset rows into ONE item so the caller gets a single blob.\n// Also surface the Apify run status so a FAILED run is visible rather than\n// silently looking like a zero-match run.\nvar status = 'UNKNOWN';\nvar runId = '';\ntry {\n  var f = $('🔀 Run Finished?').first().json;\n  status = (f.data && f.data.status) || 'UNKNOWN';\n  runId = (f.data && f.data.id) || '';\n} catch (e) { /* status stays UNKNOWN */ }\n\nvar rows = [];\ntry {\n  var items = $input.all();\n  for (var i = 0; i < items.length; i++) {\n    var j = items[i].json;\n    if (!j) { continue; }\n    // A failed HTTP fetch surfaces as an { error: ... } item - do not treat as data.\n    if (j.error && !j.searchString) { continue; }\n    rows.push(j);\n  }\n} catch (e2) { /* leave rows empty */ }\n\nreturn [{ json: { status: status, runId: runId, count: rows.length, items: rows } }];"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "runner-note",
+        "name": "Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -20,
+          60
+        ],
+        "parameters": {
+          "width": 1300,
+          "height": 180,
+          "content": "## Apify Runner (shared sub-workflow)\n\nCalled by the CHILD enrich workflow for BOTH the place lookup and the review scrape.\n\n**Why it exists:** Code nodes on this n8n version have no `$helpers.httpRequest` (bug F-R15), so every Apify call must go through an HTTP Request node. Rather than duplicate start/poll/fetch twice, both callers share this.\n\n**Input:** `{ actorInput: { ...Google Places actor input... } }`\n**Output:** `{ status, runId, count, items: [ ...dataset rows... ] }`\n\nAuth is the **Apify API** credential (httpHeaderAuth, locked to api.apify.com). The key is NOT in any workflow config.\n\nPoll loop: start with `waitForFinish=60`, then Wait 20s → status → repeat. Bounded by the workflow execution timeout (30 min)."
+        }
+      }
+    ],
+    "connections": {
+      "🧩 Runner Input": {
+        "main": [
+          [
+            {
+              "node": "🚀 Start Apify Run",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "🚀 Start Apify Run": {
+        "main": [
+          [
+            {
+              "node": "🔀 Run Finished?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "🔀 Run Finished?": {
+        "main": [
+          [
+            {
+              "node": "📦 Fetch Dataset Items",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "⏳ Wait 20s",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⏳ Wait 20s": {
+        "main": [
+          [
+            {
+              "node": "🔎 Check Run Status",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "🔎 Check Run Status": {
+        "main": [
+          [
+            {
+              "node": "🔀 Run Finished?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "📦 Fetch Dataset Items": {
+        "main": [
+          [
+            {
+              "node": "📤 Return Items",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Muhammad Ghazwan",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-08-19T21:46:06.372Z",
+    "updatedAt": "2026-08-19T21:46:06.372Z",
+    "workflowPublishHistory": [
+      {
+        "id": 298,
+        "workflowId": "MBKrssJNgd1tBaLF",
+        "versionId": "ac3b0346-9553-4249-bedd-486616b63a4c",
+        "event": "activated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-19T21:46:06.659Z"
+      }
+    ]
+  }
+}

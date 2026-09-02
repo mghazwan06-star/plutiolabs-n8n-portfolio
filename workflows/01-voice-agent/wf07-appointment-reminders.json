@@ -1,0 +1,974 @@
+{
+  "id": "uTZkiPUDDHmZHJKa",
+  "name": "Voice Agent — 07 Appointment Reminders",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-04-15T12:31:42.827Z",
+  "updatedAt": "2026-08-22T12:42:03.359Z",
+  "isArchived": false,
+  "versionCounter": 23,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "sticky-wf7",
+      "name": "📋 WF7 Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        -560
+      ],
+      "parameters": {
+        "content": "## WF7 — Appointment Reminders\n\nRuns every 30 minutes. Reads Appointment Log + Clients.\nSends SMS reminders to clients with upcoming appointments.\n\n**Reminder sequence:**\n- R1: 24h before (22–26h window) — day-before reminder\n- R2: 2h before (1–3h window) — same-day reminder\n\n**Duplicate protection:** Reminder1Sent / Reminder2Sent stamps\n**SMS opt-out:** Cross-referenced from Clients tab\n**Failure isolation:** Split in Batches(1) — one failed SMS never kills others\n**Error alert:** Failed sends notify owner via SMS\n\n**New Appointment Log columns required:**\nAppointmentTimeISO | Reminder1Sent | Reminder2Sent | ConfirmedAt | CancelledAt\n\n**CONFIRM/CANCEL replies:** Handled by WF6 (new intent branches)\n\n**Credentials:** Google Sheets OAuth2 + Twilio",
+        "height": 520,
+        "width": 420,
+        "color": 7
+      }
+    },
+    {
+      "id": "sticky-wf7-logic",
+      "name": "📋 Reminder Logic",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        560,
+        -560
+      ],
+      "parameters": {
+        "content": "## Reminder Window Logic\n\n**R1 (24h):** diffH >= 22 && diffH <= 26\n→ 4h window catches any 30-min cron run near the 24h mark\n\n**R2 (2h):** diffH >= 1 && diffH <= 3\n→ 2h window catches any cron run near the 2h mark\n\n**Skip conditions:**\n- Appointment Log Status !== 'confirmed'\n- CancelledAt is set (client cancelled via SMS)\n- Clients.SMS Opt-Out === 'Y'\n- AppointmentTimeISO missing or unparseable\n- Appointment already in the past (diffH < 0)\n- Reminder already sent (Reminder1Sent / Reminder2Sent not empty)\n\n**Error handling:** Failed Twilio sends alert owner via SMS",
+        "height": 420,
+        "width": 380,
+        "color": 4
+      }
+    },
+    {
+      "id": "wf7-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -64,
+        208
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wf7-config",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        192,
+        208
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-sheet-id",
+              "name": "sheetId",
+              "value": "YOUR_CRM_SHEET_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-appt-tab",
+              "name": "appointmentsTab",
+              "value": "Appointment Log",
+              "type": "string"
+            },
+            {
+              "id": "cfg-clients-tab",
+              "name": "clientsTab",
+              "value": "Clients",
+              "type": "string"
+            },
+            {
+              "id": "cfg-twilio-from",
+              "name": "twilioFrom",
+              "value": "PLACEHOLDER_TWILIO_NUMBER",
+              "type": "string"
+            },
+            {
+              "id": "cfg-owner-phone",
+              "name": "ownerPhone",
+              "value": "PLACEHOLDER_OWNER_PHONE",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "wf7-read-appt",
+      "name": "Read Appointment Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        448,
+        208
+      ],
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+        },
+        "range": "A:Z",
+        "filtersUI": {},
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "wf7-read-clients",
+      "name": "Read Clients",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        704,
+        208
+      ],
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "range": "A:Z",
+        "filtersUI": {},
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "wf7-prep",
+      "name": "Prep Reminder Queue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        208
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var apptRows = $('Read Appointment Log').all().map(function(i) { return i.json; });\n  var clientRows = $('Read Clients').all().map(function(i) { return i.json; });\n  var optOutMap = {};\n  clientRows.forEach(function(c) {\n    // D3 BUG-R17 blast radius: an exact string match fails the moment either sheet stores\n    // a phone differently (a coerced number, a stray space). A failed match here means an\n    // opted-out person receives an SMS. Compare digits only.\n    if (c['SMS Opt-Out'] === 'Y') { optOutMap[String(c['Phone'] || '').replace(/[^0-9]/g, '')] = true; }\n  });\n  var now = new Date();\n  var month = now.getUTCMonth() + 1;\n  var tzOffset = (month >= 3 && month <= 10) ? 1 : 0;\n  var nowMs = now.getTime();\n  var queue = [];\n  apptRows.forEach(function(appt) {\n    if (!appt['CalendarEventId'] || !appt['Phone'] || !appt['AppointmentTimeISO']) return;\n    if (appt['Status'] !== 'confirmed') return;\n    // D3 BUG-R10: the live column is 'CancelledAt' with NO space. The spaced version read\n    // undefined, so this guard never fired — masked only by the Status check above it.\n    if (appt['CancelledAt']) return;\n    var apptDigits = String(appt['Phone'] || '').replace(/[^0-9]/g, '');\n    if (apptDigits && optOutMap[apptDigits]) return;\n    var apptMs;\n    try { apptMs = new Date(appt['AppointmentTimeISO']).getTime(); } catch(parseErr) { return; }\n    if (isNaN(apptMs)) return;\n    var diffH = (apptMs - nowMs) / (1000 * 60 * 60);\n    if (diffH < 0) return;\n    if (diffH >= 22 && diffH <= 26 && !appt['Reminder1Sent']) {\n      queue.push({ calendarEventId: appt['CalendarEventId'], phone: appt['Phone'], name: appt['Name'] || 'there', service: appt['Service'] || 'appointment', date: appt['Date'] || '', time: appt['Time'] || '', reminderType: 'R1' });\n    }\n    if (diffH >= 1 && diffH <= 3 && !appt['Reminder2Sent']) {\n      queue.push({ calendarEventId: appt['CalendarEventId'], phone: appt['Phone'], name: appt['Name'] || 'there', service: appt['Service'] || 'appointment', date: appt['Date'] || '', time: appt['Time'] || '', reminderType: 'R2' });\n    }\n  });\n  if (queue.length === 0) { return [{ json: { action: 'none', count: 0 } }]; }\n  return queue.map(function(r) { return { json: r }; });\n} catch(e) { return [{ json: { action: 'error', error: e.message } }]; }"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf7-if-needed",
+      "name": "Reminders Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1200,
+        208
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "reminders-due",
+              "leftValue": "={{ $json.reminderType ? 'go' : 'stop' }}",
+              "rightValue": "go",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf7-no-op",
+      "name": "No Reminders Due",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1440,
+        368
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "noop-status",
+              "name": "status",
+              "value": "no-reminders-due",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "wf7-split",
+      "name": "Split Per Appointment",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1440,
+        80
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf7-switch",
+      "name": "R1 or R2?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1680,
+        80
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "sw-r1",
+                    "leftValue": "={{ $json.reminderType }}",
+                    "rightValue": "R1",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "R1"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "sw-r2",
+                    "leftValue": "={{ $json.reminderType }}",
+                    "rightValue": "R2",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "R2"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf7-build-r1",
+      "name": "Build R1 SMS",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1920,
+        -80
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r1-to",
+              "name": "to",
+              "value": "={{ $json.phone }}",
+              "type": "string"
+            },
+            {
+              "id": "r1-from",
+              "name": "from",
+              "value": "={{ $('⚙️ Client Config').first().json.twilioFrom }}",
+              "type": "string"
+            },
+            {
+              "id": "r1-body",
+              "name": "body",
+              "value": "={{ 'Hi ' + $json.name + ', reminder: your ' + $json.service + ' appointment is tomorrow at ' + $json.time + '. Reply CONFIRM to confirm or CANCEL to cancel.' }}",
+              "type": "string"
+            },
+            {
+              "id": "r1-event-id",
+              "name": "calendarEventId",
+              "value": "={{ $json.calendarEventId }}",
+              "type": "string"
+            },
+            {
+              "id": "r1-type",
+              "name": "reminderType",
+              "value": "R1",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wf7-send-r1",
+      "name": "Send R1 SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        -80
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "operation": "send",
+        "from": "={{ $json.from }}",
+        "to": "={{ $json.to }}",
+        "message": "={{ $json.body }}"
+      },
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf7-r1-ok",
+      "name": "R1 Sent OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2400,
+        -80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "r1-ok-check",
+              "leftValue": "={{ $json.sid ? 'ok' : 'fail' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf7-update-r1",
+      "name": "Update R1Sent in Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2640,
+        -160
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "CalendarEventId": "={{ $('Build R1 SMS').first().json.calendarEventId }}",
+            "Reminder1Sent": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "CalendarEventId",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reminder1Sent",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "CalendarEventId"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "wf7-r1-err",
+      "name": "Alert Owner R1 Fail",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFrom }}",
+        "to": "={{ $('⚙️ Client Config').first().json.ownerPhone }}",
+        "message": "={{ '❌ Reminder R1 failed for ' + $('Build R1 SMS').first().json.to + '. Send day-before reminder manually.' }}"
+      },
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf7-build-r2",
+      "name": "Build R2 SMS",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1920,
+        240
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r2-to",
+              "name": "to",
+              "value": "={{ $json.phone }}",
+              "type": "string"
+            },
+            {
+              "id": "r2-from",
+              "name": "from",
+              "value": "={{ $('⚙️ Client Config').first().json.twilioFrom }}",
+              "type": "string"
+            },
+            {
+              "id": "r2-body",
+              "name": "body",
+              "value": "={{ 'Reminder: your ' + $json.service + ' appointment is in approximately 2 hours (at ' + $json.time + '). Reply CONFIRM to confirm or CANCEL to cancel.' }}",
+              "type": "string"
+            },
+            {
+              "id": "r2-event-id",
+              "name": "calendarEventId",
+              "value": "={{ $json.calendarEventId }}",
+              "type": "string"
+            },
+            {
+              "id": "r2-type",
+              "name": "reminderType",
+              "value": "R2",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wf7-send-r2",
+      "name": "Send R2 SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        240
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "operation": "send",
+        "from": "={{ $json.from }}",
+        "to": "={{ $json.to }}",
+        "message": "={{ $json.body }}"
+      },
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf7-r2-ok",
+      "name": "R2 Sent OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2400,
+        240
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "r2-ok-check",
+              "leftValue": "={{ $json.sid ? 'ok' : 'fail' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "wf7-update-r2",
+      "name": "Update R2Sent in Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2640,
+        160
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "CalendarEventId": "={{ $('Build R2 SMS').first().json.calendarEventId }}",
+            "Reminder2Sent": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "CalendarEventId",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reminder2Sent",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "CalendarEventId"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "wf7-r2-err",
+      "name": "Alert Owner R2 Fail",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        320
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFrom }}",
+        "to": "={{ $('⚙️ Client Config').first().json.ownerPhone }}",
+        "message": "={{ '❌ Reminder R2 failed for ' + $('Build R2 SMS').first().json.to + '. Send 2-hour reminder manually.' }}"
+      },
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "wf7-merge",
+      "name": "Merge All Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2880,
+        80
+      ],
+      "parameters": {},
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Read Appointment Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Appointment Log": {
+      "main": [
+        [
+          {
+            "node": "Read Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Clients": {
+      "main": [
+        [
+          {
+            "node": "Prep Reminder Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Reminder Queue": {
+      "main": [
+        [
+          {
+            "node": "Reminders Needed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reminders Needed?": {
+      "main": [
+        [
+          {
+            "node": "Split Per Appointment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Reminders Due",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Per Appointment": {
+      "main": [
+        [],
+        [
+          {
+            "node": "R1 or R2?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "R1 or R2?": {
+      "main": [
+        [
+          {
+            "node": "Build R1 SMS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build R2 SMS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build R1 SMS": {
+      "main": [
+        [
+          {
+            "node": "Send R1 SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send R1 SMS": {
+      "main": [
+        [
+          {
+            "node": "R1 Sent OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "R1 Sent OK?": {
+      "main": [
+        [
+          {
+            "node": "Update R1Sent in Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Owner R1 Fail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update R1Sent in Sheets": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Owner R1 Fail": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build R2 SMS": {
+      "main": [
+        [
+          {
+            "node": "Send R2 SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send R2 SMS": {
+      "main": [
+        [
+          {
+            "node": "R2 Sent OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "R2 Sent OK?": {
+      "main": [
+        [
+          {
+            "node": "Update R2Sent in Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Owner R2 Fail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update R2Sent in Sheets": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Owner R2 Fail": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge All Results": {
+      "main": [
+        [
+          {
+            "node": "Split Per Appointment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "tags": [],
+  "activeVersion": null
+}

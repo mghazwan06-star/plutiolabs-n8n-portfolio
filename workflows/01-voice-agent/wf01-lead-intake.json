@@ -1,0 +1,1094 @@
+{
+  "id": "1GG6GF0PR78sjUa5",
+  "name": "Voice Agent — 01 Lead Intake & Outbound Trigger",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-04-07T01:08:00.426Z",
+  "updatedAt": "2026-08-21T22:49:29.687Z",
+  "isArchived": false,
+  "versionCounter": 36,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WF1 Overview",
+        "height": 420,
+        "width": 340,
+        "color": 7
+      },
+      "id": "wf1-sticky-overview",
+      "name": "WF1 Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -336,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Lead Validation + Duplicate Guard",
+        "height": 200,
+        "width": 280,
+        "color": 5
+      },
+      "id": "wf1-sticky-validation",
+      "name": "Validation Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        544,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## VAPI Call + Status Tracking",
+        "height": 200,
+        "width": 280,
+        "color": 6
+      },
+      "id": "wf1-sticky-vapi",
+      "name": "VAPI Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1504,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-intake",
+        "responseMode": "responseNode",
+        "options": {},
+        "authentication": "headerAuth"
+      },
+      "id": "wf1-webhook",
+      "name": "Webhook Lead Intake",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        304
+      ],
+      "webhookId": "b8a46938-c38e-43f4-9ecf-fa027b13333e",
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENTIAL_ID",
+          "name": "D2 WF1 Lead Intake — header key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-sheetId",
+              "name": "sheetId",
+              "value": "YOUR_CRM_SHEET_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-clientsTab",
+              "name": "clientsTab",
+              "value": "Clients",
+              "type": "string"
+            },
+            {
+              "id": "cfg-businessName",
+              "name": "businessName",
+              "value": "Solarify",
+              "type": "string"
+            },
+            {
+              "id": "cfg-timezone",
+              "name": "timezone",
+              "value": "Europe/London",
+              "type": "string"
+            },
+            {
+              "id": "cfg-vapiApiKey",
+              "name": "vapiApiKey",
+              "value": "PLACEHOLDER_VAPI_API_KEY",
+              "type": "string"
+            },
+            {
+              "id": "cfg-vapiAssistantId",
+              "name": "vapiAssistantId",
+              "value": "PLACEHOLDER_VAPI_ASSISTANT_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-vapiPhoneNumberId",
+              "name": "vapiPhoneNumberId",
+              "value": "PLACEHOLDER_VAPI_PHONE_NUMBER_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-twilioFrom",
+              "name": "twilioFromNumber",
+              "value": "PLACEHOLDER_TWILIO_NUMBER",
+              "type": "string"
+            },
+            {
+              "id": "cfg-ownerPhone",
+              "name": "businessOwnerPhone",
+              "value": "PLACEHOLDER_OWNER_PHONE",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "includeOtherFields": true
+        },
+        "includeOtherFields": true
+      },
+      "id": "wf1-config",
+      "name": "Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "var items = $input.all();\nvar body = items[0].json.body || {};\n\nfunction sanitize(str) { return String(str || '').replace(/^[=+\\-@]/, '').trim(); }\n\nvar phone = body.phone || body.Phone || body.phoneNumber || body.phone_number || '';\nvar name = sanitize(body.name || body.Name || body.fullName || body.full_name || '');\nvar email = sanitize(body.email || body.Email || '');\nvar serviceInterest = sanitize(body.serviceInterest || body.service_interest || body.service || body.Service || '');\nvar leadSource = sanitize(body.leadSource || body.lead_source || body.source || body.utm_source || 'Website');\n\nif (phone && phone.charAt(0) === '0') {\n  phone = '+44' + phone.substring(1);\n} else if (phone && phone.charAt(0) !== '+') {\n  phone = '+' + phone;\n}\nphone = phone.replace(/[^+\\d]/g, '');\n\nreturn [{ json: { phone: phone, name: name, email: email, serviceInterest: serviceInterest, leadSource: leadSource, createdAt: new Date().toISOString() } }];"
+      },
+      "id": "wf1-parse",
+      "name": "Parse Lead Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        304
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "phone-not-empty",
+              "leftValue": "={{ $json.phone }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf1-phone-check",
+      "name": "Phone Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        720,
+        304
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Missing or invalid phone number",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "wf1-respond-400",
+      "name": "Respond 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        960,
+        512
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Client Config').first().json.clientsTab }}"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Phone",
+              "lookupValue": "={{ $('Parse Lead Data').first().json.phone }}"
+            }
+          ]
+        },
+        "options": {
+          "returnFirstMatch": true
+        }
+      },
+      "id": "wf1-read-existing",
+      "name": "Check Existing Lead",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        960,
+        304
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "status-not-empty",
+              "leftValue": "={{ $json['Status'] }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "status-not-new",
+              "leftValue": "={{ $json['Status'] }}",
+              "rightValue": "new",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "status-not-no-answer",
+              "leftValue": "={{ $json['Status'] }}",
+              "rightValue": "no-answer",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "status-not-voicemail",
+              "leftValue": "={{ $json['Status'] }}",
+              "rightValue": "voicemail",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "status-not-unresponsive",
+              "leftValue": "={{ $json['Status'] }}",
+              "rightValue": "unresponsive",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "status-not-called",
+              "leftValue": "={{ $json['Status'] }}",
+              "rightValue": "called",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "status-not-inbound-incomplete",
+              "leftValue": "={{ $json['Status'] }}",
+              "rightValue": "inbound-incomplete",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "status-not-call-initiated",
+              "leftValue": "={{ $json['Status'] }}",
+              "rightValue": "call-initiated",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf1-dup-check",
+      "name": "Lead Already Processed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1200,
+        304
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Lead already in system",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "wf1-respond-dup",
+      "name": "Respond 200 Already Handled",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1440,
+        192
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Client Config').first().json.clientsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Parse Lead Data').first().json.phone }}",
+            "Name": "={{ $('Parse Lead Data').first().json.name }}",
+            "Email": "={{ $('Parse Lead Data').first().json.email }}",
+            "Service Interest": "={{ $('Parse Lead Data').first().json.serviceInterest }}",
+            "Lead Source": "={{ $('Parse Lead Data').first().json.leadSource }}",
+            "Status": "new",
+            "Created At": "={{ $('Parse Lead Data').first().json.createdAt }}",
+            "Sequence Step": "0",
+            "Sequence Started At": "",
+            "SMS Opt-Out": "N"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Name",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Email",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Service Interest",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Lead Source",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Created At",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Sequence Step",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Sequence Started At",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "SMS Opt-Out",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "wf1-write-row",
+      "name": "Write Client Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1440,
+        304
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "var config = $('Client Config').first().json;\nvar lead = $('Parse Lead Data').first().json;\n\nvar payload = {\n  assistantId: config.vapiAssistantId,\n  phoneNumberId: config.vapiPhoneNumberId,\n  customer: { number: lead.phone, name: lead.name },\n  assistantOverrides: { variableValues: { leadName: lead.name, serviceInterest: lead.serviceInterest, leadSource: lead.leadSource } },\n  metadata: { source: 'WF1-lead-intake' }\n};\n\nreturn [{ json: { payload: payload, phone: lead.phone, name: lead.name } }];"
+      },
+      "id": "wf1-build-payload",
+      "name": "Build VAPI Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        304
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vapi.ai/call",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.payload }}",
+        "options": {
+          "timeout": 15000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "id": "wf1-fire-call",
+      "name": "Fire Outbound Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1920,
+        304
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": false,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENTIAL_ID",
+          "name": "VAPI API — D2 Voice Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "call-id-exists",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf1-call-check",
+      "name": "Call Fired",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2160,
+        304
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Client Config').first().json.clientsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Build VAPI Payload').first().json.phone }}",
+            "Status": "call-initiated"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "wf1-update-initiated",
+      "name": "Update Status Call Initiated",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2400,
+        192
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Lead received. Outbound call initiated.",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "wf1-respond-success",
+      "name": "Respond 200 Call Initiated",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2640,
+        192
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Client Config').first().json.clientsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Build VAPI Payload').first().json.phone }}",
+            "Status": "new"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "wf1-reset-status",
+      "name": "Reset Status VAPI Failed",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2400,
+        432
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "from": "={{ $('Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ 'VAPI call failed for ' + $('Build VAPI Payload').first().json.name + ' (' + $('Build VAPI Payload').first().json.phone + '). Follow up manually.' }}",
+        "options": {}
+      },
+      "id": "wf1-alert-owner",
+      "name": "Alert Owner VAPI Failed",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        704
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Lead received. Manual follow-up required.",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "wf1-respond-failed",
+      "name": "Respond 200 VAPI Failed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2640,
+        432
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "var now = new Date();\nvar month = now.getUTCMonth() + 1;\nvar tzOffset = (month >= 3 && month <= 10) ? 1 : 0;\nvar localHour = (now.getUTCHours() + tzOffset) % 24;\nvar isBusinessHours = (localHour >= 8 && localHour < 21);\nvar items = $input.all();\nreturn [{ json: Object.assign({}, items[0].json, { withinBusinessHours: isBusinessHours, localHour: localHour }) }];"
+      },
+      "id": "wf1-biz-hours-check",
+      "name": "Business Hours Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        144
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "biz-hours-true",
+              "leftValue": "={{ $json.withinBusinessHours }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf1-within-hours",
+      "name": "Within Business Hours?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1760,
+        144
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Lead received. Call will be placed during business hours (08:00-21:00 London time).",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "wf1-respond-queued",
+      "name": "Respond 200 Queued",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1968,
+        32
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e1eeb66b-ac40-4b0b-b8f9-2b242144d77b",
+      "name": "Lead Row Written?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1440,
+        560
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "lead-row-ok",
+              "leftValue": "={{ $json.error ? 'fail' : 'ok' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "82786062-8829-428c-b74e-a0a2924cd654",
+      "name": "Alert Owner — Lead Row NOT Saved",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        700
+      ],
+      "parameters": {
+        "from": "={{ $('Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ '🚨 LEAD NOT SAVED: ' + $('Parse Lead Data').first().json.name + ' (' + $('Parse Lead Data').first().json.phone + ', ' + $('Parse Lead Data').first().json.serviceInterest + ') could not be written to the CRM. The call may still fire, but NO automatic retry or follow-up will happen for this lead. Add them manually now.' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Lead Intake": {
+      "main": [
+        [
+          {
+            "node": "Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Config": {
+      "main": [
+        [
+          {
+            "node": "Parse Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Lead Data": {
+      "main": [
+        [
+          {
+            "node": "Phone Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phone Valid": {
+      "main": [
+        [
+          {
+            "node": "Check Existing Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Existing Lead": {
+      "main": [
+        [
+          {
+            "node": "Lead Already Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Already Processed": {
+      "main": [
+        [
+          {
+            "node": "Respond 200 Already Handled",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Write Client Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build VAPI Payload": {
+      "main": [
+        [
+          {
+            "node": "Fire Outbound Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fire Outbound Call": {
+      "main": [
+        [
+          {
+            "node": "Call Fired",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Fired": {
+      "main": [
+        [
+          {
+            "node": "Update Status Call Initiated",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reset Status VAPI Failed",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Alert Owner VAPI Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Status Call Initiated": {
+      "main": [
+        [
+          {
+            "node": "Respond 200 Call Initiated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reset Status VAPI Failed": {
+      "main": [
+        [
+          {
+            "node": "Respond 200 VAPI Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Client Row": {
+      "main": [
+        [
+          {
+            "node": "Business Hours Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lead Row Written?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Business Hours Check": {
+      "main": [
+        [
+          {
+            "node": "Within Business Hours?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Within Business Hours?": {
+      "main": [
+        [
+          {
+            "node": "Build VAPI Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 200 Queued",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Row Written?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Alert Owner — Lead Row NOT Saved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "binaryMode": "separate",
+    "timezone": "Europe/London"
+  },
+  "tags": [],
+  "activeVersion": null
+}

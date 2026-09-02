@@ -1,0 +1,231 @@
+{
+  "id": "dogDkkAILhFyzztx",
+  "name": "PlutioLabs — Utility: Dedupe CRM",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-08-16T19:53:37.080Z",
+  "updatedAt": "2026-08-16T19:54:59.493Z",
+  "isArchived": false,
+  "versionCounter": 1,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "sticky",
+      "name": "ℹ️ About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -420,
+        -60
+      ],
+      "parameters": {
+        "width": 520,
+        "height": 240,
+        "content": "## De-duplicates the Outreach CRM\n\nKeeps the **first** occurrence of each `MCS Cert Number`, deletes later ones.\n\nCause of the duplicates: F-R3 — the Sheets node wrote `+44XXXXXXXXXX` under `USER_ENTERED`, Google coerced it to the number `441224638888`, so `appendOrUpdate` never matched its own key and appended instead of updating.\n\nDeletes bottom-up in merged contiguous ranges so row indices don't shift mid-operation.\n\n**Dry run by default.** POST `{\"apply\": true}` to actually delete."
+      }
+    },
+    {
+      "id": "trig",
+      "name": "📥 Run",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -420,
+        320
+      ],
+      "parameters": {
+        "path": "crm-dedupe",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "58a406e6-aa7b-48a5-8bc0-89c4ba09c3a5"
+    },
+    {
+      "id": "meta",
+      "name": "📐 Get Sheet Metadata",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -180,
+        320
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "GET",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SCRAPER_SHEET_ID?fields=sheets.properties",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "vals",
+      "name": "📖 Get Values",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        60,
+        320
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "GET",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/YOUR_SCRAPER_SHEET_ID/values/{{ encodeURIComponent(\"'Outreach CRM'!A:BE\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "calc",
+      "name": "🧮 Find Duplicates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        320
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "// Identify duplicate rows by MCS Cert Number, keeping the FIRST occurrence.\n// Emits merged, descending deleteDimension ranges so indices never shift.\ntry {\n  var valsRes = $input.first().json;\n  var rows = valsRes.values || [];\n  if (rows.length < 2) { return [{ json: { _error: 'Sheet has no data rows' } }]; }\n\n  var metaRes = $('📐 Get Sheet Metadata').first().json;\n  var sheets = (metaRes && metaRes.sheets) ? metaRes.sheets : [];\n  var sheetId = null;\n  for (var s = 0; s < sheets.length; s++) {\n    var p = sheets[s].properties || {};\n    if (p.title === 'Outreach CRM') { sheetId = p.sheetId; break; }\n  }\n  if (sheetId === null) { return [{ json: { _error: 'Tab \"Outreach CRM\" not found' } }]; }\n\n  var header = rows[0];\n  var iCert = header.indexOf('MCS Cert Number');\n  var iName = header.indexOf('Company Name');\n  var iPhone = header.indexOf('Phone');\n  if (iCert === -1) { return [{ json: { _error: 'Header \"MCS Cert Number\" not found' } }]; }\n\n  var seen = {};\n  var dupRows = [];      // 0-based SHEET row indices (header = 0)\n  var noCert = 0, kept = 0;\n  var examples = [];\n\n  for (var r = 1; r < rows.length; r++) {\n    var row = rows[r] || [];\n    var cert = (row[iCert] === undefined) ? '' : String(row[iCert]).trim();\n    if (!cert) { noCert++; kept++; continue; }   // never delete a row we can't key\n    if (seen[cert]) {\n      dupRows.push(r);\n      if (examples.length < 5) {\n        examples.push({ sheetRow: r + 1, name: row[iName] || '', cert: cert, phone: row[iPhone] || '' });\n      }\n    } else {\n      seen[cert] = true;\n      kept++;\n    }\n  }\n\n  // Merge consecutive indices into ranges, then sort DESCENDING.\n  dupRows.sort(function(a, b) { return a - b; });\n  var ranges = [];\n  for (var d = 0; d < dupRows.length; d++) {\n    var start = dupRows[d];\n    var end = start;\n    while (d + 1 < dupRows.length && dupRows[d + 1] === end + 1) { d++; end = dupRows[d]; }\n    ranges.push({ startIndex: start, endIndex: end + 1 });\n  }\n  ranges.sort(function(a, b) { return b.startIndex - a.startIndex; });\n\n  var requests = [];\n  for (var q = 0; q < ranges.length; q++) {\n    requests.push({ deleteDimension: { range: {\n      sheetId: sheetId, dimension: 'ROWS',\n      startIndex: ranges[q].startIndex, endIndex: ranges[q].endIndex\n    }}});\n  }\n\n  var body = $('📥 Run').first().json.body || {};\n  var apply = body.apply === true;\n\n  return [{ json: {\n    sheetId: sheetId,\n    dataRowsBefore: rows.length - 1,\n    uniqueCerts: Object.keys(seen).length,\n    rowsWithoutCert: noCert,\n    duplicatesFound: dupRows.length,\n    expectedRowsAfter: kept,\n    deleteRangeCount: ranges.length,\n    firstRanges: ranges.slice(0, 5),\n    examples: examples,\n    apply: apply,\n    requests: apply ? requests : []\n  }}];\n} catch (e) {\n  return [{ json: { _error: 'Find Duplicates failed: ' + e.message } }];\n}"
+      }
+    },
+    {
+      "id": "del",
+      "name": "🗑️ Delete Rows",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        540,
+        320
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SCRAPER_SHEET_ID:batchUpdate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ requests: $json.requests }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "sum",
+      "name": "📝 Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        320
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "try {\n  var plan = $('🧮 Find Duplicates').first().json;\n  var res = $input.first().json || {};\n  var replies = (res.replies || []).length;\n  return [{ json: {\n    mode: plan.apply ? 'APPLIED' : 'DRY RUN (post {\"apply\":true} to delete)',\n    dataRowsBefore: plan.dataRowsBefore,\n    duplicatesFound: plan.duplicatesFound,\n    uniqueCerts: plan.uniqueCerts,\n    rowsWithoutCert: plan.rowsWithoutCert,\n    expectedRowsAfter: plan.expectedRowsAfter,\n    deleteRangesSent: plan.apply ? plan.deleteRangeCount : 0,\n    apiRepliesReceived: replies,\n    firstRanges: plan.firstRanges,\n    duplicateExamples: plan.examples,\n    apiError: res.error ? res.error : null\n  }}];\n} catch (e) {\n  return [{ json: { _error: 'Summary failed: ' + e.message } }];\n}"
+      }
+    }
+  ],
+  "connections": {
+    "📥 Run": {
+      "main": [
+        [
+          {
+            "node": "📐 Get Sheet Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📐 Get Sheet Metadata": {
+      "main": [
+        [
+          {
+            "node": "📖 Get Values",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📖 Get Values": {
+      "main": [
+        [
+          {
+            "node": "🧮 Find Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧮 Find Duplicates": {
+      "main": [
+        [
+          {
+            "node": "🗑️ Delete Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🗑️ Delete Rows": {
+      "main": [
+        [
+          {
+            "node": "📝 Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London"
+  },
+  "tags": [],
+  "activeVersion": null
+}

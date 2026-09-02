@@ -1,0 +1,248 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="190 -50 3900 1054" width="1600" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect x="190" y="-50" width="3900" height="1054" fill="#f7f7f8"/>
+<defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#dcdce0"/></pattern></defs>
+<rect x="190" y="-50" width="3900" height="1054" fill="url(#g)"/>
+<rect x="280" y="40" width="1060" height="260" rx="8" fill="#fff8b8" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="292" y="64" font-size="13.5" font-weight="700" fill="#5f5930">WF-C2: Claude Core — WhatsApp AI Orchestrator</text>
+<text x="292" y="81" font-size="11.5" fill="#6f6840">Called by: WF-C1 (WhatsApp Receiver) via async HTTP POST</text>
+<text x="292" y="95" font-size="11.5" fill="#6f6840">Flow: Webhook (onReceived) → Load Supabase session → Build Claude payload → Call Claude R1 → IF tool_use → dispatch to WF-C3a/b/c/d/e/f →</text>
+<text x="292" y="109" font-size="11.5" fill="#6f6840">Call Claude R2 → Save session → Call WF-C4 (Send Reply)</text>
+<text x="292" y="123" font-size="11.5" fill="#6f6840">Direct text flow (no tool): Webhook → ... → Parse R1 → Build Direct Reply → Save Session Direct → Call Send Reply Direct</text>
+<text x="292" y="137" font-size="11.5" fill="#6f6840">⚠️ BEFORE ACTIVATION — Configure n8n credentials:</text>
+<text x="292" y="151" font-size="11.5" fill="#6f6840">- Anthropic HTTP Header Auth (x-api-key): add to Call Claude R1 + Call Claude R2</text>
+<text x="292" y="165" font-size="11.5" fill="#6f6840">- Supabase HTTP Header Auth (apikey + Authorization): add to Load Session, Save Session Direct, Save Session Tool</text>
+<text x="292" y="179" font-size="11.5" fill="#6f6840">- Twilio Basic Auth: add to WF-C4 (Send Reply)</text>
+<text x="292" y="193" font-size="11.5" fill="#6f6840">- Table name: sessions | Columns: session_id TEXT PK, phone TEXT, messages TEXT, updated_at TEXT</text>
+<g fill="none" stroke="#9aa0a6" stroke-width="2.5">
+<path d="M400,490 C463,490 477,490 533,490"/>
+<path d="M533,485 L540,490 L533,495" fill="#9aa0a6" stroke="none"/>
+<path d="M640,490 C703,490 717,490 773,490"/>
+<path d="M773,485 L780,490 L773,495" fill="#9aa0a6" stroke="none"/>
+<path d="M880,490 C943,490 957,490 1013,490"/>
+<path d="M1013,485 L1020,490 L1013,495" fill="#9aa0a6" stroke="none"/>
+<path d="M1120,490 C1183,490 1197,490 1253,490"/>
+<path d="M1253,485 L1260,490 L1253,495" fill="#9aa0a6" stroke="none"/>
+<path d="M1360,490 C1423,490 1437,490 1493,490"/>
+<path d="M1493,485 L1500,490 L1493,495" fill="#9aa0a6" stroke="none"/>
+<path d="M1600,490 C1663,490 1677,490 1733,490"/>
+<path d="M1733,485 L1740,490 L1733,495" fill="#9aa0a6" stroke="none"/>
+<path d="M1840,473 C1903,473 1917,310 1973,310"/>
+<path d="M1973,305 L1980,310 L1973,315" fill="#9aa0a6" stroke="none"/>
+<path d="M1840,507 C1903,507 1917,670 1973,670"/>
+<path d="M1973,665 L1980,670 L1973,675" fill="#9aa0a6" stroke="none"/>
+<path d="M2080,310 C2143,310 2157,310 2213,310"/>
+<path d="M2213,305 L2220,310 L2213,315" fill="#9aa0a6" stroke="none"/>
+<path d="M2320,271 C2383,271 2397,130 2453,130"/>
+<path d="M2453,125 L2460,130 L2453,135" fill="#9aa0a6" stroke="none"/>
+<path d="M2320,282 C2383,282 2397,230 2453,230"/>
+<path d="M2453,225 L2460,230 L2453,235" fill="#9aa0a6" stroke="none"/>
+<path d="M2320,293 C2383,293 2397,330 2453,330"/>
+<path d="M2453,325 L2460,330 L2453,335" fill="#9aa0a6" stroke="none"/>
+<path d="M2320,304 C2383,304 2397,430 2453,430"/>
+<path d="M2453,425 L2460,430 L2453,435" fill="#9aa0a6" stroke="none"/>
+<path d="M2320,316 C2383,316 2397,530 2453,530"/>
+<path d="M2453,525 L2460,530 L2453,535" fill="#9aa0a6" stroke="none"/>
+<path d="M2320,327 C2383,327 2397,630 2453,630"/>
+<path d="M2453,625 L2460,630 L2453,635" fill="#9aa0a6" stroke="none"/>
+<path d="M2320,338 C2383,338 2397,730 2453,730"/>
+<path d="M2453,725 L2460,730 L2453,735" fill="#9aa0a6" stroke="none"/>
+<path d="M2320,349 C2383,349 2397,750 2453,750"/>
+<path d="M2453,745 L2460,750 L2453,755" fill="#9aa0a6" stroke="none"/>
+<path d="M2560,130 C2623,130 2637,380 2693,380"/>
+<path d="M2693,375 L2700,380 L2693,385" fill="#9aa0a6" stroke="none"/>
+<path d="M2560,230 C2623,230 2637,380 2693,380"/>
+<path d="M2693,375 L2700,380 L2693,385" fill="#9aa0a6" stroke="none"/>
+<path d="M2560,330 C2623,330 2637,380 2693,380"/>
+<path d="M2693,375 L2700,380 L2693,385" fill="#9aa0a6" stroke="none"/>
+<path d="M2560,430 C2623,430 2637,380 2693,380"/>
+<path d="M2693,375 L2700,380 L2693,385" fill="#9aa0a6" stroke="none"/>
+<path d="M2560,530 C2623,530 2637,380 2693,380"/>
+<path d="M2693,375 L2700,380 L2693,385" fill="#9aa0a6" stroke="none"/>
+<path d="M2560,630 C2623,630 2637,380 2693,380"/>
+<path d="M2693,375 L2700,380 L2693,385" fill="#9aa0a6" stroke="none"/>
+<path d="M2800,380 C2863,380 2877,380 2933,380"/>
+<path d="M2933,375 L2940,380 L2933,385" fill="#9aa0a6" stroke="none"/>
+<path d="M3040,380 C3103,380 3117,380 3173,380"/>
+<path d="M3173,375 L3180,380 L3173,385" fill="#9aa0a6" stroke="none"/>
+<path d="M3280,380 C3343,380 3357,380 3413,380"/>
+<path d="M3413,375 L3420,380 L3413,385" fill="#9aa0a6" stroke="none"/>
+<path d="M2560,750 C2623,750 2637,380 2693,380"/>
+<path d="M2693,375 L2700,380 L2693,385" fill="#9aa0a6" stroke="none"/>
+<path d="M2320,670 C2360,670 2300,830 2333,830"/>
+<path d="M2333,825 L2340,830 L2333,835" fill="#9aa0a6" stroke="none"/>
+<path d="M3760,380 C3800,380 3740,540 3773,540"/>
+<path d="M3773,535 L3780,540 L3773,545" fill="#9aa0a6" stroke="none"/>
+<path d="M2560,730 C2623,730 2637,380 2693,380"/>
+<path d="M2693,375 L2700,380 L2693,385" fill="#9aa0a6" stroke="none"/>
+<path d="M2440,830 C2480,830 2360,830 2393,830"/>
+<path d="M2393,825 L2400,830 L2393,835" fill="#9aa0a6" stroke="none"/>
+<path d="M2500,830 C2540,830 2420,670 2453,670"/>
+<path d="M2453,665 L2460,670 L2453,675" fill="#9aa0a6" stroke="none"/>
+<path d="M3880,540 C3920,540 3800,670 3833,670"/>
+<path d="M3833,665 L3840,670 L3833,675" fill="#9aa0a6" stroke="none"/>
+<path d="M3940,670 C3980,670 3860,380 3893,380"/>
+<path d="M3893,375 L3900,380 L3893,385" fill="#9aa0a6" stroke="none"/>
+<path d="M2080,670 C2120,670 2060,670 2093,670"/>
+<path d="M2093,665 L2100,670 L2093,675" fill="#9aa0a6" stroke="none"/>
+<path d="M2200,670 C2240,670 2120,750 2153,750"/>
+<path d="M2153,745 L2160,750 L2153,755" fill="#9aa0a6" stroke="none"/>
+<path d="M2260,750 C2300,750 2180,670 2213,670"/>
+<path d="M2213,665 L2220,670 L2213,675" fill="#9aa0a6" stroke="none"/>
+<path d="M3520,380 C3560,380 3500,380 3533,380"/>
+<path d="M3533,375 L3540,380 L3533,385" fill="#9aa0a6" stroke="none"/>
+<path d="M3640,380 C3680,380 3560,470 3593,470"/>
+<path d="M3593,465 L3600,470 L3593,475" fill="#9aa0a6" stroke="none"/>
+<path d="M3700,470 C3740,470 3620,380 3653,380"/>
+<path d="M3653,375 L3660,380 L3653,385" fill="#9aa0a6" stroke="none"/>
+</g>
+<rect x="300" y="440" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="300" y="440" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="350.0" y="486.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">webhook</text>
+<text x="350.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">Webhook</text>
+<rect x="540" y="440" width="100" height="100" rx="10" fill="#ffffff" stroke="#0aa8a7" stroke-width="3"/>
+<rect x="540" y="440" width="100" height="100" rx="10" fill="#0aa8a7" fill-opacity="0.10"/>
+<text x="590.0" y="486.0" font-size="11" text-anchor="middle" fill="#0aa8a7" font-weight="700">set</text>
+<text x="590.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">⚙️ Client Config</text>
+<rect x="780" y="440" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="780" y="440" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="830.0" y="486.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="830.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">Load Session</text>
+<rect x="1020" y="440" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1020" y="440" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1070.0" y="486.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1070.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build Claude Payload</text>
+<rect x="1260" y="440" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="1260" y="440" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="1310.0" y="486.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="1310.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">Call Claude R1</text>
+<rect x="1500" y="440" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1500" y="440" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1550.0" y="486.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1550.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">Parse Response R1</text>
+<rect x="1740" y="440" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="1740" y="440" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="1790.0" y="486.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="1790.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">IF Is Tool Use</text>
+<rect x="1980" y="620" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1980" y="620" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="2030.0" y="666.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="2030.0" y="735" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build Direct Reply</text>
+<rect x="2220" y="620" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="2220" y="620" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="2270.0" y="666.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="2270.0" y="735" font-size="11.5" text-anchor="middle" fill="#2b2f36">Save Session -</text>
+<text x="2270.0" y="748" font-size="11.5" text-anchor="middle" fill="#2b2f36">Direct</text>
+<rect x="2460" y="620" width="100" height="100" rx="10" fill="#ffffff" stroke="#ff6d5a" stroke-width="3"/>
+<rect x="2460" y="620" width="100" height="100" rx="10" fill="#ff6d5a" fill-opacity="0.10"/>
+<text x="2510.0" y="666.0" font-size="11" text-anchor="middle" fill="#ff6d5a" font-weight="700">sub-flow</text>
+<text x="2510.0" y="735" font-size="11.5" text-anchor="middle" fill="#2b2f36">Call Send Reply -</text>
+<text x="2510.0" y="748" font-size="11.5" text-anchor="middle" fill="#2b2f36">Direct</text>
+<rect x="1980" y="260" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1980" y="260" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="2030.0" y="306.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="2030.0" y="375" font-size="11.5" text-anchor="middle" fill="#2b2f36">Extract Tool Call</text>
+<rect x="2220" y="260" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="2220" y="260" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="2270.0" y="306.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">switch</text>
+<text x="2270.0" y="375" font-size="11.5" text-anchor="middle" fill="#2b2f36">Switch by Tool</text>
+<rect x="2460" y="80" width="100" height="100" rx="10" fill="#ffffff" stroke="#ff6d5a" stroke-width="3"/>
+<rect x="2460" y="80" width="100" height="100" rx="10" fill="#ff6d5a" fill-opacity="0.10"/>
+<text x="2510.0" y="126.0" font-size="11" text-anchor="middle" fill="#ff6d5a" font-weight="700">sub-flow</text>
+<text x="2510.0" y="195" font-size="11.5" text-anchor="middle" fill="#2b2f36">Execute:</text>
+<text x="2510.0" y="208" font-size="11.5" text-anchor="middle" fill="#2b2f36">check_availability</text>
+<rect x="2460" y="180" width="100" height="100" rx="10" fill="#ffffff" stroke="#ff6d5a" stroke-width="3"/>
+<rect x="2460" y="180" width="100" height="100" rx="10" fill="#ff6d5a" fill-opacity="0.10"/>
+<text x="2510.0" y="226.0" font-size="11" text-anchor="middle" fill="#ff6d5a" font-weight="700">sub-flow</text>
+<text x="2510.0" y="295" font-size="11.5" text-anchor="middle" fill="#2b2f36">Execute:</text>
+<text x="2510.0" y="308" font-size="11.5" text-anchor="middle" fill="#2b2f36">book_house_visit</text>
+<rect x="2460" y="280" width="100" height="100" rx="10" fill="#ffffff" stroke="#ff6d5a" stroke-width="3"/>
+<rect x="2460" y="280" width="100" height="100" rx="10" fill="#ff6d5a" fill-opacity="0.10"/>
+<text x="2510.0" y="326.0" font-size="11" text-anchor="middle" fill="#ff6d5a" font-weight="700">sub-flow</text>
+<text x="2510.0" y="395" font-size="11.5" text-anchor="middle" fill="#2b2f36">Execute:</text>
+<text x="2510.0" y="408" font-size="11.5" text-anchor="middle" fill="#2b2f36">cancel_booking</text>
+<rect x="2460" y="380" width="100" height="100" rx="10" fill="#ffffff" stroke="#ff6d5a" stroke-width="3"/>
+<rect x="2460" y="380" width="100" height="100" rx="10" fill="#ff6d5a" fill-opacity="0.10"/>
+<text x="2510.0" y="426.0" font-size="11" text-anchor="middle" fill="#ff6d5a" font-weight="700">sub-flow</text>
+<text x="2510.0" y="495" font-size="11.5" text-anchor="middle" fill="#2b2f36">Execute:</text>
+<text x="2510.0" y="508" font-size="11.5" text-anchor="middle" fill="#2b2f36">reschedule_booking</text>
+<rect x="2460" y="480" width="100" height="100" rx="10" fill="#ffffff" stroke="#ff6d5a" stroke-width="3"/>
+<rect x="2460" y="480" width="100" height="100" rx="10" fill="#ff6d5a" fill-opacity="0.10"/>
+<text x="2510.0" y="526.0" font-size="11" text-anchor="middle" fill="#ff6d5a" font-weight="700">sub-flow</text>
+<text x="2510.0" y="595" font-size="11.5" text-anchor="middle" fill="#2b2f36">Execute:</text>
+<text x="2510.0" y="608" font-size="11.5" text-anchor="middle" fill="#2b2f36">get_business_info</text>
+<rect x="2460" y="580" width="100" height="100" rx="10" fill="#ffffff" stroke="#ff6d5a" stroke-width="3"/>
+<rect x="2460" y="580" width="100" height="100" rx="10" fill="#ff6d5a" fill-opacity="0.10"/>
+<text x="2510.0" y="626.0" font-size="11" text-anchor="middle" fill="#ff6d5a" font-weight="700">sub-flow</text>
+<text x="2510.0" y="695" font-size="11.5" text-anchor="middle" fill="#2b2f36">Execute: handle_dnc</text>
+<rect x="2700" y="330" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="2700" y="330" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="2750.0" y="376.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="2750.0" y="445" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build Tool Result</text>
+<text x="2750.0" y="458" font-size="11.5" text-anchor="middle" fill="#2b2f36">Message</text>
+<rect x="2940" y="330" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="2940" y="330" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="2990.0" y="376.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="2990.0" y="445" font-size="11.5" text-anchor="middle" fill="#2b2f36">Call Claude R2</text>
+<rect x="3180" y="330" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="3180" y="330" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="3230.0" y="376.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="3230.0" y="445" font-size="11.5" text-anchor="middle" fill="#2b2f36">Parse Response R2</text>
+<rect x="3420" y="330" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="3420" y="330" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="3470.0" y="376.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="3470.0" y="445" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build Tool Reply</text>
+<rect x="3660" y="330" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="3660" y="330" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="3710.0" y="376.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="3710.0" y="445" font-size="11.5" text-anchor="middle" fill="#2b2f36">Save Session - Tool</text>
+<rect x="3900" y="330" width="100" height="100" rx="10" fill="#ffffff" stroke="#ff6d5a" stroke-width="3"/>
+<rect x="3900" y="330" width="100" height="100" rx="10" fill="#ff6d5a" fill-opacity="0.10"/>
+<text x="3950.0" y="376.0" font-size="11" text-anchor="middle" fill="#ff6d5a" font-weight="700">sub-flow</text>
+<text x="3950.0" y="445" font-size="11.5" text-anchor="middle" fill="#2b2f36">Call Send Reply -</text>
+<text x="3950.0" y="458" font-size="11.5" text-anchor="middle" fill="#2b2f36">Tool</text>
+<rect x="2460" y="700" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="2460" y="700" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="2510.0" y="746.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="2510.0" y="815" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build Unknown Tool</text>
+<text x="2510.0" y="828" font-size="11.5" text-anchor="middle" fill="#2b2f36">Response</text>
+<rect x="2340" y="780" width="100" height="100" rx="10" fill="#ffffff" stroke="#0aa8a7" stroke-width="3"/>
+<rect x="2340" y="780" width="100" height="100" rx="10" fill="#0aa8a7" fill-opacity="0.10"/>
+<text x="2390.0" y="826.0" font-size="11" text-anchor="middle" fill="#0aa8a7" font-weight="700">set</text>
+<text x="2390.0" y="895" font-size="11.5" text-anchor="middle" fill="#2b2f36">Prep Direct Reply</text>
+<rect x="3780" y="490" width="100" height="100" rx="10" fill="#ffffff" stroke="#0aa8a7" stroke-width="3"/>
+<rect x="3780" y="490" width="100" height="100" rx="10" fill="#0aa8a7" fill-opacity="0.10"/>
+<text x="3830.0" y="536.0" font-size="11" text-anchor="middle" fill="#0aa8a7" font-weight="700">set</text>
+<text x="3830.0" y="605" font-size="11.5" text-anchor="middle" fill="#2b2f36">Prep Tool Reply</text>
+<rect x="2460" y="680" width="100" height="100" rx="10" fill="#ffffff" stroke="#ff6d5a" stroke-width="3"/>
+<rect x="2460" y="680" width="100" height="100" rx="10" fill="#ff6d5a" fill-opacity="0.10"/>
+<text x="2510.0" y="726.0" font-size="11" text-anchor="middle" fill="#ff6d5a" font-weight="700">sub-flow</text>
+<text x="2510.0" y="795" font-size="11.5" text-anchor="middle" fill="#2b2f36">Execute:</text>
+<text x="2510.0" y="808" font-size="11.5" text-anchor="middle" fill="#2b2f36">take_message</text>
+<rect x="2400" y="780" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="2400" y="780" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="2450.0" y="826.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="2450.0" y="895" font-size="11.5" text-anchor="middle" fill="#2b2f36">Chunk Direct Reply</text>
+<rect x="3840" y="620" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="3840" y="620" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="3890.0" y="666.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="3890.0" y="735" font-size="11.5" text-anchor="middle" fill="#2b2f36">Chunk Tool Reply</text>
+<rect x="2100" y="620" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="2100" y="620" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="2150.0" y="666.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="2150.0" y="735" font-size="11.5" text-anchor="middle" fill="#2b2f36">Reload Session -</text>
+<text x="2150.0" y="748" font-size="11.5" text-anchor="middle" fill="#2b2f36">Direct</text>
+<rect x="2160" y="700" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="2160" y="700" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="2210.0" y="746.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="2210.0" y="815" font-size="11.5" text-anchor="middle" fill="#2b2f36">Merge Session -</text>
+<text x="2210.0" y="828" font-size="11.5" text-anchor="middle" fill="#2b2f36">Direct</text>
+<rect x="3540" y="330" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="3540" y="330" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="3590.0" y="376.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="3590.0" y="445" font-size="11.5" text-anchor="middle" fill="#2b2f36">Reload Session -</text>
+<text x="3590.0" y="458" font-size="11.5" text-anchor="middle" fill="#2b2f36">Tool</text>
+<rect x="3600" y="420" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="3600" y="420" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="3650.0" y="466.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="3650.0" y="535" font-size="11.5" text-anchor="middle" fill="#2b2f36">Merge Session - Tool</text>
+</svg>

@@ -1,0 +1,120 @@
+{
+  "id": "D1KlmPpJg2gb1dZC",
+  "name": "PlutioLabs — Utility: CRM Status",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-08-20T20:15:03.982Z",
+  "updatedAt": "2026-08-20T20:23:04.779Z",
+  "isArchived": false,
+  "versionCounter": 2,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "trig",
+      "name": "📥 Run",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "path": "crm-status",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "a6670bda-2296-4df7-99cf-cc82abc58d37"
+    },
+    {
+      "id": "sheet",
+      "name": "📖 Read Sheet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        240,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "GET",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/YOUR_SCRAPER_SHEET_ID/values/{{ encodeURIComponent(\"'Outreach CRM'!A:BG\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "report",
+      "name": "📊 Status Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "// Read-only snapshot of what is actually IN the CRM right now.\n// The question this answers: can we WRITE THE EMAILS? So it checks, for every\n// send-ready lead, whether every merge field its assigned template consumes is\n// actually populated. Field lists come from COLD_EMAIL_PLAYBOOK.md.\n// Maps every column BY HEADER NAME so a reordered sheet cannot misread it.\ntry {\n  var res = $input.first().json;\n  var values = (res && res.values) || [];\n  if (values.length < 2) { return [{ json: { error: 'Sheet read returned no rows', raw: res } }]; }\n\n  var headers = values[0];\n  var idx = {};\n  for (var h = 0; h < headers.length; h++) { idx[String(headers[h]).trim()] = h; }\n\n  function cell(row, name) {\n    var i = idx[name];\n    if (i === undefined) { return ''; }\n    var v = row[i];\n    return (v === undefined || v === null) ? '' : String(v).trim();\n  }\n  function isTrue(v) {\n    var s = String(v).toLowerCase();\n    return s === 'true' || s === 'yes' || s === '1';\n  }\n  function bump(o, k) {\n    var key = (k === '' || k === undefined) ? '(blank)' : k;\n    o[key] = (o[key] || 0) + 1;\n  }\n\n  // Merge fields each template actually consumes (COLD_EMAIL_PLAYBOOK.md).\n  // First Name is deliberately EXCLUDED - the playbook defines a 'Hi,' fallback,\n  // so a missing first name never blocks a send.\n  var REQ1 = {\n    'A':      ['Top Competitor','Competitor Reviews','Review Count','Top Complaint'],\n    'A-v2':   ['Top Competitor','Competitor Reviews','Review Count','Best Review Quote'],\n    'A-lite': ['Top Competitor','Competitor Reviews','Review Count'],\n    'B':      ['Top Complaint'],\n    'D':      ['Company Name','City','Trade','Trade Scene']\n  };\n  var REQ2 = {\n    'E1': ['Closing Time'],\n    'E2': ['Top Competitor','Competitor Reviews'],\n    'E3': []\n  };\n\n  var rows = values.slice(1);\n  var total = rows.length;\n\n  var byRoute = {}, byPriority = {}, byStatus = {}, byCountry = {},\n      bySizeTier = {}, byTrade = {}, byEntity = {}, byEmail2 = {};\n\n  var enriched = { googleMatched: 0, hasCallPrep: 0, hasComplaint: 0,\n                   hasQuote: 0, hasFirstName: 0, hasCompetitor: 0,\n                   hasOpeningHours: 0, hasClosingTime: 0, hasWebsite: 0 };\n\n  var sendable = 0, blockedPecr = 0, blockedNotEmailable = 0,\n      blockedNoEmail = 0, alreadySent = 0;\n\n  var readyByRoute = {};\n  var t1 = {}, t2 = {};   // per-template completeness among send-ready leads\n\n  function track(store, route, row, reqMap) {\n    if (!store[route]) { store[route] = { assigned: 0, complete: 0, incomplete: 0, missingField: {} }; }\n    var s = store[route];\n    s.assigned++;\n    var req = reqMap[route];\n    if (!req) { s.unknownRoute = true; return; }\n    var ok = true;\n    for (var q = 0; q < req.length; q++) {\n      if (cell(row, req[q]) === '') {\n        ok = false;\n        s.missingField[req[q]] = (s.missingField[req[q]] || 0) + 1;\n      }\n    }\n    if (ok) { s.complete++; } else { s.incomplete++; }\n  }\n\n  for (var r = 0; r < total; r++) {\n    var row = rows[r];\n\n    var route = cell(row, 'Template Route');\n    var route2 = cell(row, 'Email 2 Route');\n    bump(byRoute, route);\n    bump(byEmail2, route2);\n    bump(byPriority, cell(row, 'Priority'));\n    bump(byStatus, cell(row, 'Status'));\n    bump(byCountry, cell(row, 'UK Country'));\n    bump(bySizeTier, cell(row, 'Size Tier'));\n    bump(byTrade, cell(row, 'Trade'));\n    bump(byEntity, cell(row, 'Entity Type'));\n\n    if (cell(row, 'Google Rating') !== '') { enriched.googleMatched++; }\n    if (cell(row, 'Call Prep Card') !== '') { enriched.hasCallPrep++; }\n    if (cell(row, 'Top Complaint') !== '') { enriched.hasComplaint++; }\n    if (cell(row, 'Best Review Quote') !== '') { enriched.hasQuote++; }\n    if (cell(row, 'First Name') !== '') { enriched.hasFirstName++; }\n    if (cell(row, 'Top Competitor') !== '') { enriched.hasCompetitor++; }\n    if (cell(row, 'Opening Hours') !== '') { enriched.hasOpeningHours++; }\n    if (cell(row, 'Closing Time') !== '') { enriched.hasClosingTime++; }\n    if (cell(row, 'Website') !== '') { enriched.hasWebsite++; }\n\n    var email = cell(row, 'Email');\n    var emailable = isTrue(cell(row, 'Emailable'));\n    var pecr = isTrue(cell(row, 'PECR Risk'));\n    var sent = cell(row, 'Email Sent');\n\n    if (sent !== '') { alreadySent++; }\n    else if (email === '') { blockedNoEmail++; }\n    else if (pecr) { blockedPecr++; }\n    else if (!emailable) { blockedNotEmailable++; }\n    else {\n      sendable++;\n      bump(readyByRoute, route);\n      track(t1, route, row, REQ1);\n      track(t2, route2, row, REQ2);\n    }\n  }\n\n  var personalised = (readyByRoute['A'] || 0) + (readyByRoute['A-v2'] || 0) +\n                     (readyByRoute['B'] || 0);\n\n  var writable = 0;\n  var routeKeys = Object.keys(t1);\n  for (var z = 0; z < routeKeys.length; z++) { writable += t1[routeKeys[z]].complete; }\n\n  return [{ json: {\n    generatedAt: new Date().toISOString(),\n    totalRows: total,\n    headerCount: headers.length,\n\n    sendReady: {\n      sendableNow: sendable,\n      personalisedReady: personalised,\n      byRoute: readyByRoute\n    },\n\n    // THE ANSWER: how many send-ready leads have every merge field their\n    // assigned template needs.\n    emailsWritableNow: writable,\n    email1Readiness: t1,\n    email2Readiness: t2,\n\n    blocked: {\n      alreadyEmailed: alreadySent,\n      noEmail: blockedNoEmail,\n      pecrRisk: blockedPecr,\n      notEmailable: blockedNotEmailable\n    },\n\n    enrichmentCoverage: enriched,\n    byTemplateRoute: byRoute,\n    byEmail2Route: byEmail2,\n    byPriority: byPriority,\n    byStatus: byStatus,\n    byUkCountry: byCountry,\n    bySizeTier: bySizeTier,\n    byTrade: byTrade,\n    byEntityType: byEntity\n  }}];\n} catch (e) {\n  return [{ json: { error: 'CRM Status failed: ' + e.message } }];\n}"
+      }
+    },
+    {
+      "id": "note",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        60
+      ],
+      "parameters": {
+        "width": 720,
+        "height": 180,
+        "content": "## CRM Status (read-only)\n\n`POST /webhook/crm-status` — answers \"what is actually in the CRM right now?\"\n\nComplements **CRM Integrity Check**, which reports row counts and per-column FILL RATES.\nThis one reports **distributions** and, most importantly, **how many leads are send-ready per template**.\n\nReads by HEADER NAME, so reordering columns cannot corrupt the report.\nWrites nothing. Safe to run at any time."
+      }
+    }
+  ],
+  "connections": {
+    "📥 Run": {
+      "main": [
+        [
+          {
+            "node": "📖 Read Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📖 Read Sheet": {
+      "main": [
+        [
+          {
+            "node": "📊 Status Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "activeVersion": null
+}

@@ -1,0 +1,2678 @@
+{
+  "id": "U6ZSilzcV6W8e8Uc",
+  "name": "Voice Agent — 04 Post-Call Processing",
+  "description": null,
+  "active": true,
+  "activeVersionId": "cf0a02ea-05a4-4418-83a3-c9bcc7aa2c3e",
+  "createdAt": "2026-04-06T15:39:33.402Z",
+  "updatedAt": "2026-08-22T12:52:37.371Z",
+  "isArchived": false,
+  "versionCounter": 39,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WF4 — Post-Call Processing\n\nTriggered async by WF2 after every VAPI call ends.\nNo response required — fire and forget.\n\n**Flow:**\n1. Parse VAPI end-of-call-report payload\n2. ✅ Validate: halt if no phone number extracted\n3. Read Clients tab by phone number\n4. Read Appointment Log for confirmed booking\n5. Read Messages for any urgent notes\n6. Build update payload (CRM + SMS + activity log fields)\n7a. Write Activity Log (parallel) — audit trail for every call\n7b. Update Clients tab in Google Sheets\n8a. If urgent message → SMS alert to business owner\n8b. Route by outcome → SMS to caller\n\n**Upstream:** WF2 (fires this on end-of-call-report event)\n**Downstream:** None — end of chain\n**Sheets:** Reads Clients + Appointment Log + Messages. Writes Clients + Activity Log.\n\n⚠️ Before activating:\n- Replace PLACEHOLDER_TWILIO_NUMBER in Client Config\n- Replace PLACEHOLDER_OWNER_PHONE in Client Config\n- Add Twilio credentials to the 4 Twilio SMS nodes\n- Create Activity Log tab in Google Sheets:\n  Columns: Timestamp | Phone | Call ID | Outcome | Duration (s) | SMS Queued | Config Ready | Error Notes",
+        "height": 520,
+        "width": 380,
+        "color": 7
+      },
+      "id": "sticky-wf4-overview",
+      "name": "📋 WF4 Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        -256
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**📞 Data Extraction**\n\nParses the VAPI end-of-call-report event.\nExtracts: phone, caller name, outcome, duration, transcript URL.\nThen reads Sheets context (client record, booking, messages).",
+        "height": 188,
+        "width": 780,
+        "color": 4
+      },
+      "id": "sticky-extract",
+      "name": "📞 Data Extraction",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        256,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**💾 CRM Update**\n\nMerges VAPI outcome + Sheets data.\nIncrements call count.\nUpdates Clients tab with: Status, Last Outcome, Last Contact,\nCall Count, Upcoming Appointment, Transcript URL.",
+        "height": 188,
+        "width": 500,
+        "color": 5
+      },
+      "id": "sticky-crm",
+      "name": "💾 CRM Update",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1152,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**📱 Follow-Up Actions**\n\nThree parallel branches from Update Client Record:\n\n**Branch 1 — Urgent Alert:**\nIf caller left urgent message → SMS internal alert to business owner.\n\n**Branch 2 — Outcome SMS:**\n- booked → booking confirmation SMS (with date, time, address if available)\n- callback-requested → callback acknowledgement SMS\n- voicemail → when's a good time? SMS\n- no-answer → missed call SMS\n- called / not-interested / do-not-contact → no outcome SMS\n\n**Branch 3 — Message Receipt SMS:**\nIf caller left any message AND outcome is not booked → SMS to caller confirming message received. (Booked callers already get a full confirmation SMS.)\n\n⚠️ Set twilioFromNumber + businessOwnerPhone in Client Config.",
+        "height": 420,
+        "width": 700,
+        "color": 6
+      },
+      "id": "sticky-followup",
+      "name": "📱 Follow-Up Actions",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1728,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "wf4-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-sheetId",
+              "name": "sheetId",
+              "value": "YOUR_CRM_SHEET_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-clients",
+              "name": "clientsTab",
+              "value": "Clients",
+              "type": "string"
+            },
+            {
+              "id": "cfg-appts",
+              "name": "appointmentsTab",
+              "value": "Appointment Log",
+              "type": "string"
+            },
+            {
+              "id": "cfg-msgs",
+              "name": "messagesTab",
+              "value": "Messages",
+              "type": "string"
+            },
+            {
+              "id": "cfg-activity",
+              "name": "activityLogTab",
+              "value": "Activity Log",
+              "type": "string"
+            },
+            {
+              "id": "cfg-biz",
+              "name": "businessName",
+              "value": "Solarify",
+              "type": "string"
+            },
+            {
+              "id": "cfg-twilio-from",
+              "name": "twilioFromNumber",
+              "value": "PLACEHOLDER_TWILIO_NUMBER",
+              "type": "string"
+            },
+            {
+              "id": "cfg-owner-phone",
+              "name": "businessOwnerPhone",
+              "value": "PLACEHOLDER_OWNER_PHONE",
+              "type": "string"
+            },
+            {
+              "id": "cfg-tz",
+              "name": "timezone",
+              "value": "Europe/London",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "includeOtherFields": true
+        },
+        "includeOtherFields": true
+      },
+      "id": "wf4-config",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  var input = $input.first().json;\n  var msg = (input.body && input.body.message) ? input.body.message : {};\n\n  // Phone — 3 extraction paths (from VAPI WEBHOOK_EVENTS.md)\n  var phone = '';\n  if (msg.call && msg.call.customer) {\n    phone = msg.call.customer.number || msg.call.customer.phoneNumber || '';\n  }\n  if (!phone && msg.customer) {\n    phone = msg.customer.number || '';\n  }\n\n  // Caller name — 3-tier cascade\n  var name = '';\n  if (msg.call && msg.call.customer) {\n    name = msg.call.customer.name || '';\n  }\n  if (!name && msg.summary) {\n    var nameMatch = msg.summary.match(/^([A-Z][a-z]+ [A-Z][a-z]+) called/);\n    if (nameMatch) name = nameMatch[1];\n  }\n  if (!name && msg.artifact && msg.artifact.messages) {\n    var allMsgs = msg.artifact.messages;\n    for (var i = 0; i < allMsgs.length; i++) {\n      if (allMsgs[i].toolCalls) {\n        for (var j = 0; j < allMsgs[i].toolCalls.length; j++) {\n          try {\n            var args = JSON.parse(allMsgs[i].toolCalls[j].function.arguments || '{}');\n            if (args.callerName) { name = args.callerName; break; }\n          } catch(parseErr) {}\n        }\n      }\n      if (name) break;\n    }\n  }\n\n  // Duration + timestamps (durationSeconds is at TOP LEVEL of message, not inside call)\n  var duration = Math.round(msg.durationSeconds || 0);\n  var startedAt = msg.startedAt || new Date().toISOString();\n  var endedAt = msg.endedAt || new Date().toISOString();\n\n  // Summary and structured data\n  var summary = '';\n  if (msg.analysis && msg.analysis.summary) summary = msg.analysis.summary;\n  if (!summary && msg.summary) summary = msg.summary;\n  var structured = (msg.analysis && msg.analysis.structuredData) ? msg.analysis.structuredData : {};\n\n  // Transcript / recording URL\n  var transcriptUrl = '';\n  if (msg.artifact) {\n    transcriptUrl = msg.artifact.recordingUrl || msg.artifact.stereoRecordingUrl || '';\n  }\n\n  // Determine outcome from VAPI structured data\n  var outcome = 'no-answer';\n  if (structured.appointmentBooked === true || structured.appointmentBooked === 'true') {\n    outcome = 'booked';\n  } else if (structured.callbackRequested === true || structured.callbackRequested === 'true') {\n    outcome = 'callback-requested';\n  } else if (structured.notInterested === true || structured.notInterested === 'true') {\n    outcome = 'not-interested';\n  } else if (structured.optOut === true || structured.optOut === 'true') {\n    outcome = 'do-not-contact';\n  } else if (structured.leftVoicemail === true || structured.leftVoicemail === 'true') {\n    outcome = 'voicemail';\n  } else if (msg.endedReason === 'voicemail') {\n    outcome = 'voicemail';\n  } else if (duration > 15) {\n    // Real conversation but no specific outcome detected\n    outcome = 'called';\n  }\n\n  var callId = (msg.call && msg.call.id) ? msg.call.id : '';\n\n  return [{\n    json: {\n      phone: phone,\n      name: name,\n      duration: duration,\n      startedAt: startedAt,\n      endedAt: endedAt,\n      summary: summary,\n      transcriptUrl: transcriptUrl,\n      outcome: outcome,\n      callId: callId\n    }\n  }];\n\n} catch(e) {\n  return [{\n    json: {\n      phone: '',\n      name: '',\n      duration: 0,\n      startedAt: new Date().toISOString(),\n      endedAt: new Date().toISOString(),\n      summary: '',\n      transcriptUrl: '',\n      outcome: 'no-answer',\n      callId: '',\n      parseError: e.message\n    }\n  }];\n}"
+      },
+      "id": "wf4-parse",
+      "name": "Parse Call Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        400
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Phone",
+              "lookupValue": "={{ $('Parse Call Data').first().json.phone }}"
+            }
+          ]
+        },
+        "options": {
+          "returnFirstMatch": true
+        }
+      },
+      "id": "wf4-read-client",
+      "name": "Read Client Record",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        720,
+        400
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Phone",
+              "lookupValue": "={{ $('Parse Call Data').first().json.phone }}"
+            },
+            {
+              "lookupColumn": "Status",
+              "lookupValue": "confirmed"
+            }
+          ]
+        },
+        "options": {
+          "returnFirstMatch": true
+        }
+      },
+      "id": "wf4-read-appt",
+      "name": "Read Appointment Record",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        960,
+        400
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.messagesTab }}"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Phone",
+              "lookupValue": "={{ $('Parse Call Data').first().json.phone }}"
+            },
+            {
+              "lookupColumn": "Status",
+              "lookupValue": "new"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf4-read-msgs",
+      "name": "Read Messages",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1200,
+        400
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  var parsed = $('Parse Call Data').first().json;\n  var config = $('⚙️ Client Config').first().json;\n\n  var clientRows = $('Read Client Record').all();\n  var clientRow = (clientRows && clientRows.length > 0 && clientRows[0].json && clientRows[0].json.Phone) ? clientRows[0].json : {};\n\n  var apptRows = $('Read Appointment Record').all();\n  var apptRow = (apptRows && apptRows.length > 0 && apptRows[0].json && apptRows[0].json.Phone) ? apptRows[0].json : {};\n\n  var msgRows = $('Read Messages').all();\n\n  var currentCount = parseInt(clientRow['Call Count'] || '0', 10);\n  if (isNaN(currentCount)) currentCount = 0;\n  var newCallCount = currentCount + 1;\n\n  var name = parsed.name || clientRow['Name'] || 'Valued Customer';\n  var service = apptRow['Service'] || clientRow['Service Interest'] || 'your enquiry';\n  var address = apptRow['Address'] || '';\n\n  var existingStatus = clientRow['Status'] || '';\n  var statusMap = {\n    'booked': 'booked',\n    'not-interested': 'not-interested',\n    'callback-requested': 'callback-requested',\n    'voicemail': 'voicemail',\n    'no-answer': 'no-answer',\n    'do-not-contact': 'do-not-contact',\n    'called': 'called'\n  };\n  var status;\n  if (existingStatus === 'sequence-active' && (parsed.outcome === 'no-answer' || parsed.outcome === 'voicemail')) {\n    status = 'sequence-active';\n  } else {\n    status = statusMap[parsed.outcome] || 'called';\n  }\n\n  var upcomingAppointment = '';\n  if (parsed.outcome === 'booked' && apptRow['Date'] && apptRow['Time']) {\n    upcomingAppointment = apptRow['Date'] + ' at ' + apptRow['Time'];\n  } else if (parsed.outcome === 'not-interested' || parsed.outcome === 'do-not-contact') {\n    upcomingAppointment = '';\n  } else if (clientRow['Upcoming Appointment']) {\n    upcomingAppointment = clientRow['Upcoming Appointment'];\n  }\n\n  var hasUrgentMessage = false;\n  var urgentText = '';\n  if (msgRows && msgRows.length > 0) {\n    for (var i = 0; i < msgRows.length; i++) {\n      var row = msgRows[i].json || {};\n      if (row.Urgency === 'urgent' && row.Status === 'new') {\n        hasUrgentMessage = true;\n        urgentText = row.Message || 'Urgent message received';\n        break;\n      }\n    }\n  }\n\n  var smsOptOut = clientRow['SMS Opt-Out'] || 'N';\n  if (parsed.outcome === 'do-not-contact') { smsOptOut = 'Y'; }\n\n  var businessName = config.businessName || 'Solarify';\n  var smsText = '';\n\n  if (smsOptOut !== 'Y') {\n    if (parsed.outcome === 'booked') {\n      var apptDate = apptRow['Date'] || 'your scheduled date';\n      var timeStr = apptRow['Time'] ? ' at ' + apptRow['Time'] : '';\n      var addressStr = address ? ' Our team will visit you at ' + address + '.' : '';\n      smsText = 'Hi ' + name + ', your ' + service + ' appointment is confirmed for ' + apptDate + timeStr + '.' + addressStr + ' Reply STOP to opt out. - ' + businessName;\n    } else if (parsed.outcome === 'callback-requested') {\n      smsText = 'Hi ' + name + ', thanks for your interest! Our team has noted your callback request and will be in touch shortly. Reply STOP to opt out. - ' + businessName;\n    } else if (parsed.outcome === 'voicemail') {\n      smsText = 'Hi ' + name + ', we just tried reaching you about your ' + service + ' enquiry. When is a good time to call? Reply STOP to opt out. - ' + businessName;\n    } else if (parsed.outcome === 'no-answer') {\n      smsText = 'Hi ' + name + \", we tried calling you about your \" + service + \" enquiry but couldn't reach you. We'll try again soon - or feel free to call us back. Reply STOP to opt out. - \" + businessName;\n    }\n  }\n\n  var alertText = hasUrgentMessage\n    ? 'URGENT: ' + name + ' (' + parsed.phone + ') left an urgent message: \"' + urgentText + '\"'\n    : '';\n\n  var hasNewMessage = (msgRows && msgRows.length > 0);\n  var messageReceiptText = '';\n  if (hasNewMessage && parsed.outcome !== 'booked' && smsOptOut !== 'Y') {\n    messageReceiptText = 'Hi ' + name + \", thanks for your message. Our team will review it and get back to you shortly. Reply STOP to opt out. - \" + businessName;\n  }\n\n  var sequenceStartedAt = clientRow['Sequence Started At'] || '';\n  if ((parsed.outcome === 'no-answer' || parsed.outcome === 'voicemail') && existingStatus !== 'sequence-active' && !sequenceStartedAt) {\n    sequenceStartedAt = new Date().toISOString();\n  }\n\n  var callDirection = clientRow['Call Direction'] || 'outbound';\n\n  var processedAt = new Date().toISOString();\n  var twilioFrom = config.twilioFromNumber || '';\n  var ownerPhone = config.businessOwnerPhone || '';\n  var configReady = (twilioFrom.indexOf('PLACEHOLDER') === -1 && ownerPhone.indexOf('PLACEHOLDER') === -1) ? 'Y' : 'N';\n  var smsQueued = (smsText !== '' || messageReceiptText !== '') ? 'Y' : 'N';\n  var errorNotes = parsed.parseError || '';\n\n  return [{\n    json: {\n      phone: parsed.phone,\n      name: name,\n      status: status,\n      outcome: parsed.outcome,\n      callCount: newCallCount,\n      lastContact: parsed.endedAt,\n      lastOutcome: parsed.outcome,\n      upcomingAppointment: upcomingAppointment,\n      transcriptUrl: parsed.transcriptUrl,\n      smsOptOut: smsOptOut,\n      smsText: smsText,\n      alertText: alertText,\n      hasUrgentMessage: hasUrgentMessage,\n      hasNewMessage: hasNewMessage,\n      messageReceiptText: messageReceiptText,\n      callId: parsed.callId,\n      duration: parsed.duration,\n      processedAt: processedAt,\n      configReady: configReady,\n      smsQueued: smsQueued,\n      errorNotes: errorNotes,\n      sequenceStartedAt: sequenceStartedAt,\n      callDirection: callDirection\n    }\n  }];\n\n} catch(e) {\n  return [{\n    json: {\n      phone: '',\n      name: '',\n      status: 'no-answer',\n      outcome: 'no-answer',\n      callCount: 0,\n      lastContact: new Date().toISOString(),\n      lastOutcome: 'no-answer',\n      upcomingAppointment: '',\n      transcriptUrl: '',\n      smsOptOut: 'N',\n      smsText: '',\n      alertText: '',\n      hasUrgentMessage: false,\n      hasNewMessage: false,\n      messageReceiptText: '',\n      callId: '',\n      duration: 0,\n      processedAt: new Date().toISOString(),\n      configReady: 'N',\n      smsQueued: 'N',\n      errorNotes: e.message,\n      buildError: e.message,\n      sequenceStartedAt: '',\n      callDirection: 'outbound'\n    }\n  }];\n}"
+      },
+      "id": "wf4-build",
+      "name": "Build Update Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        400
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $json.phone }}",
+            "Status": "={{ $json.status }}",
+            "Last Outcome": "={{ $json.lastOutcome }}",
+            "Last Contact": "={{ $json.lastContact }}",
+            "Call Count": "={{ $json.callCount }}",
+            "Upcoming Appointment": "={{ $json.upcomingAppointment }}",
+            "Transcript URL": "={{ $json.transcriptUrl }}",
+            "Call Direction": "={{ $json.callDirection }}",
+            "Sequence Started At": "={{ $json.sequenceStartedAt }}",
+            "Last Channel": "voice",
+            "SMS Opt-Out": "={{ $json.smsOptOut }}",
+            "Name": "={{ $('Build Update Payload').first().json.name || $('Read Client Record').first().json['Name'] || '' }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Outcome",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Contact",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Call Count",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Upcoming Appointment",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Transcript URL",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Call Direction",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Sequence Started At",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Channel",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "SMS Opt-Out",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "id": "wf4-update-client",
+      "name": "Update Client Record",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1680,
+        400
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "urgent",
+              "leftValue": "={{ $('Build Update Payload').first().json.hasUrgentMessage === true ? 'yes' : 'no' }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf4-check-urgent",
+      "name": "Check Urgent Message",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1920,
+        224
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ $('Build Update Payload').first().json.alertText }}",
+        "options": {}
+      },
+      "id": "wf4-alert-sms",
+      "name": "Send Urgent Alert SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        224
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "case-booked",
+                    "leftValue": "={{ $('Build Update Payload').first().json.outcome }}",
+                    "rightValue": "booked",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "booked"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "case-callback",
+                    "leftValue": "={{ $('Build Update Payload').first().json.outcome }}",
+                    "rightValue": "callback-requested",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "callback-requested"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "case-voicemail",
+                    "leftValue": "={{ $('Build Update Payload').first().json.outcome }}",
+                    "rightValue": "voicemail",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "voicemail"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "case-no-answer",
+                    "leftValue": "={{ $('Build Update Payload').first().json.outcome }}",
+                    "rightValue": "no-answer",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "no-answer"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "case-called",
+                    "leftValue": "={{ $('Build Update Payload').first().json.outcome }}",
+                    "rightValue": "called",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "called"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "case-not-interested",
+                    "leftValue": "={{ $('Build Update Payload').first().json.outcome }}",
+                    "rightValue": "not-interested",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "not-interested"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "case-do-not-contact",
+                    "leftValue": "={{ $('Build Update Payload').first().json.outcome }}",
+                    "rightValue": "do-not-contact",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "do-not-contact"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "wf4-route-outcome",
+      "name": "Route by Outcome",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1920,
+        560
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Build Update Payload').first().json.phone }}",
+        "message": "={{ $('Build Update Payload').first().json.smsText }}",
+        "options": {}
+      },
+      "id": "wf4-sms-booking",
+      "name": "Send Booking Confirmation SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        400
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Build Update Payload').first().json.phone }}",
+        "message": "={{ $('Build Update Payload').first().json.smsText }}",
+        "options": {}
+      },
+      "id": "wf4-sms-callback",
+      "name": "Send Callback SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        560
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Build Update Payload').first().json.phone }}",
+        "message": "={{ $('Build Update Payload').first().json.smsText }}",
+        "options": {}
+      },
+      "id": "wf4-sms-voicemail",
+      "name": "Send Voicemail Follow-Up SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        720
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Build Update Payload').first().json.phone }}",
+        "message": "={{ $('Build Update Payload').first().json.smsText }}",
+        "options": {}
+      },
+      "id": "wf4-sms-no-answer",
+      "name": "Send No-Answer SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        880
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "phone-ex",
+              "leftValue": "={{ $('Parse Call Data').first().json.phone ? 'ok' : 'fail' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf4-phone-check",
+      "name": "Phone Extracted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        688,
+        304
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "errorMessage": "WF4 halted: No phone number extracted from VAPI end-of-call-report. Cannot process call without a phone number."
+      },
+      "id": "wf4-stop-no-phone",
+      "name": "Stop and Error - No Phone",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        688,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**✅ Validation Gates**\n\n**Phone check:** Workflow halts with clear error if VAPI payload has no phone number.\n\n**Config check:** Activity Log shows Config Ready=N if Twilio placeholders not yet replaced. Twilio nodes fail gracefully (continueOnFail) — CRM write still completes.",
+        "height": 168,
+        "width": 380,
+        "color": 3
+      },
+      "id": "sticky-validation",
+      "name": "✅ Validation",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1216,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "msg-left",
+              "leftValue": "={{ $('Build Update Payload').first().json.messageReceiptText ? 'yes' : 'no' }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf4-msg-check",
+      "name": "Message Left?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2160,
+        1040
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('Build Update Payload').first().json.phone }}",
+        "message": "={{ $('Build Update Payload').first().json.messageReceiptText }}",
+        "options": {}
+      },
+      "id": "wf4-sms-message-receipt",
+      "name": "Send Message Receipt SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        1040
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "44c9c096-4732-43d7-a054-6e93b9cecfcc",
+      "name": "Alert Owner — Unknown Outcome",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        1200
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ '⚠️ Outbound call to ' + $('Build Update Payload').first().json.phone + ' returned an UNRECOGNISED outcome: \\'' + $('Build Update Payload').first().json.outcome + '\\'. No follow-up SMS was sent. Review the call and follow up manually.' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "89e01c73-e3c2-4fde-b3bd-90513036cc9a",
+      "name": "CRM Update OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1900,
+        60
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "crm-update-ok",
+              "leftValue": "={{ $json.error ? 'fail' : 'ok' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "83c4763c-e770-4097-9388-940f6b789530",
+      "name": "Alert Owner — CRM Update FAILED",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2140,
+        -60
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+        "message": "={{ '⚠️ CRM OUT OF SYNC: post-call update for ' + $('Build Update Payload').first().json.phone + ' (outcome: ' + $('Build Update Payload').first().json.outcome + ') failed to write to the Clients tab. The customer SMS was still sent. Update the CRM row manually — follow-up automation will use stale data until you do.' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      }
+    },
+    {
+      "id": "no-followup-wf4",
+      "name": "No Follow-Up Needed",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        1100
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "write-activity-log-hdr",
+      "name": "Write Activity Log · Headers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1680,
+        624
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + ($('⚙️ Client Config').first().json.sheetId) + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.activityLogTab) + '!1:1' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": false,
+        "options": {
+          "timeout": 10000
+        }
+      }
+    },
+    {
+      "id": "write-activity-log-build",
+      "name": "Write Activity Log · Build Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1850,
+        624
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "try {\n  var hdrResp = $input.first().json || {};\n  var headers = (hdrResp.values && hdrResp.values[0] && hdrResp.values[0].length) ? hdrResp.values[0] : null;\n  var usedFallback = false;\n  if (!headers) { headers = [\"Timestamp\", \"Phone\", \"Call ID\", \"Call Direction\", \"Outcome\", \"Duration (s)\", \"SMS Queued\", \"Config Ready\", \"Error Notes\"]; usedFallback = true; }\n  var vals = {\n    \"Timestamp\": ($('Build Update Payload').first().json.processedAt),\n    \"Phone\": ($('Build Update Payload').first().json.phone),\n    \"Call ID\": ($('Build Update Payload').first().json.callId),\n    \"Call Direction\": \"outbound\",\n    \"Outcome\": ($('Build Update Payload').first().json.outcome),\n    \"Duration (s)\": ($('Build Update Payload').first().json.duration),\n    \"SMS Queued\": ($('Build Update Payload').first().json.smsQueued),\n    \"Config Ready\": ($('Build Update Payload').first().json.configReady),\n    \"Error Notes\": ($('Build Update Payload').first().json.errorNotes)\n  };\n  var row = [];\n  for (var i = 0; i < headers.length; i++) {\n    var h = String(headers[i] || '').trim();\n    row.push(Object.prototype.hasOwnProperty.call(vals, h) ? vals[h] : '');\n  }\n  return [{ json: { row: row, headersVerified: !usedFallback } }];\n} catch(e) { return [{ json: { row: [], headersVerified: false, buildError: e.message } }]; }"
+      }
+    },
+    {
+      "id": "write-activity-log-app",
+      "name": "Write Activity Log · Atomic Append",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2020,
+        624
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + ($('⚙️ Client Config').first().json.sheetId) + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.activityLogTab) + '!A:Z:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ values: [ $json.row ] }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Parse Call Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Client Record": {
+      "main": [
+        [
+          {
+            "node": "Read Appointment Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Appointment Record": {
+      "main": [
+        [
+          {
+            "node": "Read Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Messages": {
+      "main": [
+        [
+          {
+            "node": "Build Update Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Update Payload": {
+      "main": [
+        [
+          {
+            "node": "Update Client Record",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write Activity Log · Headers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Client Record": {
+      "main": [
+        [
+          {
+            "node": "Check Urgent Message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route by Outcome",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Message Left?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "CRM Update OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Urgent Message": {
+      "main": [
+        [
+          {
+            "node": "Send Urgent Alert SMS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Route by Outcome": {
+      "main": [
+        [
+          {
+            "node": "Send Booking Confirmation SMS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Callback SMS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Voicemail Follow-Up SMS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send No-Answer SMS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Follow-Up Needed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Follow-Up Needed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Follow-Up Needed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Owner — Unknown Outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Call Data": {
+      "main": [
+        [
+          {
+            "node": "Phone Extracted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phone Extracted?": {
+      "main": [
+        [
+          {
+            "node": "Read Client Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop and Error - No Phone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message Left?": {
+      "main": [
+        [
+          {
+            "node": "Send Message Receipt SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRM Update OK?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Alert Owner — CRM Update FAILED",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Activity Log · Headers": {
+      "main": [
+        [
+          {
+            "node": "Write Activity Log · Build Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Activity Log · Build Row": {
+      "main": [
+        [
+          {
+            "node": "Write Activity Log · Atomic Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Activity Log · Atomic Append": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "callerPolicy": "any",
+    "availableInMCP": false,
+    "binaryMode": "separate"
+  },
+  "tags": [],
+  "activeVersion": {
+    "versionId": "cf0a02ea-05a4-4418-83a3-c9bcc7aa2c3e",
+    "workflowId": "U6ZSilzcV6W8e8Uc",
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## WF4 — Post-Call Processing\n\nTriggered async by WF2 after every VAPI call ends.\nNo response required — fire and forget.\n\n**Flow:**\n1. Parse VAPI end-of-call-report payload\n2. ✅ Validate: halt if no phone number extracted\n3. Read Clients tab by phone number\n4. Read Appointment Log for confirmed booking\n5. Read Messages for any urgent notes\n6. Build update payload (CRM + SMS + activity log fields)\n7a. Write Activity Log (parallel) — audit trail for every call\n7b. Update Clients tab in Google Sheets\n8a. If urgent message → SMS alert to business owner\n8b. Route by outcome → SMS to caller\n\n**Upstream:** WF2 (fires this on end-of-call-report event)\n**Downstream:** None — end of chain\n**Sheets:** Reads Clients + Appointment Log + Messages. Writes Clients + Activity Log.\n\n⚠️ Before activating:\n- Replace PLACEHOLDER_TWILIO_NUMBER in Client Config\n- Replace PLACEHOLDER_OWNER_PHONE in Client Config\n- Add Twilio credentials to the 4 Twilio SMS nodes\n- Create Activity Log tab in Google Sheets:\n  Columns: Timestamp | Phone | Call ID | Outcome | Duration (s) | SMS Queued | Config Ready | Error Notes",
+          "height": 520,
+          "width": 380,
+          "color": 7
+        },
+        "id": "sticky-wf4-overview",
+        "name": "📋 WF4 Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -240,
+          -256
+        ]
+      },
+      {
+        "parameters": {
+          "content": "**📞 Data Extraction**\n\nParses the VAPI end-of-call-report event.\nExtracts: phone, caller name, outcome, duration, transcript URL.\nThen reads Sheets context (client record, booking, messages).",
+          "height": 188,
+          "width": 780,
+          "color": 4
+        },
+        "id": "sticky-extract",
+        "name": "📞 Data Extraction",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          256,
+          -96
+        ]
+      },
+      {
+        "parameters": {
+          "content": "**💾 CRM Update**\n\nMerges VAPI outcome + Sheets data.\nIncrements call count.\nUpdates Clients tab with: Status, Last Outcome, Last Contact,\nCall Count, Upcoming Appointment, Transcript URL.",
+          "height": 188,
+          "width": 500,
+          "color": 5
+        },
+        "id": "sticky-crm",
+        "name": "💾 CRM Update",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          1152,
+          -144
+        ]
+      },
+      {
+        "parameters": {
+          "content": "**📱 Follow-Up Actions**\n\nThree parallel branches from Update Client Record:\n\n**Branch 1 — Urgent Alert:**\nIf caller left urgent message → SMS internal alert to business owner.\n\n**Branch 2 — Outcome SMS:**\n- booked → booking confirmation SMS (with date, time, address if available)\n- callback-requested → callback acknowledgement SMS\n- voicemail → when's a good time? SMS\n- no-answer → missed call SMS\n- called / not-interested / do-not-contact → no outcome SMS\n\n**Branch 3 — Message Receipt SMS:**\nIf caller left any message AND outcome is not booked → SMS to caller confirming message received. (Booked callers already get a full confirmation SMS.)\n\n⚠️ Set twilioFromNumber + businessOwnerPhone in Client Config.",
+          "height": 420,
+          "width": 700,
+          "color": 6
+        },
+        "id": "sticky-followup",
+        "name": "📱 Follow-Up Actions",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          1728,
+          -224
+        ]
+      },
+      {
+        "parameters": {
+          "inputSource": "passthrough"
+        },
+        "id": "wf4-trigger",
+        "name": "Execute Workflow Trigger",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          0,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "cfg-sheetId",
+                "name": "sheetId",
+                "value": "YOUR_CRM_SHEET_ID",
+                "type": "string"
+              },
+              {
+                "id": "cfg-clients",
+                "name": "clientsTab",
+                "value": "Clients",
+                "type": "string"
+              },
+              {
+                "id": "cfg-appts",
+                "name": "appointmentsTab",
+                "value": "Appointment Log",
+                "type": "string"
+              },
+              {
+                "id": "cfg-msgs",
+                "name": "messagesTab",
+                "value": "Messages",
+                "type": "string"
+              },
+              {
+                "id": "cfg-activity",
+                "name": "activityLogTab",
+                "value": "Activity Log",
+                "type": "string"
+              },
+              {
+                "id": "cfg-biz",
+                "name": "businessName",
+                "value": "Solarify",
+                "type": "string"
+              },
+              {
+                "id": "cfg-twilio-from",
+                "name": "twilioFromNumber",
+                "value": "PLACEHOLDER_TWILIO_NUMBER",
+                "type": "string"
+              },
+              {
+                "id": "cfg-owner-phone",
+                "name": "businessOwnerPhone",
+                "value": "PLACEHOLDER_OWNER_PHONE",
+                "type": "string"
+              },
+              {
+                "id": "cfg-tz",
+                "name": "timezone",
+                "value": "Europe/London",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {
+            "includeOtherFields": true
+          },
+          "includeOtherFields": true
+        },
+        "id": "wf4-config",
+        "name": "⚙️ Client Config",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          240,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "try {\n  var input = $input.first().json;\n  var msg = (input.body && input.body.message) ? input.body.message : {};\n\n  // Phone — 3 extraction paths (from VAPI WEBHOOK_EVENTS.md)\n  var phone = '';\n  if (msg.call && msg.call.customer) {\n    phone = msg.call.customer.number || msg.call.customer.phoneNumber || '';\n  }\n  if (!phone && msg.customer) {\n    phone = msg.customer.number || '';\n  }\n\n  // Caller name — 3-tier cascade\n  var name = '';\n  if (msg.call && msg.call.customer) {\n    name = msg.call.customer.name || '';\n  }\n  if (!name && msg.summary) {\n    var nameMatch = msg.summary.match(/^([A-Z][a-z]+ [A-Z][a-z]+) called/);\n    if (nameMatch) name = nameMatch[1];\n  }\n  if (!name && msg.artifact && msg.artifact.messages) {\n    var allMsgs = msg.artifact.messages;\n    for (var i = 0; i < allMsgs.length; i++) {\n      if (allMsgs[i].toolCalls) {\n        for (var j = 0; j < allMsgs[i].toolCalls.length; j++) {\n          try {\n            var args = JSON.parse(allMsgs[i].toolCalls[j].function.arguments || '{}');\n            if (args.callerName) { name = args.callerName; break; }\n          } catch(parseErr) {}\n        }\n      }\n      if (name) break;\n    }\n  }\n\n  // Duration + timestamps (durationSeconds is at TOP LEVEL of message, not inside call)\n  var duration = Math.round(msg.durationSeconds || 0);\n  var startedAt = msg.startedAt || new Date().toISOString();\n  var endedAt = msg.endedAt || new Date().toISOString();\n\n  // Summary and structured data\n  var summary = '';\n  if (msg.analysis && msg.analysis.summary) summary = msg.analysis.summary;\n  if (!summary && msg.summary) summary = msg.summary;\n  var structured = (msg.analysis && msg.analysis.structuredData) ? msg.analysis.structuredData : {};\n\n  // Transcript / recording URL\n  var transcriptUrl = '';\n  if (msg.artifact) {\n    transcriptUrl = msg.artifact.recordingUrl || msg.artifact.stereoRecordingUrl || '';\n  }\n\n  // Determine outcome from VAPI structured data\n  var outcome = 'no-answer';\n  if (structured.appointmentBooked === true || structured.appointmentBooked === 'true') {\n    outcome = 'booked';\n  } else if (structured.callbackRequested === true || structured.callbackRequested === 'true') {\n    outcome = 'callback-requested';\n  } else if (structured.notInterested === true || structured.notInterested === 'true') {\n    outcome = 'not-interested';\n  } else if (structured.optOut === true || structured.optOut === 'true') {\n    outcome = 'do-not-contact';\n  } else if (structured.leftVoicemail === true || structured.leftVoicemail === 'true') {\n    outcome = 'voicemail';\n  } else if (msg.endedReason === 'voicemail') {\n    outcome = 'voicemail';\n  } else if (duration > 15) {\n    // Real conversation but no specific outcome detected\n    outcome = 'called';\n  }\n\n  var callId = (msg.call && msg.call.id) ? msg.call.id : '';\n\n  return [{\n    json: {\n      phone: phone,\n      name: name,\n      duration: duration,\n      startedAt: startedAt,\n      endedAt: endedAt,\n      summary: summary,\n      transcriptUrl: transcriptUrl,\n      outcome: outcome,\n      callId: callId\n    }\n  }];\n\n} catch(e) {\n  return [{\n    json: {\n      phone: '',\n      name: '',\n      duration: 0,\n      startedAt: new Date().toISOString(),\n      endedAt: new Date().toISOString(),\n      summary: '',\n      transcriptUrl: '',\n      outcome: 'no-answer',\n      callId: '',\n      parseError: e.message\n    }\n  }];\n}"
+        },
+        "id": "wf4-parse",
+        "name": "Parse Call Data",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          480,
+          400
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+          },
+          "filtersUI": {
+            "values": [
+              {
+                "lookupColumn": "Phone",
+                "lookupValue": "={{ $('Parse Call Data').first().json.phone }}"
+              }
+            ]
+          },
+          "options": {
+            "returnFirstMatch": true
+          }
+        },
+        "id": "wf4-read-client",
+        "name": "Read Client Record",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          720,
+          400
+        ],
+        "alwaysOutputData": true,
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+          },
+          "filtersUI": {
+            "values": [
+              {
+                "lookupColumn": "Phone",
+                "lookupValue": "={{ $('Parse Call Data').first().json.phone }}"
+              },
+              {
+                "lookupColumn": "Status",
+                "lookupValue": "confirmed"
+              }
+            ]
+          },
+          "options": {
+            "returnFirstMatch": true
+          }
+        },
+        "id": "wf4-read-appt",
+        "name": "Read Appointment Record",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          960,
+          400
+        ],
+        "alwaysOutputData": true,
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.messagesTab }}"
+          },
+          "filtersUI": {
+            "values": [
+              {
+                "lookupColumn": "Phone",
+                "lookupValue": "={{ $('Parse Call Data').first().json.phone }}"
+              },
+              {
+                "lookupColumn": "Status",
+                "lookupValue": "new"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "wf4-read-msgs",
+        "name": "Read Messages",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          1200,
+          400
+        ],
+        "alwaysOutputData": true,
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "try {\n  var parsed = $('Parse Call Data').first().json;\n  var config = $('⚙️ Client Config').first().json;\n\n  var clientRows = $('Read Client Record').all();\n  var clientRow = (clientRows && clientRows.length > 0 && clientRows[0].json && clientRows[0].json.Phone) ? clientRows[0].json : {};\n\n  var apptRows = $('Read Appointment Record').all();\n  var apptRow = (apptRows && apptRows.length > 0 && apptRows[0].json && apptRows[0].json.Phone) ? apptRows[0].json : {};\n\n  var msgRows = $('Read Messages').all();\n\n  var currentCount = parseInt(clientRow['Call Count'] || '0', 10);\n  if (isNaN(currentCount)) currentCount = 0;\n  var newCallCount = currentCount + 1;\n\n  var name = parsed.name || clientRow['Name'] || 'Valued Customer';\n  var service = apptRow['Service'] || clientRow['Service Interest'] || 'your enquiry';\n  var address = apptRow['Address'] || '';\n\n  var existingStatus = clientRow['Status'] || '';\n  var statusMap = {\n    'booked': 'booked',\n    'not-interested': 'not-interested',\n    'callback-requested': 'callback-requested',\n    'voicemail': 'voicemail',\n    'no-answer': 'no-answer',\n    'do-not-contact': 'do-not-contact',\n    'called': 'called'\n  };\n  var status;\n  if (existingStatus === 'sequence-active' && (parsed.outcome === 'no-answer' || parsed.outcome === 'voicemail')) {\n    status = 'sequence-active';\n  } else {\n    status = statusMap[parsed.outcome] || 'called';\n  }\n\n  var upcomingAppointment = '';\n  if (parsed.outcome === 'booked' && apptRow['Date'] && apptRow['Time']) {\n    upcomingAppointment = apptRow['Date'] + ' at ' + apptRow['Time'];\n  } else if (parsed.outcome === 'not-interested' || parsed.outcome === 'do-not-contact') {\n    upcomingAppointment = '';\n  } else if (clientRow['Upcoming Appointment']) {\n    upcomingAppointment = clientRow['Upcoming Appointment'];\n  }\n\n  var hasUrgentMessage = false;\n  var urgentText = '';\n  if (msgRows && msgRows.length > 0) {\n    for (var i = 0; i < msgRows.length; i++) {\n      var row = msgRows[i].json || {};\n      if (row.Urgency === 'urgent' && row.Status === 'new') {\n        hasUrgentMessage = true;\n        urgentText = row.Message || 'Urgent message received';\n        break;\n      }\n    }\n  }\n\n  var smsOptOut = clientRow['SMS Opt-Out'] || 'N';\n  if (parsed.outcome === 'do-not-contact') { smsOptOut = 'Y'; }\n\n  var businessName = config.businessName || 'Solarify';\n  var smsText = '';\n\n  if (smsOptOut !== 'Y') {\n    if (parsed.outcome === 'booked') {\n      var apptDate = apptRow['Date'] || 'your scheduled date';\n      var timeStr = apptRow['Time'] ? ' at ' + apptRow['Time'] : '';\n      var addressStr = address ? ' Our team will visit you at ' + address + '.' : '';\n      smsText = 'Hi ' + name + ', your ' + service + ' appointment is confirmed for ' + apptDate + timeStr + '.' + addressStr + ' Reply STOP to opt out. - ' + businessName;\n    } else if (parsed.outcome === 'callback-requested') {\n      smsText = 'Hi ' + name + ', thanks for your interest! Our team has noted your callback request and will be in touch shortly. Reply STOP to opt out. - ' + businessName;\n    } else if (parsed.outcome === 'voicemail') {\n      smsText = 'Hi ' + name + ', we just tried reaching you about your ' + service + ' enquiry. When is a good time to call? Reply STOP to opt out. - ' + businessName;\n    } else if (parsed.outcome === 'no-answer') {\n      smsText = 'Hi ' + name + \", we tried calling you about your \" + service + \" enquiry but couldn't reach you. We'll try again soon - or feel free to call us back. Reply STOP to opt out. - \" + businessName;\n    }\n  }\n\n  var alertText = hasUrgentMessage\n    ? 'URGENT: ' + name + ' (' + parsed.phone + ') left an urgent message: \"' + urgentText + '\"'\n    : '';\n\n  var hasNewMessage = (msgRows && msgRows.length > 0);\n  var messageReceiptText = '';\n  if (hasNewMessage && parsed.outcome !== 'booked' && smsOptOut !== 'Y') {\n    messageReceiptText = 'Hi ' + name + \", thanks for your message. Our team will review it and get back to you shortly. Reply STOP to opt out. - \" + businessName;\n  }\n\n  var sequenceStartedAt = clientRow['Sequence Started At'] || '';\n  if ((parsed.outcome === 'no-answer' || parsed.outcome === 'voicemail') && existingStatus !== 'sequence-active' && !sequenceStartedAt) {\n    sequenceStartedAt = new Date().toISOString();\n  }\n\n  var callDirection = clientRow['Call Direction'] || 'outbound';\n\n  var processedAt = new Date().toISOString();\n  var twilioFrom = config.twilioFromNumber || '';\n  var ownerPhone = config.businessOwnerPhone || '';\n  var configReady = (twilioFrom.indexOf('PLACEHOLDER') === -1 && ownerPhone.indexOf('PLACEHOLDER') === -1) ? 'Y' : 'N';\n  var smsQueued = (smsText !== '' || messageReceiptText !== '') ? 'Y' : 'N';\n  var errorNotes = parsed.parseError || '';\n\n  return [{\n    json: {\n      phone: parsed.phone,\n      name: name,\n      status: status,\n      outcome: parsed.outcome,\n      callCount: newCallCount,\n      lastContact: parsed.endedAt,\n      lastOutcome: parsed.outcome,\n      upcomingAppointment: upcomingAppointment,\n      transcriptUrl: parsed.transcriptUrl,\n      smsOptOut: smsOptOut,\n      smsText: smsText,\n      alertText: alertText,\n      hasUrgentMessage: hasUrgentMessage,\n      hasNewMessage: hasNewMessage,\n      messageReceiptText: messageReceiptText,\n      callId: parsed.callId,\n      duration: parsed.duration,\n      processedAt: processedAt,\n      configReady: configReady,\n      smsQueued: smsQueued,\n      errorNotes: errorNotes,\n      sequenceStartedAt: sequenceStartedAt,\n      callDirection: callDirection\n    }\n  }];\n\n} catch(e) {\n  return [{\n    json: {\n      phone: '',\n      name: '',\n      status: 'no-answer',\n      outcome: 'no-answer',\n      callCount: 0,\n      lastContact: new Date().toISOString(),\n      lastOutcome: 'no-answer',\n      upcomingAppointment: '',\n      transcriptUrl: '',\n      smsOptOut: 'N',\n      smsText: '',\n      alertText: '',\n      hasUrgentMessage: false,\n      hasNewMessage: false,\n      messageReceiptText: '',\n      callId: '',\n      duration: 0,\n      processedAt: new Date().toISOString(),\n      configReady: 'N',\n      smsQueued: 'N',\n      errorNotes: e.message,\n      buildError: e.message,\n      sequenceStartedAt: '',\n      callDirection: 'outbound'\n    }\n  }];\n}"
+        },
+        "id": "wf4-build",
+        "name": "Build Update Payload",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1440,
+          400
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "Phone": "={{ $json.phone }}",
+              "Status": "={{ $json.status }}",
+              "Last Outcome": "={{ $json.lastOutcome }}",
+              "Last Contact": "={{ $json.lastContact }}",
+              "Call Count": "={{ $json.callCount }}",
+              "Upcoming Appointment": "={{ $json.upcomingAppointment }}",
+              "Transcript URL": "={{ $json.transcriptUrl }}",
+              "Call Direction": "={{ $json.callDirection }}",
+              "Sequence Started At": "={{ $json.sequenceStartedAt }}",
+              "Last Channel": "voice",
+              "SMS Opt-Out": "={{ $json.smsOptOut }}",
+              "Name": "={{ $('Build Update Payload').first().json.name || $('Read Client Record').first().json['Name'] || '' }}"
+            },
+            "schema": [
+              {
+                "id": "Phone",
+                "defaultMatch": true,
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "Status",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Last Outcome",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Last Contact",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Call Count",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Upcoming Appointment",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Transcript URL",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Call Direction",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Sequence Started At",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Last Channel",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "SMS Opt-Out",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Name",
+                "displayName": "Name",
+                "type": "string",
+                "display": true,
+                "required": false,
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              }
+            ],
+            "matchingColumns": [
+              "Phone"
+            ]
+          },
+          "options": {
+            "cellFormat": "RAW"
+          }
+        },
+        "id": "wf4-update-client",
+        "name": "Update Client Record",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          1680,
+          400
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "urgent",
+                "leftValue": "={{ $('Build Update Payload').first().json.hasUrgentMessage === true ? 'yes' : 'no' }}",
+                "rightValue": "yes",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "wf4-check-urgent",
+        "name": "Check Urgent Message",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1920,
+          224
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+          "message": "={{ $('Build Update Payload').first().json.alertText }}",
+          "options": {}
+        },
+        "id": "wf4-alert-sms",
+        "name": "Send Urgent Alert SMS",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2160,
+          224
+        ],
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "combinator": "and",
+                  "conditions": [
+                    {
+                      "id": "case-booked",
+                      "leftValue": "={{ $('Build Update Payload').first().json.outcome }}",
+                      "rightValue": "booked",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ]
+                },
+                "renameOutput": true,
+                "outputKey": "booked"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "combinator": "and",
+                  "conditions": [
+                    {
+                      "id": "case-callback",
+                      "leftValue": "={{ $('Build Update Payload').first().json.outcome }}",
+                      "rightValue": "callback-requested",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ]
+                },
+                "renameOutput": true,
+                "outputKey": "callback-requested"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "combinator": "and",
+                  "conditions": [
+                    {
+                      "id": "case-voicemail",
+                      "leftValue": "={{ $('Build Update Payload').first().json.outcome }}",
+                      "rightValue": "voicemail",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ]
+                },
+                "renameOutput": true,
+                "outputKey": "voicemail"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "combinator": "and",
+                  "conditions": [
+                    {
+                      "id": "case-no-answer",
+                      "leftValue": "={{ $('Build Update Payload').first().json.outcome }}",
+                      "rightValue": "no-answer",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ]
+                },
+                "renameOutput": true,
+                "outputKey": "no-answer"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "combinator": "and",
+                  "conditions": [
+                    {
+                      "id": "case-called",
+                      "leftValue": "={{ $('Build Update Payload').first().json.outcome }}",
+                      "rightValue": "called",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ]
+                },
+                "renameOutput": true,
+                "outputKey": "called"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "combinator": "and",
+                  "conditions": [
+                    {
+                      "id": "case-not-interested",
+                      "leftValue": "={{ $('Build Update Payload').first().json.outcome }}",
+                      "rightValue": "not-interested",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ]
+                },
+                "renameOutput": true,
+                "outputKey": "not-interested"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose",
+                    "version": 2
+                  },
+                  "combinator": "and",
+                  "conditions": [
+                    {
+                      "id": "case-do-not-contact",
+                      "leftValue": "={{ $('Build Update Payload').first().json.outcome }}",
+                      "rightValue": "do-not-contact",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ]
+                },
+                "renameOutput": true,
+                "outputKey": "do-not-contact"
+              }
+            ]
+          },
+          "options": {
+            "fallbackOutput": "extra"
+          }
+        },
+        "id": "wf4-route-outcome",
+        "name": "Route by Outcome",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.4,
+        "position": [
+          1920,
+          560
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('Build Update Payload').first().json.phone }}",
+          "message": "={{ $('Build Update Payload').first().json.smsText }}",
+          "options": {}
+        },
+        "id": "wf4-sms-booking",
+        "name": "Send Booking Confirmation SMS",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2160,
+          400
+        ],
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('Build Update Payload').first().json.phone }}",
+          "message": "={{ $('Build Update Payload').first().json.smsText }}",
+          "options": {}
+        },
+        "id": "wf4-sms-callback",
+        "name": "Send Callback SMS",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2160,
+          560
+        ],
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('Build Update Payload').first().json.phone }}",
+          "message": "={{ $('Build Update Payload').first().json.smsText }}",
+          "options": {}
+        },
+        "id": "wf4-sms-voicemail",
+        "name": "Send Voicemail Follow-Up SMS",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2160,
+          720
+        ],
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('Build Update Payload').first().json.phone }}",
+          "message": "={{ $('Build Update Payload').first().json.smsText }}",
+          "options": {}
+        },
+        "id": "wf4-sms-no-answer",
+        "name": "Send No-Answer SMS",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2160,
+          880
+        ],
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "phone-ex",
+                "leftValue": "={{ $('Parse Call Data').first().json.phone ? 'ok' : 'fail' }}",
+                "rightValue": "ok",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "wf4-phone-check",
+        "name": "Phone Extracted?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          688,
+          304
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "errorMessage": "WF4 halted: No phone number extracted from VAPI end-of-call-report. Cannot process call without a phone number."
+        },
+        "id": "wf4-stop-no-phone",
+        "name": "Stop and Error - No Phone",
+        "type": "n8n-nodes-base.stopAndError",
+        "typeVersion": 1,
+        "position": [
+          688,
+          144
+        ]
+      },
+      {
+        "parameters": {
+          "content": "**✅ Validation Gates**\n\n**Phone check:** Workflow halts with clear error if VAPI payload has no phone number.\n\n**Config check:** Activity Log shows Config Ready=N if Twilio placeholders not yet replaced. Twilio nodes fail gracefully (continueOnFail) — CRM write still completes.",
+          "height": 168,
+          "width": 380,
+          "color": 3
+        },
+        "id": "sticky-validation",
+        "name": "✅ Validation",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          1216,
+          64
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "msg-left",
+                "leftValue": "={{ $('Build Update Payload').first().json.messageReceiptText ? 'yes' : 'no' }}",
+                "rightValue": "yes",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "wf4-msg-check",
+        "name": "Message Left?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          2160,
+          1040
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('Build Update Payload').first().json.phone }}",
+          "message": "={{ $('Build Update Payload').first().json.messageReceiptText }}",
+          "options": {}
+        },
+        "id": "wf4-sms-message-receipt",
+        "name": "Send Message Receipt SMS",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2400,
+          1040
+        ],
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "44c9c096-4732-43d7-a054-6e93b9cecfcc",
+        "name": "Alert Owner — Unknown Outcome",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2160,
+          1200
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+          "message": "={{ '⚠️ Outbound call to ' + $('Build Update Payload').first().json.phone + ' returned an UNRECOGNISED outcome: \\'' + $('Build Update Payload').first().json.outcome + '\\'. No follow-up SMS was sent. Review the call and follow up manually.' }}",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "89e01c73-e3c2-4fde-b3bd-90513036cc9a",
+        "name": "CRM Update OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1900,
+          60
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "crm-update-ok",
+                "leftValue": "={{ $json.error ? 'fail' : 'ok' }}",
+                "rightValue": "ok",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "83c4763c-e770-4097-9388-940f6b789530",
+        "name": "Alert Owner — CRM Update FAILED",
+        "type": "n8n-nodes-base.twilio",
+        "typeVersion": 1,
+        "position": [
+          2140,
+          -60
+        ],
+        "parameters": {
+          "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+          "to": "={{ $('⚙️ Client Config').first().json.businessOwnerPhone }}",
+          "message": "={{ '⚠️ CRM OUT OF SYNC: post-call update for ' + $('Build Update Payload').first().json.phone + ' (outcome: ' + $('Build Update Payload').first().json.outcome + ') failed to write to the Clients tab. The customer SMS was still sent. Update the CRM row manually — follow-up automation will use stale data until you do.' }}",
+          "options": {}
+        },
+        "onError": "continueRegularOutput",
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        }
+      },
+      {
+        "id": "no-followup-wf4",
+        "name": "No Follow-Up Needed",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          2400,
+          1100
+        ],
+        "parameters": {}
+      },
+      {
+        "id": "write-activity-log-hdr",
+        "name": "Write Activity Log · Headers",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1680,
+          624
+        ],
+        "onError": "continueRegularOutput",
+        "alwaysOutputData": true,
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "parameters": {
+          "method": "GET",
+          "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + ($('⚙️ Client Config').first().json.sheetId) + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.activityLogTab) + '!1:1' }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleSheetsOAuth2Api",
+          "sendBody": false,
+          "options": {
+            "timeout": 10000
+          }
+        }
+      },
+      {
+        "id": "write-activity-log-build",
+        "name": "Write Activity Log · Build Row",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1850,
+          624
+        ],
+        "onError": "continueRegularOutput",
+        "parameters": {
+          "jsCode": "try {\n  var hdrResp = $input.first().json || {};\n  var headers = (hdrResp.values && hdrResp.values[0] && hdrResp.values[0].length) ? hdrResp.values[0] : null;\n  var usedFallback = false;\n  if (!headers) { headers = [\"Timestamp\", \"Phone\", \"Call ID\", \"Call Direction\", \"Outcome\", \"Duration (s)\", \"SMS Queued\", \"Config Ready\", \"Error Notes\"]; usedFallback = true; }\n  var vals = {\n    \"Timestamp\": ($('Build Update Payload').first().json.processedAt),\n    \"Phone\": ($('Build Update Payload').first().json.phone),\n    \"Call ID\": ($('Build Update Payload').first().json.callId),\n    \"Call Direction\": \"outbound\",\n    \"Outcome\": ($('Build Update Payload').first().json.outcome),\n    \"Duration (s)\": ($('Build Update Payload').first().json.duration),\n    \"SMS Queued\": ($('Build Update Payload').first().json.smsQueued),\n    \"Config Ready\": ($('Build Update Payload').first().json.configReady),\n    \"Error Notes\": ($('Build Update Payload').first().json.errorNotes)\n  };\n  var row = [];\n  for (var i = 0; i < headers.length; i++) {\n    var h = String(headers[i] || '').trim();\n    row.push(Object.prototype.hasOwnProperty.call(vals, h) ? vals[h] : '');\n  }\n  return [{ json: { row: row, headersVerified: !usedFallback } }];\n} catch(e) { return [{ json: { row: [], headersVerified: false, buildError: e.message } }]; }"
+        }
+      },
+      {
+        "id": "write-activity-log-app",
+        "name": "Write Activity Log · Atomic Append",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          2020,
+          624
+        ],
+        "onError": "continueRegularOutput",
+        "alwaysOutputData": true,
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "parameters": {
+          "method": "POST",
+          "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + ($('⚙️ Client Config').first().json.sheetId) + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.activityLogTab) + '!A:Z:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS' }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleSheetsOAuth2Api",
+          "sendBody": true,
+          "contentType": "raw",
+          "rawContentType": "application/json",
+          "body": "={{ JSON.stringify({ values: [ $json.row ] }) }}",
+          "options": {
+            "timeout": 10000
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Execute Workflow Trigger": {
+        "main": [
+          [
+            {
+              "node": "⚙️ Client Config",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⚙️ Client Config": {
+        "main": [
+          [
+            {
+              "node": "Parse Call Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Client Record": {
+        "main": [
+          [
+            {
+              "node": "Read Appointment Record",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Appointment Record": {
+        "main": [
+          [
+            {
+              "node": "Read Messages",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Messages": {
+        "main": [
+          [
+            {
+              "node": "Build Update Payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Update Payload": {
+        "main": [
+          [
+            {
+              "node": "Update Client Record",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Write Activity Log · Headers",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Client Record": {
+        "main": [
+          [
+            {
+              "node": "Check Urgent Message",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Route by Outcome",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Message Left?",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "CRM Update OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Urgent Message": {
+        "main": [
+          [
+            {
+              "node": "Send Urgent Alert SMS",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Route by Outcome": {
+        "main": [
+          [
+            {
+              "node": "Send Booking Confirmation SMS",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Send Callback SMS",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Send Voicemail Follow-Up SMS",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Send No-Answer SMS",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "No Follow-Up Needed",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "No Follow-Up Needed",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "No Follow-Up Needed",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Alert Owner — Unknown Outcome",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Call Data": {
+        "main": [
+          [
+            {
+              "node": "Phone Extracted?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Phone Extracted?": {
+        "main": [
+          [
+            {
+              "node": "Read Client Record",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Stop and Error - No Phone",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Message Left?": {
+        "main": [
+          [
+            {
+              "node": "Send Message Receipt SMS",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CRM Update OK?": {
+        "main": [
+          [],
+          [
+            {
+              "node": "Alert Owner — CRM Update FAILED",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Write Activity Log · Headers": {
+        "main": [
+          [
+            {
+              "node": "Write Activity Log · Build Row",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Write Activity Log · Build Row": {
+        "main": [
+          [
+            {
+              "node": "Write Activity Log · Atomic Append",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Write Activity Log · Atomic Append": {
+        "main": [
+          []
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Muhammad Ghazwan",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-08-22T12:52:37.373Z",
+    "updatedAt": "2026-08-22T12:52:37.373Z",
+    "workflowPublishHistory": [
+      {
+        "id": 431,
+        "workflowId": "U6ZSilzcV6W8e8Uc",
+        "versionId": "cf0a02ea-05a4-4418-83a3-c9bcc7aa2c3e",
+        "event": "activated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-22T12:52:37.474Z"
+      }
+    ]
+  }
+}

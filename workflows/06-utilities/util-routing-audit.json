@@ -1,0 +1,104 @@
+{
+  "id": "6UvZ6byQ9QCvh6Jm",
+  "name": "PlutioLabs — Utility: Routing Audit",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-08-20T20:30:48.995Z",
+  "updatedAt": "2026-08-20T20:49:32.179Z",
+  "isArchived": false,
+  "versionCounter": 2,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Run",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "path": "routing-audit",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "2670362e-b3d7-46e9-ace5-a3725cac241d"
+    },
+    {
+      "id": "s",
+      "name": "Read Sheet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        240,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "GET",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/YOUR_SCRAPER_SHEET_ID/values/{{ encodeURIComponent(\"'Outreach CRM'!A:BG\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "a",
+      "name": "Audit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "// Independent verification of two trust questions:\n// 1. Was routing computed correctly? Recompute every stored route from stored\n//    fields with the SAME rule as Build CRM Row, then diff.\n// 2. Did Claude invent anything? A complaint or quote can only exist if the\n//    business has reviews. Any complaint on a 0-review row is fabricated.\ntry {\n  var v = ($input.first().json || {}).values || [];\n  if (v.length < 2) { return [{ json: { error: 'no rows' } }]; }\n  var H = v[0], I = {};\n  for (var h = 0; h < H.length; h++) { I[String(H[h]).trim()] = h; }\n  function c(r, n) { var i = I[n]; if (i === undefined) { return ''; } var x = r[i]; return (x === undefined || x === null) ? '' : String(x).trim(); }\n  function N(r, n) { var x = c(r, n); if (x === '') { return 0; } var y = Number(x); return isNaN(y) ? 0 : y; }\n\n  // Kept in lockstep with isCallComplaint() in '📋 Build CRM Row' (LEVER 4).\n  var KW = ['call','phone','response','respons','unrespon','respond','reply','answer','rang','reach','voicemail','contact','get back','get hold','get through','pickup','pick up','available','message','communic','follow','appointment','schedul','no-show','no show','turn up','turned up','show up','showed up','never came','never turned','chase','chasing','ignore','missed'];\n  function isCall(x) { if (!x) { return false; } var s = String(x).toLowerCase(); for (var i = 0; i < KW.length; i++) { if (s.indexOf(KW[i]) !== -1) { return true; } } return false; }\n  function route(p, cr, rc, tc, bq) {\n    var gap = cr - rc;\n    // LEVER 3 mirrored: P2 leads with a dominant gap also qualify for A-lite.\n    if ((p === '1' && gap >= 10) || gap >= 30) { if (tc && isCall(tc)) { return 'A'; } if (bq) { return 'A-v2'; } return 'A-lite'; }\n    if (tc && isCall(tc)) { return 'B'; }\n    return 'D';\n  }\n\n  var rows = v.slice(1);\n  var mismatch = 0, samples = [], byPair = {};\n  var halluc = { complaintNoReviews: 0, quoteNoReviews: 0, complaintNoGoogle: 0, examples: [] };\n  var complaintNotCall = 0, complaintNotCallSamples = [];\n\n  for (var r = 0; r < rows.length; r++) {\n    var row = rows[r];\n    var stored = c(row, 'Template Route');\n    var tc = c(row, 'Top Complaint');\n    var bq = c(row, 'Best Review Quote');\n    var rc = N(row, 'Review Count');\n    var cr = N(row, 'Competitor Reviews');\n    var p = c(row, 'Priority');\n\n    var expect = route(p, cr, rc, tc, bq);\n    if (expect !== stored) {\n      mismatch++;\n      var pair = stored + '->' + expect;\n      byPair[pair] = (byPair[pair] || 0) + 1;\n      if (samples.length < 8) {\n        samples.push({ row: r + 2, company: c(row, 'Company Name'), stored: stored, recomputed: expect, priority: p, reviewCount: rc, competitorReviews: cr, gap: cr - rc, hasComplaint: tc !== '', hasQuote: bq !== '' });\n      }\n    }\n\n    if (tc !== '' && rc === 0) { halluc.complaintNoReviews++; if (halluc.examples.length < 5) { halluc.examples.push({ row: r + 2, company: c(row, 'Company Name'), complaint: tc, reviewCount: rc }); } }\n    if (bq !== '' && rc === 0) { halluc.quoteNoReviews++; }\n    if (tc !== '' && c(row, 'Google Rating') === '') { halluc.complaintNoGoogle++; }\n\n    if (tc !== '' && !isCall(tc)) { complaintNotCall++; if (complaintNotCallSamples.length < 10) { complaintNotCallSamples.push({ company: c(row, 'Company Name'), complaint: tc, stored: stored }); } }\n  }\n\n  return [{ json: {\n    rowsAudited: rows.length,\n    routing: { mismatches: mismatch, verdict: mismatch === 0 ? 'PASS - every stored route matches a clean recomputation' : 'FAIL', byTransition: byPair, samples: samples },\n    grounding: { verdict: (halluc.complaintNoReviews === 0 && halluc.quoteNoReviews === 0) ? 'PASS - no complaint or quote exists on a 0-review business' : 'FAIL', complaintOnZeroReviewRows: halluc.complaintNoReviews, quoteOnZeroReviewRows: halluc.quoteNoReviews, complaintWithoutGoogleData: halluc.complaintNoGoogle, examples: halluc.examples },\n    wastedComplaints: { count: complaintNotCall, note: 'Leads WITH a real complaint that is not call-related. Build CRM Row only routes call-related complaints to A or B, so these fall to D despite having the strongest personal signal.', samples: complaintNotCallSamples }\n  }}];\n} catch (e) { return [{ json: { error: 'Audit failed: ' + e.message } }]; }"
+      }
+    }
+  ],
+  "connections": {
+    "Run": {
+      "main": [
+        [
+          {
+            "node": "Read Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Sheet": {
+      "main": [
+        [
+          {
+            "node": "Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "activeVersion": null
+}

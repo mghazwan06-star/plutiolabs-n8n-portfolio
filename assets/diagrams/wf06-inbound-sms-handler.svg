@@ -1,0 +1,360 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-350 -530 3660 2204" width="1600" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect x="-350" y="-530" width="3660" height="2204" fill="#f7f7f8"/>
+<defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#dcdce0"/></pattern></defs>
+<rect x="-350" y="-530" width="3660" height="2204" fill="url(#g)"/>
+<rect x="-260" y="-240" width="420" height="560" rx="8" fill="#d9f2f2" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="-248" y="-216" font-size="13.5" font-weight="700" fill="#5f5930">WF6 — Inbound SMS Handler</text>
+<text x="-248" y="-199" font-size="11.5" fill="#6f6840">Handles all inbound SMS replies on the Twilio business</text>
+<text x="-248" y="-185" font-size="11.5" fill="#6f6840">number.</text>
+<text x="-248" y="-171" font-size="11.5" fill="#6f6840">Flow: Twilio webhook → normalize phone → read lead →</text>
+<text x="-248" y="-157" font-size="11.5" fill="#6f6840">log SMS → classify intent (Claude AI) → act</text>
+<text x="-248" y="-143" font-size="11.5" fill="#6f6840">Actions by intent:</text>
+<text x="-248" y="-129" font-size="11.5" fill="#6f6840">- opt-out (STOP/UNSUBSCRIBE): Status=do-not-contact,</text>
+<text x="-248" y="-115" font-size="11.5" fill="#6f6840">SMS Opt-Out=Y + confirmation SMS</text>
+<text x="-248" y="-101" font-size="11.5" fill="#6f6840">- do-not-contact: Status=do-not-contact + reply SMS</text>
+<text x="-248" y="-87" font-size="11.5" fill="#6f6840">- callback: Status=callback-scheduled + Callback Time</text>
+<text x="-248" y="-73" font-size="11.5" fill="#6f6840">ISO</text>
+<text x="-248" y="-59" font-size="11.5" fill="#6f6840">- positive: Status=callback-requested + reply SMS +</text>
+<text x="-248" y="-45" font-size="11.5" fill="#6f6840">alert owner</text>
+<text x="-248" y="-31" font-size="11.5" fill="#6f6840">- confirm (BEVESTIG): Null-check → Updates ConfirmedAt</text>
+<text x="-248" y="-17" font-size="11.5" fill="#6f6840">+ reply SMS (or &#x27;no appt found&#x27; reply)</text>
+<text x="-248" y="-3" font-size="11.5" fill="#6f6840">- cancel (ANNULEER): Null-check → Cancels appointment +</text>
+<text x="-248" y="11" font-size="11.5" fill="#6f6840">Clients Status=callback-requested + reply SMS (or &#x27;no…</text>
+<text x="-248" y="25" font-size="11.5" fill="#6f6840">- unknown intent: Alert owner</text>
+<text x="-248" y="39" font-size="11.5" fill="#6f6840">- unknown number: Alert owner</text>
+<text x="-248" y="53" font-size="11.5" fill="#6f6840">Trigger: POST /webhook/wf6-sms-inbound</text>
+<rect x="460" y="60" width="500" height="200" rx="8" fill="#e8d9ff" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="472" y="84" font-size="13.5" font-weight="700" fill="#5f5930">Intake &amp; Classification</text>
+<text x="472" y="101" font-size="11.5" fill="#6f6840">1. Receive Twilio webhook</text>
+<text x="472" y="115" font-size="11.5" fill="#6f6840">2. Normalize phone → E.164</text>
+<text x="472" y="129" font-size="11.5" fill="#6f6840">3. Read lead row from Sheets by Phone</text>
+<text x="472" y="143" font-size="11.5" fill="#6f6840">4. Log inbound SMS to Messages tab</text>
+<text x="472" y="157" font-size="11.5" fill="#6f6840">5. Lead not found → alert owner, stop</text>
+<text x="472" y="171" font-size="11.5" fill="#6f6840">6. Classify intent via Claude Haiku</text>
+<text x="472" y="185" font-size="11.5" fill="#6f6840">7. STOP keyword override</text>
+<text x="472" y="199" font-size="11.5" fill="#6f6840">8. Route to intent branch</text>
+<g fill="none" stroke="#9aa0a6" stroke-width="2.5">
+<path d="M100,350 C163,350 177,350 233,350"/>
+<path d="M233,345 L240,350 L233,355" fill="#9aa0a6" stroke="none"/>
+<path d="M340,350 C403,350 417,350 473,350"/>
+<path d="M473,345 L480,350 L473,355" fill="#9aa0a6" stroke="none"/>
+<path d="M580,350 C643,350 657,350 713,350"/>
+<path d="M713,345 L720,350 L713,355" fill="#9aa0a6" stroke="none"/>
+<path d="M1300,333 C1363,333 1377,250 1433,250"/>
+<path d="M1433,245 L1440,250 L1433,255" fill="#9aa0a6" stroke="none"/>
+<path d="M1300,367 C1340,367 1320,610 1353,610"/>
+<path d="M1353,605 L1360,610 L1353,615" fill="#9aa0a6" stroke="none"/>
+<path d="M1540,250 C1603,250 1617,250 1673,250"/>
+<path d="M1673,245 L1680,250 L1673,255" fill="#9aa0a6" stroke="none"/>
+<path d="M1780,250 C1843,250 1857,250 1913,250"/>
+<path d="M1913,245 L1920,250 L1913,255" fill="#9aa0a6" stroke="none"/>
+<path d="M2020,212 C2083,212 2097,-10 2153,-10"/>
+<path d="M2153,-15 L2160,-10 L2153,-5" fill="#9aa0a6" stroke="none"/>
+<path d="M2020,225 C2083,225 2097,150 2153,150"/>
+<path d="M2153,145 L2160,150 L2153,155" fill="#9aa0a6" stroke="none"/>
+<path d="M2020,238 C2083,238 2097,310 2153,310"/>
+<path d="M2153,305 L2160,310 L2153,315" fill="#9aa0a6" stroke="none"/>
+<path d="M2020,250 C2083,250 2097,470 2153,470"/>
+<path d="M2153,465 L2160,470 L2153,475" fill="#9aa0a6" stroke="none"/>
+<path d="M2020,262 C2083,262 2097,-230 2153,-230"/>
+<path d="M2153,-235 L2160,-230 L2153,-225" fill="#9aa0a6" stroke="none"/>
+<path d="M2020,275 C2083,275 2097,790 2153,790"/>
+<path d="M2153,785 L2160,790 L2153,795" fill="#9aa0a6" stroke="none"/>
+<path d="M2020,288 C2083,288 2097,630 2153,630"/>
+<path d="M2153,625 L2160,630 L2153,635" fill="#9aa0a6" stroke="none"/>
+<path d="M2260,310 C2323,310 2337,310 2393,310"/>
+<path d="M2393,305 L2400,310 L2393,315" fill="#9aa0a6" stroke="none"/>
+<path d="M2260,310 C2300,310 2260,1300 2293,1300"/>
+<path d="M2293,1295 L2300,1300 L2293,1305" fill="#9aa0a6" stroke="none"/>
+<path d="M2260,470 C2323,470 2337,470 2393,470"/>
+<path d="M2393,465 L2400,470 L2393,475" fill="#9aa0a6" stroke="none"/>
+<path d="M2260,470 C2300,470 2260,1400 2293,1400"/>
+<path d="M2293,1395 L2300,1400 L2293,1405" fill="#9aa0a6" stroke="none"/>
+<path d="M2500,470 C2563,470 2577,470 2633,470"/>
+<path d="M2633,465 L2640,470 L2633,475" fill="#9aa0a6" stroke="none"/>
+<path d="M2260,-230 C2323,-230 2337,-230 2393,-230"/>
+<path d="M2393,-235 L2400,-230 L2393,-225" fill="#9aa0a6" stroke="none"/>
+<path d="M2500,-247 C2563,-247 2577,-230 2633,-230"/>
+<path d="M2633,-235 L2640,-230 L2633,-225" fill="#9aa0a6" stroke="none"/>
+<path d="M2500,-213 C2563,-213 2577,-390 2633,-390"/>
+<path d="M2633,-395 L2640,-390 L2633,-385" fill="#9aa0a6" stroke="none"/>
+<path d="M2740,-230 C2803,-230 2817,-230 2873,-230"/>
+<path d="M2873,-235 L2880,-230 L2873,-225" fill="#9aa0a6" stroke="none"/>
+<path d="M2740,-230 C2938,-230 2102,1500 2293,1500"/>
+<path d="M2293,1495 L2300,1500 L2293,1505" fill="#9aa0a6" stroke="none"/>
+<path d="M2260,790 C2323,790 2337,790 2393,790"/>
+<path d="M2393,785 L2400,790 L2393,795" fill="#9aa0a6" stroke="none"/>
+<path d="M2500,773 C2540,773 2480,790 2513,790"/>
+<path d="M2513,785 L2520,790 L2513,795" fill="#9aa0a6" stroke="none"/>
+<path d="M2500,807 C2563,807 2577,950 2633,950"/>
+<path d="M2633,945 L2640,950 L2633,955" fill="#9aa0a6" stroke="none"/>
+<path d="M2740,790 C2803,790 2817,790 2873,790"/>
+<path d="M2873,785 L2880,790 L2873,795" fill="#9aa0a6" stroke="none"/>
+<path d="M2740,790 C2803,790 2817,930 2873,930"/>
+<path d="M2873,925 L2880,930 L2873,935" fill="#9aa0a6" stroke="none"/>
+<path d="M2980,790 C3043,790 3057,790 3113,790"/>
+<path d="M3113,785 L3120,790 L3113,795" fill="#9aa0a6" stroke="none"/>
+<path d="M2980,930 C3043,930 3057,930 3113,930"/>
+<path d="M3113,925 L3120,930 L3113,935" fill="#9aa0a6" stroke="none"/>
+<path d="M2620,790 C2660,790 2540,790 2573,790"/>
+<path d="M2573,785 L2580,790 L2573,795" fill="#9aa0a6" stroke="none"/>
+<path d="M2680,773 C2720,773 2600,790 2633,790"/>
+<path d="M2633,785 L2640,790 L2633,795" fill="#9aa0a6" stroke="none"/>
+<path d="M2680,807 C2720,807 2600,1110 2633,1110"/>
+<path d="M2633,1105 L2640,1110 L2633,1115" fill="#9aa0a6" stroke="none"/>
+<path d="M2740,1110 C2803,1110 2817,1110 2873,1110"/>
+<path d="M2873,1105 L2880,1110 L2873,1115" fill="#9aa0a6" stroke="none"/>
+<path d="M2260,-10 C2300,-10 2240,-10 2273,-10"/>
+<path d="M2273,-15 L2280,-10 L2273,-5" fill="#9aa0a6" stroke="none"/>
+<path d="M2380,-27 C2420,-27 2360,-10 2393,-10"/>
+<path d="M2393,-15 L2400,-10 L2393,-5" fill="#9aa0a6" stroke="none"/>
+<path d="M2380,7 C2443,7 2457,-150 2513,-150"/>
+<path d="M2513,-155 L2520,-150 L2513,-145" fill="#9aa0a6" stroke="none"/>
+<path d="M2260,150 C2300,150 2240,150 2273,150"/>
+<path d="M2273,145 L2280,150 L2273,155" fill="#9aa0a6" stroke="none"/>
+<path d="M2380,133 C2420,133 2360,150 2393,150"/>
+<path d="M2393,145 L2400,150 L2393,155" fill="#9aa0a6" stroke="none"/>
+<path d="M2380,167 C2443,167 2457,250 2513,250"/>
+<path d="M2513,245 L2520,250 L2513,255" fill="#9aa0a6" stroke="none"/>
+<path d="M820,350 C860,350 760,510 793,510"/>
+<path d="M793,505 L800,510 L793,515" fill="#9aa0a6" stroke="none"/>
+<path d="M900,510 C940,510 920,510 953,510"/>
+<path d="M953,505 L960,510 L953,515" fill="#9aa0a6" stroke="none"/>
+<path d="M1060,510 C1100,510 1080,510 1113,510"/>
+<path d="M1113,505 L1120,510 L1113,515" fill="#9aa0a6" stroke="none"/>
+<path d="M1220,510 C1260,510 1160,350 1193,350"/>
+<path d="M1193,345 L1200,350 L1193,355" fill="#9aa0a6" stroke="none"/>
+<path d="M2400,1317 C2472,1317 2488,1400 2553,1400"/>
+<path d="M2553,1395 L2560,1400 L2553,1405" fill="#9aa0a6" stroke="none"/>
+<path d="M2400,1417 C2472,1417 2488,1400 2553,1400"/>
+<path d="M2553,1395 L2560,1400 L2553,1405" fill="#9aa0a6" stroke="none"/>
+<path d="M2400,1517 C2472,1517 2488,1400 2553,1400"/>
+<path d="M2553,1395 L2560,1400 L2553,1405" fill="#9aa0a6" stroke="none"/>
+<path d="M1460,593 C1523,593 1537,690 1593,690"/>
+<path d="M1593,685 L1600,690 L1593,695" fill="#9aa0a6" stroke="none"/>
+<path d="M1460,627 C1500,627 1400,530 1433,530"/>
+<path d="M1433,525 L1440,530 L1433,535" fill="#9aa0a6" stroke="none"/>
+</g>
+<rect x="0" y="300" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="0" y="300" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="50.0" y="346.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">webhook</text>
+<text x="50.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">Twilio Inbound SMS</text>
+<rect x="240" y="300" width="100" height="100" rx="10" fill="#ffffff" stroke="#0aa8a7" stroke-width="3"/>
+<rect x="240" y="300" width="100" height="100" rx="10" fill="#0aa8a7" fill-opacity="0.10"/>
+<text x="290.0" y="346.0" font-size="11" text-anchor="middle" fill="#0aa8a7" font-weight="700">set</text>
+<text x="290.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">⚙️ Client Config</text>
+<rect x="480" y="300" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="480" y="300" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="530.0" y="346.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="530.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">Parse SMS Data</text>
+<rect x="720" y="300" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="720" y="300" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="770.0" y="346.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="770.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">Read Lead from</text>
+<text x="770.0" y="428" font-size="11.5" text-anchor="middle" fill="#2b2f36">Sheets</text>
+<rect x="1200" y="300" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="1200" y="300" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="1250.0" y="346.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="1250.0" y="415" font-size="11.5" text-anchor="middle" fill="#2b2f36">Lead Found?</text>
+<rect x="1440" y="200" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="1440" y="200" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="1490.0" y="246.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="1490.0" y="315" font-size="11.5" text-anchor="middle" fill="#2b2f36">Classify Intent</text>
+<rect x="1680" y="200" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1680" y="200" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1730.0" y="246.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1730.0" y="315" font-size="11.5" text-anchor="middle" fill="#2b2f36">Parse Intent</text>
+<rect x="1920" y="200" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="1920" y="200" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="1970.0" y="246.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">switch</text>
+<text x="1970.0" y="315" font-size="11.5" text-anchor="middle" fill="#2b2f36">Route by Intent</text>
+<rect x="2160" y="-60" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="2160" y="-60" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="2210.0" y="-14.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="2210.0" y="55" font-size="11.5" text-anchor="middle" fill="#2b2f36">Update Clients — Opt</text>
+<text x="2210.0" y="68" font-size="11.5" text-anchor="middle" fill="#2b2f36">Out</text>
+<rect x="2400" y="-60" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2400" y="-60" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2450.0" y="-14.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2450.0" y="55" font-size="11.5" text-anchor="middle" fill="#2b2f36">Reply SMS — Opt Out</text>
+<rect x="2160" y="100" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="2160" y="100" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="2210.0" y="146.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="2210.0" y="215" font-size="11.5" text-anchor="middle" fill="#2b2f36">Update Clients — DNC</text>
+<rect x="2400" y="100" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2400" y="100" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2450.0" y="146.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2450.0" y="215" font-size="11.5" text-anchor="middle" fill="#2b2f36">Reply SMS — DNC</text>
+<rect x="2160" y="260" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="2160" y="260" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="2210.0" y="306.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="2210.0" y="375" font-size="11.5" text-anchor="middle" fill="#2b2f36">Update Clients —</text>
+<text x="2210.0" y="388" font-size="11.5" text-anchor="middle" fill="#2b2f36">Callback</text>
+<rect x="2400" y="260" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2400" y="260" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2450.0" y="306.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2450.0" y="375" font-size="11.5" text-anchor="middle" fill="#2b2f36">Reply SMS — Callback</text>
+<rect x="2160" y="420" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="2160" y="420" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="2210.0" y="466.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="2210.0" y="535" font-size="11.5" text-anchor="middle" fill="#2b2f36">Update Clients —</text>
+<text x="2210.0" y="548" font-size="11.5" text-anchor="middle" fill="#2b2f36">Positive</text>
+<rect x="2400" y="420" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2400" y="420" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2450.0" y="466.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2450.0" y="535" font-size="11.5" text-anchor="middle" fill="#2b2f36">Reply SMS — Positive</text>
+<rect x="2640" y="420" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2640" y="420" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2690.0" y="466.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2690.0" y="535" font-size="11.5" text-anchor="middle" fill="#2b2f36">Alert Owner —</text>
+<text x="2690.0" y="548" font-size="11.5" text-anchor="middle" fill="#2b2f36">Positive</text>
+<rect x="2160" y="580" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2160" y="580" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2210.0" y="626.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2210.0" y="695" font-size="11.5" text-anchor="middle" fill="#2b2f36">Alert Owner —</text>
+<text x="2210.0" y="708" font-size="11.5" text-anchor="middle" fill="#2b2f36">Unknown Intent</text>
+<rect x="1440" y="480" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="1440" y="480" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="1490.0" y="526.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="1490.0" y="595" font-size="11.5" text-anchor="middle" fill="#2b2f36">Alert Owner —</text>
+<text x="1490.0" y="608" font-size="11.5" text-anchor="middle" fill="#2b2f36">Unknown Number</text>
+<rect x="2160" y="-280" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="2160" y="-280" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="2210.0" y="-234.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="2210.0" y="-165" font-size="11.5" text-anchor="middle" fill="#2b2f36">Read Appt Log</text>
+<text x="2210.0" y="-152" font-size="11.5" text-anchor="middle" fill="#2b2f36">(Confirm)</text>
+<rect x="2400" y="-280" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="2400" y="-280" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="2450.0" y="-234.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="2450.0" y="-165" font-size="11.5" text-anchor="middle" fill="#2b2f36">Appt Found?</text>
+<text x="2450.0" y="-152" font-size="11.5" text-anchor="middle" fill="#2b2f36">(Confirm)</text>
+<rect x="2640" y="-280" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="2640" y="-280" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="2690.0" y="-234.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="2690.0" y="-165" font-size="11.5" text-anchor="middle" fill="#2b2f36">Update ConfirmedAt</text>
+<rect x="2880" y="-280" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2880" y="-280" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2930.0" y="-234.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2930.0" y="-165" font-size="11.5" text-anchor="middle" fill="#2b2f36">Reply SMS — Confirm</text>
+<rect x="2640" y="-440" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2640" y="-440" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2690.0" y="-394.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2690.0" y="-325" font-size="11.5" text-anchor="middle" fill="#2b2f36">Reply SMS — No Appt</text>
+<text x="2690.0" y="-312" font-size="11.5" text-anchor="middle" fill="#2b2f36">(Confirm)</text>
+<rect x="2160" y="740" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="2160" y="740" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="2210.0" y="786.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="2210.0" y="855" font-size="11.5" text-anchor="middle" fill="#2b2f36">Read Appt Log</text>
+<text x="2210.0" y="868" font-size="11.5" text-anchor="middle" fill="#2b2f36">(Cancel)</text>
+<rect x="2400" y="740" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="2400" y="740" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="2450.0" y="786.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="2450.0" y="855" font-size="11.5" text-anchor="middle" fill="#2b2f36">Appt Found? (Cancel)</text>
+<rect x="2640" y="740" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="2640" y="740" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="2690.0" y="786.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="2690.0" y="855" font-size="11.5" text-anchor="middle" fill="#2b2f36">Update Cancelled</text>
+<text x="2690.0" y="868" font-size="11.5" text-anchor="middle" fill="#2b2f36">Appt</text>
+<rect x="2880" y="740" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="2880" y="740" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="2930.0" y="786.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="2930.0" y="855" font-size="11.5" text-anchor="middle" fill="#2b2f36">Update Clients —</text>
+<text x="2930.0" y="868" font-size="11.5" text-anchor="middle" fill="#2b2f36">Cancel Status</text>
+<rect x="3120" y="740" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="3120" y="740" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="3170.0" y="786.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="3170.0" y="855" font-size="11.5" text-anchor="middle" fill="#2b2f36">Reply SMS — Cancel</text>
+<rect x="2640" y="900" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2640" y="900" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2690.0" y="946.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2690.0" y="1015" font-size="11.5" text-anchor="middle" fill="#2b2f36">Reply SMS — No Appt</text>
+<text x="2690.0" y="1028" font-size="11.5" text-anchor="middle" fill="#2b2f36">(Cancel)</text>
+<rect x="2520" y="740" width="100" height="100" rx="10" fill="#ffffff" stroke="#4285f4" stroke-width="3"/>
+<rect x="2520" y="740" width="100" height="100" rx="10" fill="#4285f4" fill-opacity="0.10"/>
+<text x="2570.0" y="786.0" font-size="11" text-anchor="middle" fill="#4285f4" font-weight="700">Calendar</text>
+<text x="2570.0" y="855" font-size="11.5" text-anchor="middle" fill="#2b2f36">Delete Calendar</text>
+<text x="2570.0" y="868" font-size="11.5" text-anchor="middle" fill="#2b2f36">Event</text>
+<rect x="2880" y="880" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="2880" y="880" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="2930.0" y="926.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="2930.0" y="995" font-size="11.5" text-anchor="middle" fill="#2b2f36">Is D3 Booking?</text>
+<text x="2930.0" y="1008" font-size="11.5" text-anchor="middle" fill="#2b2f36">(Cancel)</text>
+<rect x="3120" y="880" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="3120" y="880" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="3170.0" y="926.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="3170.0" y="995" font-size="11.5" text-anchor="middle" fill="#2b2f36">Alert Owner — D3</text>
+<text x="3170.0" y="1008" font-size="11.5" text-anchor="middle" fill="#2b2f36">Cancel</text>
+<rect x="2580" y="740" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="2580" y="740" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="2630.0" y="786.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="2630.0" y="855" font-size="11.5" text-anchor="middle" fill="#2b2f36">Delete Succeeded?</text>
+<rect x="2640" y="1060" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2640" y="1060" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2690.0" y="1106.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2690.0" y="1175" font-size="11.5" text-anchor="middle" fill="#2b2f36">Reply SMS — Cancel</text>
+<text x="2690.0" y="1188" font-size="11.5" text-anchor="middle" fill="#2b2f36">Failed</text>
+<rect x="2880" y="1060" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2880" y="1060" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2930.0" y="1106.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2930.0" y="1175" font-size="11.5" text-anchor="middle" fill="#2b2f36">Alert Owner — Cancel</text>
+<text x="2930.0" y="1188" font-size="11.5" text-anchor="middle" fill="#2b2f36">Failed</text>
+<rect x="2280" y="-60" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="2280" y="-60" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="2330.0" y="-14.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="2330.0" y="55" font-size="11.5" text-anchor="middle" fill="#2b2f36">Opt-Out Write OK?</text>
+<rect x="2520" y="-200" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2520" y="-200" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2570.0" y="-154.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2570.0" y="-85" font-size="11.5" text-anchor="middle" fill="#2b2f36">Alert Owner —</text>
+<text x="2570.0" y="-72" font-size="11.5" text-anchor="middle" fill="#2b2f36">Opt-Out Write FAILED</text>
+<rect x="2280" y="100" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="2280" y="100" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="2330.0" y="146.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="2330.0" y="215" font-size="11.5" text-anchor="middle" fill="#2b2f36">DNC Write OK?</text>
+<rect x="2520" y="200" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2520" y="200" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2570.0" y="246.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2570.0" y="315" font-size="11.5" text-anchor="middle" fill="#2b2f36">Alert Owner — DNC</text>
+<text x="2570.0" y="328" font-size="11.5" text-anchor="middle" fill="#2b2f36">Write FAILED</text>
+<rect x="800" y="460" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="800" y="460" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="850.0" y="506.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="850.0" y="575" font-size="11.5" text-anchor="middle" fill="#2b2f36">Read Messages</text>
+<text x="850.0" y="588" font-size="11.5" text-anchor="middle" fill="#2b2f36">Headers</text>
+<rect x="960" y="460" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="960" y="460" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1010.0" y="506.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1010.0" y="575" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build Messages Row</text>
+<rect x="1120" y="460" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="1120" y="460" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="1170.0" y="506.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="1170.0" y="575" font-size="11.5" text-anchor="middle" fill="#2b2f36">Append Messages Row</text>
+<text x="1170.0" y="588" font-size="11.5" text-anchor="middle" fill="#2b2f36">(atomic)</text>
+<rect x="2560" y="1350" width="100" height="100" rx="10" fill="#ffffff" stroke="#e02d3c" stroke-width="3"/>
+<rect x="2560" y="1350" width="100" height="100" rx="10" fill="#e02d3c" fill-opacity="0.10"/>
+<text x="2610.0" y="1396.0" font-size="11" text-anchor="middle" fill="#e02d3c" font-weight="700">Twilio</text>
+<text x="2610.0" y="1465" font-size="11.5" text-anchor="middle" fill="#2b2f36">Alert Owner — CRM</text>
+<text x="2610.0" y="1478" font-size="11.5" text-anchor="middle" fill="#2b2f36">Write Failed</text>
+<rect x="2300" y="1250" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="2300" y="1250" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="2350.0" y="1296.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="2350.0" y="1365" font-size="11.5" text-anchor="middle" fill="#2b2f36">Callback Write OK?</text>
+<rect x="2300" y="1350" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="2300" y="1350" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="2350.0" y="1396.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="2350.0" y="1465" font-size="11.5" text-anchor="middle" fill="#2b2f36">Positive Write OK?</text>
+<rect x="2300" y="1450" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="2300" y="1450" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="2350.0" y="1496.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="2350.0" y="1565" font-size="11.5" text-anchor="middle" fill="#2b2f36">Confirm Write OK?</text>
+<rect x="1360" y="560" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="1360" y="560" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="1410.0" y="606.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="1410.0" y="675" font-size="11.5" text-anchor="middle" fill="#2b2f36">Unknown Sender</text>
+<text x="1410.0" y="688" font-size="11.5" text-anchor="middle" fill="#2b2f36">Opt-Out?</text>
+<rect x="1600" y="640" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="1600" y="640" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="1650.0" y="686.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="1650.0" y="755" font-size="11.5" text-anchor="middle" fill="#2b2f36">Suppress Unknown</text>
+<text x="1650.0" y="768" font-size="11.5" text-anchor="middle" fill="#2b2f36">Sender</text>
+</svg>

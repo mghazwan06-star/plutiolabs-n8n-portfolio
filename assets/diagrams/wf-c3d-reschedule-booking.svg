@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="190 -50 2460 974" width="1600" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect x="190" y="-50" width="2460" height="974" fill="#f7f7f8"/>
+<defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#dcdce0"/></pattern></defs>
+<rect x="190" y="-50" width="2460" height="974" fill="url(#g)"/>
+<rect x="280" y="40" width="940" height="200" rx="8" fill="#fff8b8" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="292" y="64" font-size="13.5" font-weight="700" fill="#5f5930">WF-C3d: Reschedule Booking</text>
+<text x="292" y="81" font-size="11.5" fill="#6f6840">Called by: WF-C2 (Claude Core) via Execute Workflow node</text>
+<text x="292" y="95" font-size="11.5" fill="#6f6840">Input: { toolInput: { newDate: &#x27;YYYY-MM-DD&#x27;, newTime: &#x27;9am|11am|1pm|3pm&#x27; }, toolUseId, phone }</text>
+<text x="292" y="109" font-size="11.5" fill="#6f6840">Output: { toolCallId, result }</text>
+<text x="292" y="123" font-size="11.5" fill="#6f6840">1. Reads Appointment Log for phone + status=confirmed</text>
+<text x="292" y="137" font-size="11.5" fill="#6f6840">2. Computes new ISO start/end (BST-aware)</text>
+<text x="292" y="151" font-size="11.5" fill="#6f6840">3. Updates Google Calendar event start/end</text>
+<text x="292" y="165" font-size="11.5" fill="#6f6840">4. Updates Appointment Log: Date, Time, AppointmentTimeISO</text>
+<text x="292" y="179" font-size="11.5" fill="#6f6840">5. Updates Clients: Upcoming Appointment, Last Contact, Last Channel</text>
+<text x="292" y="193" font-size="11.5" fill="#6f6840">⚠️ Credentials: Google Sheets OAuth2 (id: 0d40kOfUWlsFuLuB), Google Calendar OAuth2 (id: Vm9SHjOljbABWWKN)</text>
+<g fill="none" stroke="#9aa0a6" stroke-width="2.5">
+<path d="M400,370 C463,370 477,370 533,370"/>
+<path d="M533,365 L540,370 L533,375" fill="#9aa0a6" stroke="none"/>
+<path d="M640,370 C703,370 717,370 773,370"/>
+<path d="M773,365 L780,370 L773,375" fill="#9aa0a6" stroke="none"/>
+<path d="M880,370 C943,370 957,370 1013,370"/>
+<path d="M1013,365 L1020,370 L1013,375" fill="#9aa0a6" stroke="none"/>
+<path d="M1120,370 C1183,370 1197,370 1253,370"/>
+<path d="M1253,365 L1260,370 L1253,375" fill="#9aa0a6" stroke="none"/>
+<path d="M1360,353 C1423,353 1437,250 1493,250"/>
+<path d="M1493,245 L1500,250 L1493,255" fill="#9aa0a6" stroke="none"/>
+<path d="M1360,387 C1423,387 1437,510 1493,510"/>
+<path d="M1493,505 L1500,510 L1493,515" fill="#9aa0a6" stroke="none"/>
+<path d="M1840,250 C1880,250 1830,250 1863,250"/>
+<path d="M1863,245 L1870,250 L1863,255" fill="#9aa0a6" stroke="none"/>
+<path d="M1970,233 C2010,233 1940,250 1973,250"/>
+<path d="M1973,245 L1980,250 L1973,255" fill="#9aa0a6" stroke="none"/>
+<path d="M1970,267 C2038,267 2052,470 2113,470"/>
+<path d="M2113,465 L2120,470 L2113,475" fill="#9aa0a6" stroke="none"/>
+<path d="M2080,250 C2143,250 2157,250 2213,250"/>
+<path d="M2213,245 L2220,250 L2213,255" fill="#9aa0a6" stroke="none"/>
+<path d="M2320,250 C2383,250 2397,250 2453,250"/>
+<path d="M2453,245 L2460,250 L2453,255" fill="#9aa0a6" stroke="none"/>
+<path d="M1720,250 C1760,250 1620,370 1653,370"/>
+<path d="M1653,365 L1660,370 L1653,375" fill="#9aa0a6" stroke="none"/>
+<path d="M1760,370 C1800,370 1660,490 1693,490"/>
+<path d="M1693,485 L1700,490 L1693,495" fill="#9aa0a6" stroke="none"/>
+<path d="M1800,473 C1840,473 1700,250 1733,250"/>
+<path d="M1733,245 L1740,250 L1733,255" fill="#9aa0a6" stroke="none"/>
+<path d="M1800,507 C1845,507 1655,650 1693,650"/>
+<path d="M1693,645 L1700,650 L1693,655" fill="#9aa0a6" stroke="none"/>
+<path d="M1600,250 C1640,250 1540,130 1573,130"/>
+<path d="M1573,125 L1580,130 L1573,135" fill="#9aa0a6" stroke="none"/>
+<path d="M1680,113 C1720,113 1580,250 1613,250"/>
+<path d="M1613,245 L1620,250 L1613,255" fill="#9aa0a6" stroke="none"/>
+<path d="M1680,147 C1725,147 1535,750 1573,750"/>
+<path d="M1573,745 L1580,750 L1573,755" fill="#9aa0a6" stroke="none"/>
+</g>
+<rect x="300" y="320" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="300" y="320" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="350.0" y="366.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">sub-flow</text>
+<text x="350.0" y="380.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">in</text>
+<text x="350.0" y="435" font-size="11.5" text-anchor="middle" fill="#2b2f36">Execute Workflow</text>
+<text x="350.0" y="448" font-size="11.5" text-anchor="middle" fill="#2b2f36">Trigger</text>
+<rect x="540" y="320" width="100" height="100" rx="10" fill="#ffffff" stroke="#0aa8a7" stroke-width="3"/>
+<rect x="540" y="320" width="100" height="100" rx="10" fill="#0aa8a7" fill-opacity="0.10"/>
+<text x="590.0" y="366.0" font-size="11" text-anchor="middle" fill="#0aa8a7" font-weight="700">set</text>
+<text x="590.0" y="435" font-size="11.5" text-anchor="middle" fill="#2b2f36">⚙️ Client Config</text>
+<rect x="780" y="320" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="780" y="320" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="830.0" y="366.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="830.0" y="435" font-size="11.5" text-anchor="middle" fill="#2b2f36">Read Appointment Log</text>
+<rect x="1020" y="320" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1020" y="320" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1070.0" y="366.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1070.0" y="435" font-size="11.5" text-anchor="middle" fill="#2b2f36">Find Confirmed</text>
+<text x="1070.0" y="448" font-size="11.5" text-anchor="middle" fill="#2b2f36">Appointment</text>
+<rect x="1260" y="320" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="1260" y="320" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="1310.0" y="366.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="1310.0" y="435" font-size="11.5" text-anchor="middle" fill="#2b2f36">IF Has Confirmed</text>
+<text x="1310.0" y="448" font-size="11.5" text-anchor="middle" fill="#2b2f36">Appointment</text>
+<rect x="1500" y="200" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1500" y="200" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1550.0" y="246.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1550.0" y="315" font-size="11.5" text-anchor="middle" fill="#2b2f36">Compute New Time</text>
+<rect x="1740" y="200" width="100" height="100" rx="10" fill="#ffffff" stroke="#4285f4" stroke-width="3"/>
+<rect x="1740" y="200" width="100" height="100" rx="10" fill="#4285f4" fill-opacity="0.10"/>
+<text x="1790.0" y="246.0" font-size="11" text-anchor="middle" fill="#4285f4" font-weight="700">Calendar</text>
+<text x="1790.0" y="315" font-size="11.5" text-anchor="middle" fill="#2b2f36">Update Calendar</text>
+<text x="1790.0" y="328" font-size="11.5" text-anchor="middle" fill="#2b2f36">Event</text>
+<rect x="1870" y="200" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="1870" y="200" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="1920.0" y="246.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="1920.0" y="315" font-size="11.5" text-anchor="middle" fill="#2b2f36">Calendar Updated?</text>
+<rect x="1980" y="200" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="1980" y="200" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="2030.0" y="246.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="2030.0" y="315" font-size="11.5" text-anchor="middle" fill="#2b2f36">Update Appointment</text>
+<text x="2030.0" y="328" font-size="11.5" text-anchor="middle" fill="#2b2f36">Log - Rescheduled</text>
+<rect x="2220" y="200" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="2220" y="200" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="2270.0" y="246.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="2270.0" y="315" font-size="11.5" text-anchor="middle" fill="#2b2f36">Update Clients -</text>
+<text x="2270.0" y="328" font-size="11.5" text-anchor="middle" fill="#2b2f36">Rescheduled</text>
+<rect x="2460" y="200" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="2460" y="200" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="2510.0" y="246.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="2510.0" y="315" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build Reschedule</text>
+<text x="2510.0" y="328" font-size="11.5" text-anchor="middle" fill="#2b2f36">Success</text>
+<rect x="1500" y="460" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1500" y="460" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1550.0" y="506.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1550.0" y="575" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build No Booking</text>
+<text x="1550.0" y="588" font-size="11.5" text-anchor="middle" fill="#2b2f36">Response</text>
+<rect x="2120" y="420" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="2120" y="420" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="2170.0" y="466.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="2170.0" y="535" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build Calendar</text>
+<text x="2170.0" y="548" font-size="11.5" text-anchor="middle" fill="#2b2f36">Update Fail Response</text>
+<rect x="1620" y="200" width="100" height="100" rx="10" fill="#ffffff" stroke="#4285f4" stroke-width="3"/>
+<rect x="1620" y="200" width="100" height="100" rx="10" fill="#4285f4" fill-opacity="0.10"/>
+<text x="1670.0" y="246.0" font-size="11" text-anchor="middle" fill="#4285f4" font-weight="700">Calendar</text>
+<text x="1670.0" y="315" font-size="11.5" text-anchor="middle" fill="#2b2f36">Re-check New Slot</text>
+<rect x="1660" y="320" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1660" y="320" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1710.0" y="366.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1710.0" y="435" font-size="11.5" text-anchor="middle" fill="#2b2f36">Evaluate New Slot</text>
+<rect x="1700" y="440" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="1700" y="440" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="1750.0" y="486.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="1750.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">New Slot Free?</text>
+<rect x="1700" y="600" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1700" y="600" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1750.0" y="646.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1750.0" y="715" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build New Slot Taken</text>
+<text x="1750.0" y="728" font-size="11.5" text-anchor="middle" fill="#2b2f36">Response</text>
+<rect x="1580" y="80" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="1580" y="80" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="1630.0" y="126.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="1630.0" y="195" font-size="11.5" text-anchor="middle" fill="#2b2f36">New Slot Bookable?</text>
+<rect x="1580" y="700" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="1580" y="700" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1630.0" y="746.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1630.0" y="815" font-size="11.5" text-anchor="middle" fill="#2b2f36">Build Outside Hours</text>
+<text x="1630.0" y="828" font-size="11.5" text-anchor="middle" fill="#2b2f36">Response</text>
+</svg>

@@ -1,0 +1,133 @@
+{
+  "id": "ojgg84XTJeLVP9Tr",
+  "name": "PlutioLabs — Utility: Write CRM Headers",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-08-16T19:33:45.397Z",
+  "updatedAt": "2026-08-16T19:34:14.943Z",
+  "isArchived": false,
+  "versionCounter": 1,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "sticky-1",
+      "name": "ℹ️ About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -360,
+        -40
+      ],
+      "parameters": {
+        "width": 520,
+        "height": 260,
+        "content": "## One-off utility — writes the CRM header row\n\nWrites all **57 headers** to row 1 of the `Outreach CRM` tab via the Google Sheets API, using the existing `Google Sheets account` OAuth credential.\n\n38 existing headers keep their original positions; 19 new ones are appended (incl. `Email Verify Status`, which v2 emitted but the sheet never had — see V3_BUILD_LOG.md F-F6).\n\n**Safe to re-run** — it overwrites row 1 only, never touches data rows.\n\nTrigger: POST to the webhook path `write-crm-headers`."
+      }
+    },
+    {
+      "id": "trigger-1",
+      "name": "📥 Run Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -360,
+        300
+      ],
+      "parameters": {
+        "path": "write-crm-headers",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "3d7f756f-87c6-47b5-87e2-b79dce9df40d"
+    },
+    {
+      "id": "headers-1",
+      "name": "🧱 Build Header Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "// 57 CRM headers: 38 existing (original order preserved) + 19 new.\ntry {\n  var headers = [\n    'Company Name','City','Phone','Website','First Name','Email','LinkedIn URL',\n    'Google Maps URL','Google Rating','Review Count','Business Category',\n    'Opening Hours','Business Attributes','Top Complaint','Best Review Quote',\n    'Top Competitor','Competitor Reviews','Competitor Opening Hours','Priority',\n    'Template Route','Email 2 Route','Hours Gap','Closing Time','Trade Scene',\n    'Competitor Has Weekend','Call Prep Card','LinkedIn Message','Status',\n    'Date Added','Email Sent','Call Status','LinkedIn Status','Notes','Trade',\n    'Review Gap','First Call Status','Call Date','Call Notes',\n    'Email Verify Status','Source','MCS Cert Body','MCS Cert Number',\n    'Technologies','BUS Registered','Entity Type','Email Source','Postcode',\n    'UK Country','Competitor Distance','Competitor Tier','Emailable','PECR Risk',\n    'Is Mobile','WhatsApp Signal','WhatsApp Number','WhatsApp Message',\n    'WhatsApp Status'\n  ];\n  return [{ json: {\n    sheetId: 'YOUR_SCRAPER_SHEET_ID',\n    range: \"'Outreach CRM'!A1:BE1\",\n    count: headers.length,\n    values: [headers]\n  }}];\n} catch (e) {\n  return [{ json: { _error: 'Build Header Row failed: ' + e.message } }];\n}"
+      }
+    },
+    {
+      "id": "write-1",
+      "name": "📝 Write Row 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        120,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/{{ $json.sheetId }}/values/{{ encodeURIComponent($json.range) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "RAW"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: $json.values }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "📥 Run Webhook": {
+      "main": [
+        [
+          {
+            "node": "🧱 Build Header Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧱 Build Header Row": {
+      "main": [
+        [
+          {
+            "node": "📝 Write Row 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London"
+  },
+  "tags": [],
+  "activeVersion": null
+}

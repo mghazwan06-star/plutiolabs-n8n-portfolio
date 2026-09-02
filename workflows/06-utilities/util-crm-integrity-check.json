@@ -1,0 +1,138 @@
+{
+  "id": "mKwxMIlgtbnwgymG",
+  "name": "PlutioLabs — Utility: CRM Integrity Check",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-08-16T20:01:43.696Z",
+  "updatedAt": "2026-08-19T22:01:26.877Z",
+  "isArchived": false,
+  "versionCounter": 2,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "trig",
+      "name": "📥 Run",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -420,
+        300
+      ],
+      "parameters": {
+        "path": "crm-integrity",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "99251fc8-1810-455c-9cf8-212e5713d187"
+    },
+    {
+      "id": "mcs",
+      "name": "📥 Fetch MCS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -180,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "parameters": {
+        "url": "https://findcertifiedinstallers.co.uk/api/installers.json",
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "sheet",
+      "name": "📖 Read Sheet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        60,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "GET",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/YOUR_SCRAPER_SHEET_ID/values/{{ encodeURIComponent(\"'Outreach CRM'!A:BG\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "check",
+      "name": "🔎 Integrity Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "// Definitive check: does the sheet contain exactly the rows it should,\n// and is every column populated as intended?\ntry {\n  var sheetRes = $input.first().json;\n  var rows = sheetRes.values || [];\n  var header = rows[0] || [];\n  var body = rows.slice(1);\n\n  var mcsRes = $('📥 Fetch MCS').first().json;\n  var src = (mcsRes && mcsRes.installers) ? mcsRes.installers : [];\n\n  // --- rebuild the expected set using the SAME rules as the pipeline ---\n  var TECH = ['solar_pv','ashp','battery','wshp','solar_thermal','eahp'];\n  var expected = {};\n  var expectedCount = 0;\n  for (var i = 0; i < src.length; i++) {\n    var r = src[i];\n    var techs = r.technologies || [];\n    var inScope = false;\n    for (var t = 0; t < techs.length; t++) {\n      if (TECH.indexOf(techs[t]) !== -1) { inScope = true; break; }\n    }\n    if (!inScope) { continue; }\n    var la = Number(r.latitude), lo = Number(r.longitude);\n    if (!(la >= 49.8 && la <= 60.9 && lo >= -8.7 && lo <= 1.9)) { continue; }\n    if (!String(r.name || '').trim()) { continue; }\n    expected[r.certification_number] = r.name;\n    expectedCount++;\n  }\n\n  // --- what is actually in the sheet ---\n  var iCert = header.indexOf('MCS Cert Number');\n  var present = {};\n  for (var b = 0; b < body.length; b++) {\n    var c = String((body[b] || [])[iCert] || '').trim();\n    if (c) { present[c] = true; }\n  }\n\n  var missing = [];\n  var keys = Object.keys(expected);\n  for (var k = 0; k < keys.length; k++) {\n    if (!present[keys[k]]) { missing.push({ cert: keys[k], name: expected[keys[k]] }); }\n  }\n  var unexpected = [];\n  var pk = Object.keys(present);\n  for (var p = 0; p < pk.length; p++) {\n    if (!expected[pk[p]]) { unexpected.push(pk[p]); }\n  }\n\n  // --- per-column fill rate: catches misalignment and dead columns ---\n  var fill = [];\n  for (var col = 0; col < header.length; col++) {\n    var n = 0;\n    for (var rr = 0; rr < body.length; rr++) {\n      var v = (body[rr] || [])[col];\n      if (v !== undefined && v !== null && String(v) !== '') { n++; }\n    }\n    fill.push({ col: col + 1, name: header[col], filled: n,\n                pct: Math.round((n / body.length) * 1000) / 10 });\n  }\n\n  return [{ json: {\n    headerCount: header.length,\n    headersInOrder: header,\n    dataRows: body.length,\n    expectedRows: expectedCount,\n    rowDelta: body.length - expectedCount,\n    missingCount: missing.length,\n    missingRecords: missing.slice(0, 20),\n    unexpectedCount: unexpected.length,\n    unexpectedCerts: unexpected.slice(0, 20),\n    columnFill: fill\n  }}];\n} catch (e) {\n  return [{ json: { _error: 'Integrity check failed: ' + e.message } }];\n}"
+      }
+    }
+  ],
+  "connections": {
+    "📥 Run": {
+      "main": [
+        [
+          {
+            "node": "📥 Fetch MCS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📥 Fetch MCS": {
+      "main": [
+        [
+          {
+            "node": "📖 Read Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📖 Read Sheet": {
+      "main": [
+        [
+          {
+            "node": "🔎 Integrity Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London"
+  },
+  "tags": [],
+  "activeVersion": null
+}

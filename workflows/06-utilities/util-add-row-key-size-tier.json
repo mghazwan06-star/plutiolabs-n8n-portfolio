@@ -1,0 +1,184 @@
+{
+  "id": "MK33WMibkd6mzkt8",
+  "name": "PlutioLabs — Utility: Add Row Key + Size Tier",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-08-17T17:49:53.037Z",
+  "updatedAt": "2026-08-17T17:51:08.799Z",
+  "isArchived": false,
+  "versionCounter": 1,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "trig",
+      "name": "📥 Run",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -420,
+        300
+      ],
+      "parameters": {
+        "path": "add-rowkey",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "e81b8d62-493d-4f77-89ed-23be49f76955"
+    },
+    {
+      "id": "read",
+      "name": "📖 Read CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -180,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "GET",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/YOUR_SCRAPER_SHEET_ID/values/{{ encodeURIComponent(\"'Outreach CRM'!A:BE\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "calc",
+      "name": "🧮 Build Columns",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        60,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "// Builds columns BF (Row Key) and BG (Size Tier) for the header + every data row.\ntry {\n  var res = $input.first().json;\n  var rows = res.values || [];\n  if (rows.length < 2) { return [{ json: { _error: 'No data rows' } }]; }\n\n  var header = rows[0];\n  var body = rows.slice(1);\n  var iCert = header.indexOf('MCS Cert Number');\n  var iRev = header.indexOf('Review Count');\n  var iSite = header.indexOf('Website');\n  var iPhone = header.indexOf('Phone');\n  var iName = header.indexOf('Company Name');\n  if (iCert === -1 || iRev === -1) {\n    return [{ json: { _error: 'Required headers not found' } }];\n  }\n\n  function domainOf(w) {\n    var d = String(w || '').toLowerCase().trim();\n    if (!d) { return ''; }\n    if (d.indexOf('://') !== -1) { d = d.split('://')[1]; }\n    if (d.indexOf('www.') === 0) { d = d.substring(4); }\n    return d.split('/')[0].split('?')[0].trim();\n  }\n  function sizeTier(rv) {\n    // Blank Review Count means no Google data was ever fetched for this lead.\n    if (rv === undefined || rv === null || String(rv) === '') { return '0 - unknown'; }\n    var n = Number(rv) || 0;\n    if (n >= 500) { return '6 - 500+'; }\n    if (n >= 150) { return '5 - 150-499'; }\n    if (n >= 50) { return '4 - 50-149'; }\n    if (n >= 15) { return '3 - 15-49'; }\n    if (n >= 5) { return '2 - 5-14'; }\n    return '1 - 0-4';\n  }\n\n  var values = [['Row Key', 'Size Tier']];\n  var keys = {}, dupKeys = 0, tiers = {}, byCert = 0, byDom = 0, byTel = 0, byName = 0;\n\n  for (var i = 0; i < body.length; i++) {\n    var r = body[i] || [];\n    var cert = String(r[iCert] || '').trim();\n    var key = '';\n    if (cert) { key = 'MCS:' + cert; byCert++; }\n    else {\n      var dm = domainOf(r[iSite]);\n      if (dm) { key = 'DOM:' + dm; byDom++; }\n      else if (String(r[iPhone] || '')) { key = 'TEL:' + String(r[iPhone]); byTel++; }\n      else { key = 'NAME:' + String(r[iName] || '').toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 40); byName++; }\n    }\n    if (keys[key]) { dupKeys++; } else { keys[key] = true; }\n\n    var tier = sizeTier(r[iRev]);\n    tiers[tier] = (tiers[tier] || 0) + 1;\n    values.push([key, tier]);\n  }\n\n  return [{ json: {\n    range: \"'Outreach CRM'!BF1:BG\" + (body.length + 1),\n    rowsWritten: values.length,\n    dataRows: body.length,\n    uniqueKeys: Object.keys(keys).length,\n    duplicateKeys: dupKeys,\n    keySource: { cert: byCert, domain: byDom, phone: byTel, name: byName },\n    tierCounts: tiers,\n    values: values\n  }}];\n} catch (e) {\n  return [{ json: { _error: 'Build Columns failed: ' + e.message } }];\n}"
+      }
+    },
+    {
+      "id": "write",
+      "name": "📝 Write BF:BG",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        300,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/YOUR_SCRAPER_SHEET_ID/values/{{ encodeURIComponent($json.range) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "RAW"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: $json.values }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "sum",
+      "name": "📝 Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        540,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "try {\n  var plan = $('🧮 Build Columns').first().json;\n  var res = $input.first().json || {};\n  return [{ json: {\n    updatedRange: res.updatedRange || null,\n    updatedCells: res.updatedCells || 0,\n    dataRows: plan.dataRows,\n    uniqueKeys: plan.uniqueKeys,\n    duplicateKeys: plan.duplicateKeys,\n    keySource: plan.keySource,\n    tierCounts: plan.tierCounts\n  }}];\n} catch (e) {\n  return [{ json: { _error: 'Summary failed: ' + e.message } }];\n}"
+      }
+    }
+  ],
+  "connections": {
+    "📥 Run": {
+      "main": [
+        [
+          {
+            "node": "📖 Read CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📖 Read CRM": {
+      "main": [
+        [
+          {
+            "node": "🧮 Build Columns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧮 Build Columns": {
+      "main": [
+        [
+          {
+            "node": "📝 Write BF:BG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📝 Write BF:BG": {
+      "main": [
+        [
+          {
+            "node": "📝 Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London"
+  },
+  "tags": [],
+  "activeVersion": null
+}

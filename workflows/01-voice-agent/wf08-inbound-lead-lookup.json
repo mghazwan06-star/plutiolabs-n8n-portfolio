@@ -1,0 +1,523 @@
+{
+  "id": "pezK9CIkBbvo9ys8",
+  "name": "Voice Agent — 08 Inbound Lead Lookup",
+  "description": null,
+  "active": true,
+  "activeVersionId": "b83020ff-c400-4f41-bb77-b7732982502a",
+  "createdAt": "2026-04-30T12:11:48.088Z",
+  "updatedAt": "2026-08-22T12:54:14.496Z",
+  "isArchived": false,
+  "versionCounter": 15,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WF8 — Inbound Lead Lookup\n\nCalled SYNCHRONOUSLY by WF-IN2 on every `assistant-request` event.\nRuns BEFORE the AI speaks — must complete in < 3 seconds.\n\n**Flow:**\n1. Extract phone from VAPI assistant-request payload\n2. No phone (withheld number) → return empty variables\n3. Lookup phone in Clients tab\n4. Return { variables: {...} } with callerName, serviceInterest, isExistingLead, callCount, lastOutcome, upcomingAppointment, callerStatus\n\nVAPI injects these into the AI system prompt before first speech.\n\n**Upstream:** WF-IN2 (sync call on assistant-request)\n**Downstream:** Returns { variables: {...} } to WF-IN2\n**Sheets:** Reads Clients. NEVER writes.\n\n⚠️ Constraint: must complete in < 3 seconds.",
+        "height": 440,
+        "width": 380,
+        "color": 7
+      },
+      "id": "wf8-sticky",
+      "name": "📋 WF8 Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "wf8-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-sheet",
+              "name": "sheetId",
+              "value": "YOUR_CRM_SHEET_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-tab",
+              "name": "clientsTab",
+              "value": "Clients",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "includeOtherFields": true
+        },
+        "includeOtherFields": true
+      },
+      "id": "wf8-config",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  var input = $input.first().json;\n  var msg = (input.body && input.body.message) ? input.body.message : input;\n  var raw = '';\n  if (msg.call && msg.call.customer) {\n    raw = msg.call.customer.number || msg.call.customer.phoneNumber || '';\n  }\n  raw = raw.replace(/\\s/g, '');\n  if (raw && raw.charAt(0) !== '+') { raw = '+' + raw; }\n  return [{ json: { phone: raw } }];\n} catch(e) {\n  return [{ json: { phone: '', errorMsg: 'Extract Caller Phone failed: ' + e.message } }];\n}"
+      },
+      "id": "wf8-extract",
+      "name": "Extract Caller Phone",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        256
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "phone-not-empty",
+              "leftValue": "={{ $json.phone ? 'ok' : 'fail' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf8-phone-check",
+      "name": "Phone Present?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        672,
+        256
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {},
+        "range": "A:Z"
+      },
+      "id": "wf8-read-record",
+      "name": "Read Caller Record",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        896,
+        352
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n  // B9: the Sheets node's built-in lookup is an EXACT string match on Phone. One historically\n  // coerced number (missing '+', stray space) and a known customer is greeted as a stranger at\n  // the start of an inbound call. Read the tab and match on digits instead.\n  var wanted = String($('Extract Caller Phone').first().json.phone || '').replace(/[^0-9]/g, '');\n  var rows = $input.all();\n  var row = null;\n  if (wanted) {\n    for (var i = 0; i < rows.length; i++) {\n      var r = rows[i].json || {};\n      var d = String(r['Phone'] || '').replace(/[^0-9]/g, '');\n      if (!d) { continue; }\n      // compare the last 9 digits so a missing or differing country code still matches\n      var a = d.slice(-9);\n      var b = wanted.slice(-9);\n      if (d === wanted || (a.length === 9 && a === b)) { row = r; break; }\n    }\n  }\n  var hasRecord = !!(row && row['Phone']);\n  return [{\n    json: {\n      variables: {\n        callerName:          hasRecord ? (row['Name'] || '')                 : '',\n        serviceInterest:     hasRecord ? (row['Service Interest'] || '')     : '',\n        isExistingLead:      hasRecord ? 'true'                              : 'false',\n        callCount:           hasRecord ? String(row['Call Count'] || '0')    : '0',\n        lastOutcome:         hasRecord ? (row['Last Outcome'] || '')         : '',\n        upcomingAppointment: hasRecord ? (row['Upcoming Appointment'] || '') : '',\n        callerStatus:        hasRecord ? (row['Status'] || '')               : '',\n        lastChannel:         hasRecord ? (row['Last Channel'] || '')         : ''\n      },\n      matchedOn: hasRecord ? 'digits' : 'none',\n      rowsScanned: rows.length\n    }\n  }];\n} catch(e) {\n  return [{ json: { variables: {}, errorMsg: 'Build Variables Response failed: ' + e.message } }];\n}"
+      },
+      "id": "wf8-build-vars",
+      "name": "Build Variables Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        352
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Withheld / private number — return empty variables, AI uses generic greeting\nreturn [{ json: { variables: {} } }];"
+      },
+      "id": "wf8-empty-vars",
+      "name": "Return Empty Variables",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        160
+      ],
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Extract Caller Phone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Caller Phone": {
+      "main": [
+        [
+          {
+            "node": "Phone Present?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phone Present?": {
+      "main": [
+        [
+          {
+            "node": "Read Caller Record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Empty Variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Caller Record": {
+      "main": [
+        [
+          {
+            "node": "Build Variables Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "callerPolicy": "workflowsFromSameOwner",
+    "binaryMode": "separate"
+  },
+  "tags": [],
+  "activeVersion": {
+    "versionId": "b83020ff-c400-4f41-bb77-b7732982502a",
+    "workflowId": "pezK9CIkBbvo9ys8",
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## WF8 — Inbound Lead Lookup\n\nCalled SYNCHRONOUSLY by WF-IN2 on every `assistant-request` event.\nRuns BEFORE the AI speaks — must complete in < 3 seconds.\n\n**Flow:**\n1. Extract phone from VAPI assistant-request payload\n2. No phone (withheld number) → return empty variables\n3. Lookup phone in Clients tab\n4. Return { variables: {...} } with callerName, serviceInterest, isExistingLead, callCount, lastOutcome, upcomingAppointment, callerStatus\n\nVAPI injects these into the AI system prompt before first speech.\n\n**Upstream:** WF-IN2 (sync call on assistant-request)\n**Downstream:** Returns { variables: {...} } to WF-IN2\n**Sheets:** Reads Clients. NEVER writes.\n\n⚠️ Constraint: must complete in < 3 seconds.",
+          "height": 440,
+          "width": 380,
+          "color": 7
+        },
+        "id": "wf8-sticky",
+        "name": "📋 WF8 Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -240,
+          -320
+        ]
+      },
+      {
+        "parameters": {
+          "inputSource": "passthrough"
+        },
+        "id": "wf8-trigger",
+        "name": "Execute Workflow Trigger",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          0,
+          256
+        ]
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "cfg-sheet",
+                "name": "sheetId",
+                "value": "YOUR_CRM_SHEET_ID",
+                "type": "string"
+              },
+              {
+                "id": "cfg-tab",
+                "name": "clientsTab",
+                "value": "Clients",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {
+            "includeOtherFields": true
+          },
+          "includeOtherFields": true
+        },
+        "id": "wf8-config",
+        "name": "⚙️ Client Config",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          224,
+          256
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "try {\n  var input = $input.first().json;\n  var msg = (input.body && input.body.message) ? input.body.message : input;\n  var raw = '';\n  if (msg.call && msg.call.customer) {\n    raw = msg.call.customer.number || msg.call.customer.phoneNumber || '';\n  }\n  raw = raw.replace(/\\s/g, '');\n  if (raw && raw.charAt(0) !== '+') { raw = '+' + raw; }\n  return [{ json: { phone: raw } }];\n} catch(e) {\n  return [{ json: { phone: '', errorMsg: 'Extract Caller Phone failed: ' + e.message } }];\n}"
+        },
+        "id": "wf8-extract",
+        "name": "Extract Caller Phone",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          448,
+          256
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "loose"
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "phone-not-empty",
+                "leftValue": "={{ $json.phone ? 'ok' : 'fail' }}",
+                "rightValue": "ok",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "wf8-phone-check",
+        "name": "Phone Present?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          672,
+          256
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+          },
+          "filtersUI": {
+            "values": []
+          },
+          "options": {},
+          "range": "A:Z"
+        },
+        "id": "wf8-read-record",
+        "name": "Read Caller Record",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          896,
+          352
+        ],
+        "alwaysOutputData": true,
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "try {\n  // B9: the Sheets node's built-in lookup is an EXACT string match on Phone. One historically\n  // coerced number (missing '+', stray space) and a known customer is greeted as a stranger at\n  // the start of an inbound call. Read the tab and match on digits instead.\n  var wanted = String($('Extract Caller Phone').first().json.phone || '').replace(/[^0-9]/g, '');\n  var rows = $input.all();\n  var row = null;\n  if (wanted) {\n    for (var i = 0; i < rows.length; i++) {\n      var r = rows[i].json || {};\n      var d = String(r['Phone'] || '').replace(/[^0-9]/g, '');\n      if (!d) { continue; }\n      // compare the last 9 digits so a missing or differing country code still matches\n      var a = d.slice(-9);\n      var b = wanted.slice(-9);\n      if (d === wanted || (a.length === 9 && a === b)) { row = r; break; }\n    }\n  }\n  var hasRecord = !!(row && row['Phone']);\n  return [{\n    json: {\n      variables: {\n        callerName:          hasRecord ? (row['Name'] || '')                 : '',\n        serviceInterest:     hasRecord ? (row['Service Interest'] || '')     : '',\n        isExistingLead:      hasRecord ? 'true'                              : 'false',\n        callCount:           hasRecord ? String(row['Call Count'] || '0')    : '0',\n        lastOutcome:         hasRecord ? (row['Last Outcome'] || '')         : '',\n        upcomingAppointment: hasRecord ? (row['Upcoming Appointment'] || '') : '',\n        callerStatus:        hasRecord ? (row['Status'] || '')               : '',\n        lastChannel:         hasRecord ? (row['Last Channel'] || '')         : ''\n      },\n      matchedOn: hasRecord ? 'digits' : 'none',\n      rowsScanned: rows.length\n    }\n  }];\n} catch(e) {\n  return [{ json: { variables: {}, errorMsg: 'Build Variables Response failed: ' + e.message } }];\n}"
+        },
+        "id": "wf8-build-vars",
+        "name": "Build Variables Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1120,
+          352
+        ],
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Withheld / private number — return empty variables, AI uses generic greeting\nreturn [{ json: { variables: {} } }];"
+        },
+        "id": "wf8-empty-vars",
+        "name": "Return Empty Variables",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          896,
+          160
+        ],
+        "onError": "continueRegularOutput"
+      }
+    ],
+    "connections": {
+      "Execute Workflow Trigger": {
+        "main": [
+          [
+            {
+              "node": "⚙️ Client Config",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⚙️ Client Config": {
+        "main": [
+          [
+            {
+              "node": "Extract Caller Phone",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Caller Phone": {
+        "main": [
+          [
+            {
+              "node": "Phone Present?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Phone Present?": {
+        "main": [
+          [
+            {
+              "node": "Read Caller Record",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Return Empty Variables",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Caller Record": {
+        "main": [
+          [
+            {
+              "node": "Build Variables Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Muhammad Ghazwan",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-08-22T12:54:14.496Z",
+    "updatedAt": "2026-08-22T12:54:14.496Z",
+    "workflowPublishHistory": [
+      {
+        "id": 441,
+        "workflowId": "pezK9CIkBbvo9ys8",
+        "versionId": "b83020ff-c400-4f41-bb77-b7732982502a",
+        "event": "activated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-22T12:54:14.603Z"
+      }
+    ]
+  }
+}

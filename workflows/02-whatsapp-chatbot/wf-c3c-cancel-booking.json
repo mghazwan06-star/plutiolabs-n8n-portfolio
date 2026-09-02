@@ -1,0 +1,1223 @@
+{
+  "id": "UbhS8xxnkcOjnq1S",
+  "name": "D3-WF-C3c: Cancel Booking",
+  "description": null,
+  "active": true,
+  "activeVersionId": "b51eaeef-4963-409d-8f15-3136758a50c5",
+  "createdAt": "2026-05-19T13:18:18.149Z",
+  "updatedAt": "2026-08-18T16:30:21.335Z",
+  "isArchived": false,
+  "versionCounter": 21,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "sticky-c3c",
+      "name": "📋 WF-C3c Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        280,
+        40
+      ],
+      "parameters": {
+        "content": "## WF-C3c: Cancel Booking\nCalled by: WF-C2 (Claude Core) via Execute Workflow node\n\n**Input:** { toolInput: { reason? }, toolUseId, phone, sessionId }\n**Output:** { toolCallId, result }\n\n1. Reads Appointment Log for phone + status=confirmed\n2. Deletes Google Calendar event\n3. Updates Appointment Log: Status=cancelled\n4. Updates Clients: Status=called, Last Outcome=cancelled-via-chatbot, Upcoming Appointment='', Last Channel=chatbot\n\n⚠️ Credentials: Google Sheets OAuth2 (id: 0d40kOfUWlsFuLuB), Google Calendar OAuth2 (id: Vm9SHjOljbABWWKN)",
+        "height": 180,
+        "width": 880
+      }
+    },
+    {
+      "id": "trigger-c3c",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        300,
+        300
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "config-c3c",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        540,
+        300
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c3c-cfg-01",
+              "name": "sheetId",
+              "type": "string",
+              "value": "YOUR_CRM_SHEET_ID"
+            },
+            {
+              "id": "c3c-cfg-02",
+              "name": "clientsTab",
+              "type": "string",
+              "value": "Clients"
+            },
+            {
+              "id": "c3c-cfg-03",
+              "name": "appointmentsTab",
+              "type": "string",
+              "value": "Appointment Log"
+            },
+            {
+              "id": "c3c-cfg-04",
+              "name": "calendarId",
+              "type": "string",
+              "value": "owner@example.com"
+            },
+            {
+              "id": "c3c-cfg-05",
+              "name": "businessName",
+              "type": "string",
+              "value": "Solarify"
+            },
+            {
+              "id": "c3c-cfg-06",
+              "name": "timezone",
+              "type": "string",
+              "value": "Europe/London"
+            },
+            {
+              "id": "c3c-cfg-07",
+              "name": "businessPhone",
+              "type": "string",
+              "value": "07700 900123"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "read-apptlog-c3c",
+      "name": "Read Appointment Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        780,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+        },
+        "range": "A:Z",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "find-appt-c3c",
+      "name": "Find Confirmed Appointment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var trigger = $('Execute Workflow Trigger').first().json;\n  var phone = trigger.phone || '';\n  var toolUseId = trigger.toolUseId || '';\n  var toolInput = trigger.toolInput || {};\n  var reason = toolInput.reason || '';\n\n  var rows = $input.all();\n  var found = null;\n\n  for (var i = 0; i < rows.length; i++) {\n    var row = rows[i].json;\n    if (String(row.Phone).replace(/[^0-9]/g, '') === String(phone).replace(/[^0-9]/g, '') && row.Status === 'confirmed') {\n      found = row;\n      break;\n    }\n  }\n\n  if (found) {\n    return [{\n      json: {\n        hasAppointment: true,\n        calendarEventId: found.CalendarEventId || '',\n        phone: phone,\n        toolUseId: toolUseId,\n        reason: reason,\n        appointmentDate: found.Date || '',\n        appointmentTime: found.Time || ''\n      }\n    }];\n  } else {\n    return [{\n      json: {\n        hasAppointment: false,\n        phone: phone,\n        toolUseId: toolUseId,\n        calendarEventId: '',\n        reason: reason\n      }\n    }];\n  }\n} catch (e) {\n  var fb = $('Execute Workflow Trigger').first().json;\n  return [{\n    json: {\n      hasAppointment: false,\n      phone: fb.phone || '',\n      toolUseId: fb.toolUseId || '',\n      calendarEventId: '',\n      error: e.message\n    }\n  }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "if-has-appt-c3c",
+      "name": "IF Has Confirmed Appointment",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1260,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c3c-cond1",
+              "leftValue": "={{ $json.hasAppointment }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "delete-cal-c3c",
+      "name": "Delete Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1500,
+        180
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "resource": "event",
+        "operation": "delete",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.calendarId }}"
+        },
+        "eventId": "={{ $('Find Confirmed Appointment').first().json.calendarEventId }}"
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Calendar OAuth2 API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "if-del-c3c",
+      "name": "Delete Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1700,
+        40
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "del-fail-cond",
+              "leftValue": "={{ $json.error !== undefined ? 'yes' : 'no' }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "update-apptlog-c3c",
+      "name": "Update Appointment Log - Cancelled",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1740,
+        180
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "CalendarEventId": "={{ $('Find Confirmed Appointment').first().json.calendarEventId }}",
+            "Status": "cancelled",
+            "CancelledAt": "={{ new Date().toISOString() }}",
+            "Notes": "={{ 'Cancelled by customer via WhatsApp' + ($('Find Confirmed Appointment').first().json.reason ? '. Reason: ' + $('Find Confirmed Appointment').first().json.reason : '') }}"
+          },
+          "matchingColumns": [
+            "CalendarEventId"
+          ],
+          "schema": [
+            {
+              "id": "CalendarEventId",
+              "displayName": "CalendarEventId",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "CancelledAt",
+              "displayName": "CancelledAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Notes",
+              "displayName": "Notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "update-clients-c3c",
+      "name": "Update Clients - Cancelled",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1980,
+        180
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Find Confirmed Appointment').first().json.phone }}",
+            "Status": "called",
+            "Last Outcome": "cancelled-via-chatbot",
+            "Upcoming Appointment": "",
+            "Last Channel": "chatbot",
+            "Last Contact": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": [
+            "Phone"
+          ],
+          "schema": [
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last Outcome",
+              "displayName": "Last Outcome",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Upcoming Appointment",
+              "displayName": "Upcoming Appointment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last Channel",
+              "displayName": "Last Channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last Contact",
+              "displayName": "Last Contact",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "success-c3c",
+      "name": "Build Cancel Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var appt = $('Find Confirmed Appointment').first().json;\n  var date = appt.appointmentDate || '';\n  var time = appt.appointmentTime || '';\n  var toolUseId = appt.toolUseId || '';\n\n  var when = date ? (' on ' + date + (time ? ' at ' + time : '')) : '';\n  var result = 'Your appointment' + when + ' has been successfully cancelled. If you change your mind, feel free to book again anytime.';\n\n  return [{\n    json: {\n      toolCallId: toolUseId,\n      result: result\n    }\n  }];\n} catch (e) {\n  return [{\n    json: {\n      toolCallId: $('Find Confirmed Appointment').first().json.toolUseId || '',\n      result: 'Your appointment has been successfully cancelled.'\n    }\n  }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "no-booking-c3c",
+      "name": "Build No Booking Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        440
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  return [{\n    json: {\n      toolCallId: $json.toolUseId || '',\n      result: \"I couldn't find an active booking associated with your number. If you believe this is an error, please contact us directly.\"\n    }\n  }];\n} catch (e) {\n  return [{\n    json: {\n      toolCallId: '',\n      result: \"I couldn't find an active booking for your number.\"\n    }\n  }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "del-fail-c3c",
+      "name": "Build Delete Failed Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1940,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var appt = $('Find Confirmed Appointment').first().json;\n  var config = $('⚙️ Client Config').first().json;\n  var phone = config.businessPhone || '';\n  var phoneValid = phone && phone !== 'ADD_PHONE_BEFORE_ACTIVATION';\n  var phoneMsg = phoneValid ? ' Please call us on ' + phone + ' and we will sort it out.' : ' Please contact us directly to resolve this.';\n  var result = 'There was a problem removing your appointment from our calendar.' + phoneMsg + ' Your booking has not been marked as cancelled in our system.';\n  return [{ json: { toolCallId: appt.toolUseId || '', result: result } }];\n} catch (e) {\n  return [{ json: { toolCallId: '', result: 'There was a system error cancelling your appointment. Please contact us directly.' } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Read Appointment Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Appointment Log": {
+      "main": [
+        [
+          {
+            "node": "Find Confirmed Appointment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Confirmed Appointment": {
+      "main": [
+        [
+          {
+            "node": "IF Has Confirmed Appointment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Has Confirmed Appointment": {
+      "main": [
+        [
+          {
+            "node": "Delete Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build No Booking Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Delete Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Build Delete Failed Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Appointment Log - Cancelled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Appointment Log - Cancelled": {
+      "main": [
+        [
+          {
+            "node": "Update Clients - Cancelled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Clients - Cancelled": {
+      "main": [
+        [
+          {
+            "node": "Build Cancel Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London"
+  },
+  "tags": [],
+  "activeVersion": {
+    "versionId": "b51eaeef-4963-409d-8f15-3136758a50c5",
+    "workflowId": "UbhS8xxnkcOjnq1S",
+    "nodes": [
+      {
+        "id": "sticky-c3c",
+        "name": "📋 WF-C3c Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          280,
+          40
+        ],
+        "parameters": {
+          "content": "## WF-C3c: Cancel Booking\nCalled by: WF-C2 (Claude Core) via Execute Workflow node\n\n**Input:** { toolInput: { reason? }, toolUseId, phone, sessionId }\n**Output:** { toolCallId, result }\n\n1. Reads Appointment Log for phone + status=confirmed\n2. Deletes Google Calendar event\n3. Updates Appointment Log: Status=cancelled\n4. Updates Clients: Status=called, Last Outcome=cancelled-via-chatbot, Upcoming Appointment='', Last Channel=chatbot\n\n⚠️ Credentials: Google Sheets OAuth2 (id: 0d40kOfUWlsFuLuB), Google Calendar OAuth2 (id: Vm9SHjOljbABWWKN)",
+          "height": 180,
+          "width": 880
+        }
+      },
+      {
+        "id": "trigger-c3c",
+        "name": "Execute Workflow Trigger",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          300,
+          300
+        ],
+        "parameters": {
+          "inputSource": "passthrough"
+        }
+      },
+      {
+        "id": "config-c3c",
+        "name": "⚙️ Client Config",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          540,
+          300
+        ],
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "c3c-cfg-01",
+                "name": "sheetId",
+                "type": "string",
+                "value": "YOUR_CRM_SHEET_ID"
+              },
+              {
+                "id": "c3c-cfg-02",
+                "name": "clientsTab",
+                "type": "string",
+                "value": "Clients"
+              },
+              {
+                "id": "c3c-cfg-03",
+                "name": "appointmentsTab",
+                "type": "string",
+                "value": "Appointment Log"
+              },
+              {
+                "id": "c3c-cfg-04",
+                "name": "calendarId",
+                "type": "string",
+                "value": "owner@example.com"
+              },
+              {
+                "id": "c3c-cfg-05",
+                "name": "businessName",
+                "type": "string",
+                "value": "Solarify"
+              },
+              {
+                "id": "c3c-cfg-06",
+                "name": "timezone",
+                "type": "string",
+                "value": "Europe/London"
+              },
+              {
+                "id": "c3c-cfg-07",
+                "name": "businessPhone",
+                "type": "string",
+                "value": "07700 900123"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "read-apptlog-c3c",
+        "name": "Read Appointment Log",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.5,
+        "position": [
+          780,
+          300
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "alwaysOutputData": true,
+        "parameters": {
+          "operation": "read",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+          },
+          "range": "A:Z",
+          "options": {}
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "find-appt-c3c",
+        "name": "Find Confirmed Appointment",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1020,
+          300
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var trigger = $('Execute Workflow Trigger').first().json;\n  var phone = trigger.phone || '';\n  var toolUseId = trigger.toolUseId || '';\n  var toolInput = trigger.toolInput || {};\n  var reason = toolInput.reason || '';\n\n  var rows = $input.all();\n  var found = null;\n\n  for (var i = 0; i < rows.length; i++) {\n    var row = rows[i].json;\n    if (String(row.Phone).replace(/[^0-9]/g, '') === String(phone).replace(/[^0-9]/g, '') && row.Status === 'confirmed') {\n      found = row;\n      break;\n    }\n  }\n\n  if (found) {\n    return [{\n      json: {\n        hasAppointment: true,\n        calendarEventId: found.CalendarEventId || '',\n        phone: phone,\n        toolUseId: toolUseId,\n        reason: reason,\n        appointmentDate: found.Date || '',\n        appointmentTime: found.Time || ''\n      }\n    }];\n  } else {\n    return [{\n      json: {\n        hasAppointment: false,\n        phone: phone,\n        toolUseId: toolUseId,\n        calendarEventId: '',\n        reason: reason\n      }\n    }];\n  }\n} catch (e) {\n  var fb = $('Execute Workflow Trigger').first().json;\n  return [{\n    json: {\n      hasAppointment: false,\n      phone: fb.phone || '',\n      toolUseId: fb.toolUseId || '',\n      calendarEventId: '',\n      error: e.message\n    }\n  }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "if-has-appt-c3c",
+        "name": "IF Has Confirmed Appointment",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1260,
+          300
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "c3c-cond1",
+                "leftValue": "={{ $json.hasAppointment }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "delete-cal-c3c",
+        "name": "Delete Calendar Event",
+        "type": "n8n-nodes-base.googleCalendar",
+        "typeVersion": 1.3,
+        "position": [
+          1500,
+          180
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "parameters": {
+          "resource": "event",
+          "operation": "delete",
+          "calendar": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.calendarId }}"
+          },
+          "eventId": "={{ $('Find Confirmed Appointment').first().json.calendarEventId }}"
+        },
+        "credentials": {
+          "googleCalendarOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Calendar OAuth2 API"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "if-del-c3c",
+        "name": "Delete Succeeded?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1700,
+          40
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "del-fail-cond",
+                "leftValue": "={{ $json.error !== undefined ? 'yes' : 'no' }}",
+                "rightValue": "yes",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "update-apptlog-c3c",
+        "name": "Update Appointment Log - Cancelled",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.5,
+        "position": [
+          1740,
+          180
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "CalendarEventId": "={{ $('Find Confirmed Appointment').first().json.calendarEventId }}",
+              "Status": "cancelled",
+              "CancelledAt": "={{ new Date().toISOString() }}",
+              "Notes": "={{ 'Cancelled by customer via WhatsApp' + ($('Find Confirmed Appointment').first().json.reason ? '. Reason: ' + $('Find Confirmed Appointment').first().json.reason : '') }}"
+            },
+            "matchingColumns": [
+              "CalendarEventId"
+            ],
+            "schema": [
+              {
+                "id": "CalendarEventId",
+                "displayName": "CalendarEventId",
+                "required": false,
+                "defaultMatch": true,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "Status",
+                "displayName": "Status",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "CancelledAt",
+                "displayName": "CancelledAt",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "Notes",
+                "displayName": "Notes",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              }
+            ]
+          },
+          "options": {
+            "cellFormat": "RAW"
+          }
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "update-clients-c3c",
+        "name": "Update Clients - Cancelled",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.5,
+        "position": [
+          1980,
+          180
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "Phone": "={{ $('Find Confirmed Appointment').first().json.phone }}",
+              "Status": "called",
+              "Last Outcome": "cancelled-via-chatbot",
+              "Upcoming Appointment": "",
+              "Last Channel": "chatbot",
+              "Last Contact": "={{ new Date().toISOString() }}"
+            },
+            "matchingColumns": [
+              "Phone"
+            ],
+            "schema": [
+              {
+                "id": "Phone",
+                "displayName": "Phone",
+                "required": false,
+                "defaultMatch": true,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "Status",
+                "displayName": "Status",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "Last Outcome",
+                "displayName": "Last Outcome",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "Upcoming Appointment",
+                "displayName": "Upcoming Appointment",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "Last Channel",
+                "displayName": "Last Channel",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "Last Contact",
+                "displayName": "Last Contact",
+                "required": false,
+                "defaultMatch": false,
+                "display": true,
+                "type": "string",
+                "canBeUsedToMatch": true
+              }
+            ]
+          },
+          "options": {
+            "cellFormat": "RAW"
+          }
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "success-c3c",
+        "name": "Build Cancel Success",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2220,
+          180
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var appt = $('Find Confirmed Appointment').first().json;\n  var date = appt.appointmentDate || '';\n  var time = appt.appointmentTime || '';\n  var toolUseId = appt.toolUseId || '';\n\n  var when = date ? (' on ' + date + (time ? ' at ' + time : '')) : '';\n  var result = 'Your appointment' + when + ' has been successfully cancelled. If you change your mind, feel free to book again anytime.';\n\n  return [{\n    json: {\n      toolCallId: toolUseId,\n      result: result\n    }\n  }];\n} catch (e) {\n  return [{\n    json: {\n      toolCallId: $('Find Confirmed Appointment').first().json.toolUseId || '',\n      result: 'Your appointment has been successfully cancelled.'\n    }\n  }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "no-booking-c3c",
+        "name": "Build No Booking Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1500,
+          440
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  return [{\n    json: {\n      toolCallId: $json.toolUseId || '',\n      result: \"I couldn't find an active booking associated with your number. If you believe this is an error, please contact us directly.\"\n    }\n  }];\n} catch (e) {\n  return [{\n    json: {\n      toolCallId: '',\n      result: \"I couldn't find an active booking for your number.\"\n    }\n  }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "del-fail-c3c",
+        "name": "Build Delete Failed Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1940,
+          400
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var appt = $('Find Confirmed Appointment').first().json;\n  var config = $('⚙️ Client Config').first().json;\n  var phone = config.businessPhone || '';\n  var phoneValid = phone && phone !== 'ADD_PHONE_BEFORE_ACTIVATION';\n  var phoneMsg = phoneValid ? ' Please call us on ' + phone + ' and we will sort it out.' : ' Please contact us directly to resolve this.';\n  var result = 'There was a problem removing your appointment from our calendar.' + phoneMsg + ' Your booking has not been marked as cancelled in our system.';\n  return [{ json: { toolCallId: appt.toolUseId || '', result: result } }];\n} catch (e) {\n  return [{ json: { toolCallId: '', result: 'There was a system error cancelling your appointment. Please contact us directly.' } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      }
+    ],
+    "connections": {
+      "Execute Workflow Trigger": {
+        "main": [
+          [
+            {
+              "node": "⚙️ Client Config",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⚙️ Client Config": {
+        "main": [
+          [
+            {
+              "node": "Read Appointment Log",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Appointment Log": {
+        "main": [
+          [
+            {
+              "node": "Find Confirmed Appointment",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Find Confirmed Appointment": {
+        "main": [
+          [
+            {
+              "node": "IF Has Confirmed Appointment",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF Has Confirmed Appointment": {
+        "main": [
+          [
+            {
+              "node": "Delete Calendar Event",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build No Booking Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Delete Calendar Event": {
+        "main": [
+          [
+            {
+              "node": "Delete Succeeded?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Delete Succeeded?": {
+        "main": [
+          [
+            {
+              "node": "Build Delete Failed Response",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Update Appointment Log - Cancelled",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Appointment Log - Cancelled": {
+        "main": [
+          [
+            {
+              "node": "Update Clients - Cancelled",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Clients - Cancelled": {
+        "main": [
+          [
+            {
+              "node": "Build Cancel Success",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Muhammad Ghazwan",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-08-18T16:30:21.337Z",
+    "updatedAt": "2026-08-18T16:30:21.337Z",
+    "workflowPublishHistory": [
+      {
+        "id": 292,
+        "workflowId": "UbhS8xxnkcOjnq1S",
+        "versionId": "b51eaeef-4963-409d-8f15-3136758a50c5",
+        "event": "activated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-18T16:30:21.445Z"
+      },
+      {
+        "id": 291,
+        "workflowId": "UbhS8xxnkcOjnq1S",
+        "versionId": "b51eaeef-4963-409d-8f15-3136758a50c5",
+        "event": "deactivated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-18T16:30:21.445Z"
+      }
+    ]
+  }
+}

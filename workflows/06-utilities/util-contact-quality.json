@@ -1,0 +1,104 @@
+{
+  "id": "yysYwROH37kyM0Jx",
+  "name": "PlutioLabs — Utility: Contact Quality",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-08-20T20:38:48.905Z",
+  "updatedAt": "2026-08-21T18:06:51.753Z",
+  "isArchived": false,
+  "versionCounter": 2,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Run",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "path": "uplift-model",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "1f8c4ec5-756e-45b7-bb86-3c10c0b59c32"
+    },
+    {
+      "id": "s",
+      "name": "Read Sheet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        240,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "GET",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/YOUR_SCRAPER_SHEET_ID/values/{{ encodeURIComponent(\"'Outreach CRM'!A:BG\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "m",
+      "name": "Model",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "// WHO IS ACTUALLY BEHIND THESE EMAILS? Classifies every send-ready contact by the\n// email local-part, then cross-tabs against company size - because at a 1-4 person\n// installer, info@ IS the owner's inbox, while at a 50+ firm it is a receptionist.\ntry {\n  var v = ($input.first().json || {}).values || [];\n  if (v.length < 2) { return [{ json: { error: 'no rows' } }]; }\n  var H = v[0], I = {};\n  for (var h = 0; h < H.length; h++) { I[String(H[h]).trim()] = h; }\n  function c(r, n) { var i = I[n]; if (i === undefined) { return ''; } var x = r[i]; return (x === undefined || x === null) ? '' : String(x).trim(); }\n  function T(x) { var s = String(x).toLowerCase(); return s === 'true' || s === 'yes' || s === '1'; }\n\n  var GEN = ['info','sales','enquiries','enquiry','admin','contact','hello','office','accounts','mail','support','team','service','post','general','bookings','booking','reception','help','hi','enquires','customerservice','estimating','quotes'];\n\n  function localPart(e) { var s = String(e || ''); var a = s.indexOf('@'); return a > -1 ? s.substring(0, a).toLowerCase() : ''; }\n  function classify(e) {\n    var lp = localPart(e);\n    if (!lp) { return 'no-email'; }\n    for (var i = 0; i < GEN.length; i++) { if (lp === GEN[i]) { return 'role-inbox'; } }\n    // first.last / first_last / first-last\n    if (/^[a-z]{2,14}[._-][a-z]{2,14}$/.test(lp)) { return 'named-person'; }\n    // single short alphabetic token = almost always a first name\n    if (/^[a-z]{2,14}$/.test(lp)) { return 'named-person'; }\n    // contains a role word but is not exactly one, e.g. sales.uk, info2\n    for (var g = 0; g < GEN.length; g++) { if (lp.indexOf(GEN[g]) !== -1) { return 'role-inbox'; } }\n    return 'other';\n  }\n\n  var byClass = {}, bySizeClass = {}, sendReady = 0;\n  var namedWithFirstName = 0, roleWithFirstName = 0;\n  var hasWebsite = 0, roleWithWebsite = 0;\n  var smallFirmRole = 0, largeFirmRole = 0;\n  var samples = { named: [], role: [], other: [] };\n\n  for (var r = 1; r < v.length; r++) {\n    var row = v[r];\n    if (c(row, 'Email') === '' || T(c(row, 'PECR Risk')) || !T(c(row, 'Emailable'))) { continue; }\n    sendReady++;\n\n    var cls = classify(c(row, 'Email'));\n    byClass[cls] = (byClass[cls] || 0) + 1;\n\n    var tier = c(row, 'Size Tier') || '(blank)';\n    if (!bySizeClass[tier]) { bySizeClass[tier] = {}; }\n    bySizeClass[tier][cls] = (bySizeClass[tier][cls] || 0) + 1;\n\n    var fn = c(row, 'First Name') !== '';\n    if (cls === 'named-person' && fn) { namedWithFirstName++; }\n    if (cls === 'role-inbox' && fn) { roleWithFirstName++; }\n\n    var web = c(row, 'Website') !== '';\n    if (web) { hasWebsite++; }\n    if (cls === 'role-inbox' && web) { roleWithWebsite++; }\n\n    // Tier strings look like '1 - 0-4', '3 - 15-49'\n    if (cls === 'role-inbox') {\n      var t0 = tier.charAt(0);\n      if (t0 === '0' || t0 === '1' || t0 === '2') { smallFirmRole++; }\n      else if (t0 === '3' || t0 === '4' || t0 === '5' || t0 === '6') { largeFirmRole++; }\n    }\n\n    if (cls === 'named-person' && samples.named.length < 4) { samples.named.push(c(row, 'Email')); }\n    if (cls === 'role-inbox' && samples.role.length < 4) { samples.role.push(c(row, 'Email')); }\n    if (cls === 'other' && samples.other.length < 4) { samples.other.push(c(row, 'Email')); }\n  }\n\n  return [{ json: {\n    sendReady: sendReady,\n    byContactType: byClass,\n    pctNamedPerson: Math.round((byClass['named-person'] || 0) / sendReady * 1000) / 10,\n    pctRoleInbox: Math.round((byClass['role-inbox'] || 0) / sendReady * 1000) / 10,\n    roleInboxBySize: { atSmallFirms_0to14: smallFirmRole, atLargerFirms_15plus: largeFirmRole, note: 'At a 0-14 person installer a role inbox is normally read by the owner. At 15+ it is more likely staff.' },\n    firstNameCoverage: { onNamedPerson: namedWithFirstName, onRoleInbox: roleWithFirstName },\n    enrichmentCeiling: { hasWebsite: hasWebsite, roleInboxWithWebsite: roleWithWebsite, note: 'roleInboxWithWebsite is the ONLY population Instantly Lead Finder could improve - it needs a domain to search, and a named contact already has one.' },\n    samples: samples\n  }}];\n} catch (e) { return [{ json: { error: 'failed: ' + e.message } }]; }"
+      }
+    }
+  ],
+  "connections": {
+    "Run": {
+      "main": [
+        [
+          {
+            "node": "Read Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Sheet": {
+      "main": [
+        [
+          {
+            "node": "Model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "activeVersion": null
+}

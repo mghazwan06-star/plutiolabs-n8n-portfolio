@@ -1,0 +1,1260 @@
+{
+  "id": "OzT8oyIRzD8lQ5kt",
+  "name": "D5 — 02 Voice Reactivation Engine",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-05-18T01:39:09.270Z",
+  "updatedAt": "2026-08-20T20:57:17.849Z",
+  "isArchived": false,
+  "versionCounter": 11,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "d5wf2-sticky",
+      "name": "D5-WF2 Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -80
+      ],
+      "parameters": {
+        "content": "## D5-WF2: Voice Reactivation Engine\n\nScheduled every 30 min (Mon–Sat 09:00–17:00 GMT/BST).\n\nReads Reactivation Log for idle leads (queued + retry-pending + stale call-initiated >2h).\nCross-checks Clients.Status before firing each call (skips booked/DNC/not-interested).\nFires VAPI outbound calls with D5’s own assistant.\n\nUpstream: D5-WF1 writes leads to Reactivation Log.\nDownstream: D5-WF2b routes VAPI events (ID: 1EsyoHL1IaXcyON5, webhook: /webhook/d5-vapi-events).\n\nAll PLACEHOLDER values must be filled before activation.",
+        "height": 280,
+        "width": 460,
+        "color": 6
+      }
+    },
+    {
+      "id": "d5wf2-trigger",
+      "name": "D5 Voice Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0,30 9-16 * * 1-6"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d5wf2-config",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        200
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-sheetId",
+              "name": "sheetId",
+              "value": "YOUR_CRM_SHEET_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-clientsTab",
+              "name": "clientsTab",
+              "value": "Clients",
+              "type": "string"
+            },
+            {
+              "id": "cfg-reactivationLogTab",
+              "name": "reactivationLogTab",
+              "value": "Reactivation Log",
+              "type": "string"
+            },
+            {
+              "id": "cfg-callbackQueueTab",
+              "name": "callbackQueueTab",
+              "value": "D5 Callback Queue",
+              "type": "string"
+            },
+            {
+              "id": "cfg-appointmentLogTab",
+              "name": "appointmentLogTab",
+              "value": "Appointment Log",
+              "type": "string"
+            },
+            {
+              "id": "cfg-businessName",
+              "name": "businessName",
+              "value": "Solarify",
+              "type": "string"
+            },
+            {
+              "id": "cfg-timezone",
+              "name": "timezone",
+              "value": "Europe/London",
+              "type": "string"
+            },
+            {
+              "id": "cfg-vapiKey",
+              "name": "vapiApiKey",
+              "value": "PLACEHOLDER_VAPI_API_KEY",
+              "type": "string"
+            },
+            {
+              "id": "cfg-d5AssistantId",
+              "name": "d5AssistantId",
+              "value": "PLACEHOLDER_D5_ASSISTANT_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-d5PhoneNumberId",
+              "name": "d5PhoneNumberId",
+              "value": "PLACEHOLDER_D5_PHONE_NUMBER_ID",
+              "type": "string"
+            },
+            {
+              "id": "cfg-d5WebhookUrl",
+              "name": "d5WebhookUrl",
+              "value": "PLACEHOLDER_D5_WEBHOOK_URL",
+              "type": "string"
+            },
+            {
+              "id": "cfg-ownerPhone",
+              "name": "ownerPhone",
+              "value": "PLACEHOLDER_OWNER_PHONE",
+              "type": "string"
+            },
+            {
+              "id": "cfg-twilioFrom",
+              "name": "twilioFromNumber",
+              "value": "PLACEHOLDER_TWILIO_FROM",
+              "type": "string"
+            },
+            {
+              "id": "cfg-cooldown",
+              "name": "cooldownDays",
+              "value": "30",
+              "type": "number"
+            },
+            {
+              "id": "cfg-maxAttempts",
+              "name": "maxVoiceAttempts",
+              "value": "2",
+              "type": "number"
+            },
+            {
+              "id": "cfg-maxPerRun",
+              "name": "maxVoicePerRun",
+              "value": "5",
+              "type": "number"
+            },
+            {
+              "id": "cfg-retryDelay",
+              "name": "retryDelayHours",
+              "value": "24",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2-read-log",
+      "name": "Read Reactivation Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        480,
+        200
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}"
+        },
+        "range": "A:Z",
+        "options": {}
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2-read-clients",
+      "name": "Read Clients",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        720,
+        200
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "range": "A:Z",
+        "options": {}
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2-filter",
+      "name": "Filter & Route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        200
+      ],
+      "parameters": {
+        "jsCode": "try {\n  var config = $('⚙️ Client Config').first().json;\n  var allReactivation = $('Read Reactivation Log').all().map(function(item) { return item.json; });\n  var allClients = $input.all().map(function(item) { return item.json; });\n\n  var now = new Date();\n  var skipStatuses = ['booked', 'do-not-contact', 'not-interested', 'call-initiated', 'callback-scheduled', 'sequence-active'];\n  var maxAttempts = config.maxVoiceAttempts || 2;\n  var cap = config.maxVoicePerRun || 5;\n\n  var clientsMap = {};\n  allClients.forEach(function(c) {\n    if (c['Phone']) { clientsMap[c['Phone']] = c['Status']; }\n  });\n\n  var results = [];\n\n  for (var i = 0; i < allReactivation.length && results.length < cap; i++) {\n    var row = allReactivation[i];\n    if (!row['Phone'] || row['Pool Type'] !== 'idle') continue;\n\n    var status = row['Reactivation Status'];\n    var action = null;\n\n    if (status === 'queued') {\n      action = 'first-call';\n    } else if (status === 'retry-pending') {\n      var nextTouchAt = row['Next Touch At'] ? new Date(row['Next Touch At']) : null;\n      if (!nextTouchAt || now < nextTouchAt) continue;\n      var attemptCount = parseInt(row['Attempt Count'] || 0);\n      if (attemptCount >= maxAttempts) {\n        action = 'exhausted';\n      } else {\n        action = 'retry-call';\n      }\n    } else if (status === 'call-initiated') {\n      var lastTouch = row['Last Touch'] ? new Date(row['Last Touch']) : null;\n      var staleMs = 2 * 60 * 60 * 1000;\n      if (!lastTouch || (now - lastTouch) <= staleMs) continue;\n      var staleAttempts = parseInt(row['Attempt Count'] || 1);\n      if (staleAttempts >= maxAttempts) {\n        action = 'exhausted';\n      } else {\n        action = 'retry-call';\n      }\n    } else {\n      continue;\n    }\n\n    var phone = row['Phone'];\n    var clientStatus = clientsMap[phone];\n    if (clientStatus && skipStatuses.indexOf(clientStatus) !== -1) {\n      results.push({ json: { phone: phone, campaignId: row['Campaign ID'], name: row['Name'] || '', action: 'completed' } });\n      continue;\n    }\n\n    results.push({ json: {\n      phone: phone,\n      campaignId: row['Campaign ID'],\n      name: row['Name'] || '',\n      email: row['Email'] || '',\n      serviceInterest: row['Service Interest'] || '',\n      reactivationAngle: row['Reactivation Angle'] || 'promo',\n      attemptCount: parseInt(row['Attempt Count'] || 0),\n      action: action\n    } });\n  }\n\n  return results.length > 0 ? results : [{ json: { action: 'none', phone: '', campaignId: '' } }];\n} catch(e) {\n  return [{ json: { action: 'none', phone: '', campaignId: '', _error: e.message } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2-switch",
+      "name": "Route Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1200,
+        200
+      ],
+      "parameters": {
+        "mode": "rules",
+        "options": {
+          "fallbackOutput": "extra"
+        },
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "loose",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "id": "rule-first-call",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "first-call",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "loose",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "id": "rule-retry-call",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "retry-call",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "loose",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "id": "rule-exhausted",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "exhausted",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "options": {
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "loose",
+                  "leftValue": ""
+                },
+                "conditions": [
+                  {
+                    "id": "rule-completed",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "completed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2-build-payload",
+      "name": "Build VAPI Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "try {\n  var config = $('⚙️ Client Config').first().json;\n  var results = [];\n  $input.all().forEach(function(item) {\n    var lead = item.json;\n    if (!lead.phone) return;\n    var payload = {\n      assistantId: config.d5AssistantId,\n      phoneNumberId: config.d5PhoneNumberId,\n      customer: { number: lead.phone, name: lead.name || '' },\n      assistantOverrides: {\n        variableValues: {\n          customerName: lead.name || 'there',\n          customerPhone: lead.phone,\n          customerEmail: lead.email || '',\n          serviceInterest: lead.serviceInterest || 'Solar Survey',\n          reactivationAngle: lead.reactivationAngle || 'promo',\n          attemptNumber: (lead.attemptCount || 0) + 1\n        },\n        serverUrl: config.d5WebhookUrl\n      },\n      metadata: { campaignId: lead.campaignId, name: lead.name || '', attemptCount: lead.attemptCount || 0, source: 'd5-reactivation' }\n    };\n    results.push({ json: { payload: payload, phone: lead.phone, campaignId: lead.campaignId, name: lead.name || '', attemptCount: lead.attemptCount || 0 } });\n  });\n  return results.length > 0 ? results : [{ json: { _skip: true, payload: null, phone: '', campaignId: '' } }];\n} catch(e) {\n  return [{ json: { _error: e.message, payload: null, phone: '', campaignId: '', name: '', attemptCount: 0 } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2-fire-call",
+      "name": "Fire VAPI Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1680,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": false,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vapi.ai/call",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $('⚙️ Client Config').first().json.vapiApiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.payload }}",
+        "options": {
+          "timeout": 15000
+        }
+      }
+    },
+    {
+      "id": "d5wf2-call-queued",
+      "name": "Call Queued?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1920,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "call-id-exists",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2-update-initiated",
+      "name": "Update Log - Call Initiated",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2160,
+        -120
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Build VAPI Payload').item.json.phone }}",
+            "Campaign ID": "={{ $('Build VAPI Payload').item.json.campaignId }}",
+            "Reactivation Status": "call-initiated",
+            "Last Touch": "={{ new Date().toISOString() }}",
+            "Last Channel": "voice",
+            "Attempt Count": "={{ $('Build VAPI Payload').item.json.attemptCount + 1 }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Campaign ID",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reactivation Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Touch",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Channel",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Attempt Count",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone",
+            "Campaign ID"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2-alert-failed",
+      "name": "Alert Owner - Call Failed",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        180
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('⚙️ Client Config').first().json.ownerPhone }}",
+        "message": "={{ 'D5 call failed for ' + ($('Build VAPI Payload').item.json.name || 'Lead') + ' (' + $('Build VAPI Payload').item.json.phone + '). VAPI did not queue. Follow up manually.' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2-update-call-failed",
+      "name": "Update Log - Call Failed",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2400,
+        180
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Build VAPI Payload').item.json.phone }}",
+            "Campaign ID": "={{ $('Build VAPI Payload').item.json.campaignId }}",
+            "Reactivation Status": "call-failed",
+            "Last Touch": "={{ new Date().toISOString() }}",
+            "Error Notes": "VAPI call failed to queue"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Campaign ID",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reactivation Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Touch",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Error Notes",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone",
+            "Campaign ID"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2-build-retry",
+      "name": "Build VAPI Payload Retry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        420
+      ],
+      "parameters": {
+        "jsCode": "try {\n  var config = $('⚙️ Client Config').first().json;\n  var results = [];\n  $input.all().forEach(function(item) {\n    var lead = item.json;\n    if (!lead.phone) return;\n    var payload = {\n      assistantId: config.d5AssistantId,\n      phoneNumberId: config.d5PhoneNumberId,\n      customer: { number: lead.phone, name: lead.name || '' },\n      assistantOverrides: {\n        variableValues: {\n          customerName: lead.name || 'there',\n          customerPhone: lead.phone,\n          customerEmail: lead.email || '',\n          serviceInterest: lead.serviceInterest || 'Solar Survey',\n          reactivationAngle: lead.reactivationAngle || 'promo',\n          attemptNumber: (lead.attemptCount || 0) + 1\n        },\n        serverUrl: config.d5WebhookUrl\n      },\n      metadata: { campaignId: lead.campaignId, name: lead.name || '', attemptCount: lead.attemptCount || 0, source: 'd5-reactivation' }\n    };\n    results.push({ json: { payload: payload, phone: lead.phone, campaignId: lead.campaignId, name: lead.name || '', attemptCount: lead.attemptCount || 0 } });\n  });\n  return results.length > 0 ? results : [{ json: { _skip: true, payload: null, phone: '', campaignId: '' } }];\n} catch(e) {\n  return [{ json: { _error: e.message, payload: null, phone: '', campaignId: '', name: '', attemptCount: 0 } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2-fire-retry",
+      "name": "Fire VAPI Retry",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1680,
+        420
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": false,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vapi.ai/call",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $('⚙️ Client Config').first().json.vapiApiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.payload }}",
+        "options": {
+          "timeout": 15000
+        }
+      }
+    },
+    {
+      "id": "d5wf2-retry-queued",
+      "name": "Retry Queued?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1920,
+        420
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": false,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "retry-id-exists",
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2-update-retry-init",
+      "name": "Update Log - Retry Initiated",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2160,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Build VAPI Payload Retry').item.json.phone }}",
+            "Campaign ID": "={{ $('Build VAPI Payload Retry').item.json.campaignId }}",
+            "Reactivation Status": "call-initiated",
+            "Last Touch": "={{ new Date().toISOString() }}",
+            "Last Channel": "voice",
+            "Attempt Count": "={{ $('Build VAPI Payload Retry').item.json.attemptCount + 1 }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Campaign ID",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reactivation Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Touch",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Channel",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Attempt Count",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone",
+            "Campaign ID"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2-alert-retry",
+      "name": "Alert Owner - Retry Failed",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        540
+      ],
+      "parameters": {
+        "from": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}",
+        "to": "={{ $('⚙️ Client Config').first().json.ownerPhone }}",
+        "message": "={{ 'D5 retry call failed for ' + ($('Build VAPI Payload Retry').item.json.name || 'Lead') + ' (' + $('Build VAPI Payload Retry').item.json.phone + '). Lead exhausted after 2 attempts.' }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2-update-retry-failed",
+      "name": "Update Log - Retry Failed",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2400,
+        540
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('Build VAPI Payload Retry').item.json.phone }}",
+            "Campaign ID": "={{ $('Build VAPI Payload Retry').item.json.campaignId }}",
+            "Reactivation Status": "call-failed",
+            "Last Touch": "={{ new Date().toISOString() }}",
+            "Error Notes": "VAPI retry call failed to queue"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Campaign ID",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reactivation Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Touch",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Error Notes",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone",
+            "Campaign ID"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2-update-exhausted",
+      "name": "Update Log - Exhausted",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1440,
+        700
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $json.phone }}",
+            "Campaign ID": "={{ $json.campaignId }}",
+            "Reactivation Status": "exhausted",
+            "Last Touch": "={{ new Date().toISOString() }}",
+            "Completed At": "={{ new Date().toISOString() }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Campaign ID",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reactivation Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Touch",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Completed At",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone",
+            "Campaign ID"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2-update-completed",
+      "name": "Update Log - Completed",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1440,
+        860
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.reactivationLogTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $json.phone }}",
+            "Campaign ID": "={{ $json.campaignId }}",
+            "Reactivation Status": "completed",
+            "Last Touch": "={{ new Date().toISOString() }}",
+            "Completed At": "={{ new Date().toISOString() }}"
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Campaign ID",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Reactivation Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Touch",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Completed At",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone",
+            "Campaign ID"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d5wf2-noop",
+      "name": "No Leads to Process",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1440,
+        1060
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": []
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "D5 Voice Schedule": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Read Reactivation Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Reactivation Log": {
+      "main": [
+        [
+          {
+            "node": "Read Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Clients": {
+      "main": [
+        [
+          {
+            "node": "Filter & Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter & Route": {
+      "main": [
+        [
+          {
+            "node": "Route Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Action": {
+      "main": [
+        [
+          {
+            "node": "Build VAPI Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build VAPI Payload Retry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Log - Exhausted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Log - Completed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Leads to Process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build VAPI Payload": {
+      "main": [
+        [
+          {
+            "node": "Fire VAPI Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fire VAPI Call": {
+      "main": [
+        [
+          {
+            "node": "Call Queued?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Queued?": {
+      "main": [
+        [
+          {
+            "node": "Update Log - Call Initiated",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Owner - Call Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Owner - Call Failed": {
+      "main": [
+        [
+          {
+            "node": "Update Log - Call Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build VAPI Payload Retry": {
+      "main": [
+        [
+          {
+            "node": "Fire VAPI Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fire VAPI Retry": {
+      "main": [
+        [
+          {
+            "node": "Retry Queued?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Queued?": {
+      "main": [
+        [
+          {
+            "node": "Update Log - Retry Initiated",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Owner - Retry Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Owner - Retry Failed": {
+      "main": [
+        [
+          {
+            "node": "Update Log - Retry Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London",
+    "saveManualExecutions": true
+  },
+  "tags": [],
+  "activeVersion": null
+}

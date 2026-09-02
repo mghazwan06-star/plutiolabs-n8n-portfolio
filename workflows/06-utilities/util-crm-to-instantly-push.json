@@ -1,0 +1,283 @@
+{
+  "id": "m8dN3asARpLeQZvV",
+  "name": "PlutioLabs — CRM to Instantly Push",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-08-21T22:49:08.459Z",
+  "updatedAt": "2026-08-21T22:49:08.459Z",
+  "isArchived": false,
+  "versionCounter": 1,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Run",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "path": "instantly-push",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "7c42910a-f74b-4a97-892f-891f1d9ab959"
+    },
+    {
+      "id": "s",
+      "name": "Read Sheet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        200,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "GET",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/YOUR_SCRAPER_SHEET_ID/values/{{ encodeURIComponent(\"'Outreach CRM'!A:BG\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "b",
+      "name": "Select Batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "// Selects one sending batch from the CRM and builds the Instantly payload.\n// POST body: { campaignId, route, limit, namedOnly, apply }\n//   campaignId  required to actually push\n//   route       default 'A-lite'\n//   limit       default 250   (Instantly caps a single request at 1000)\n//   namedOnly   default true  - only contacts whose email is a real person\n//   apply       default false - DRY RUN, nothing pushed and nothing written\n//\n// Marks pushed rows Status='queued' so the next batch never overlaps. We track\n// this in OUR sheet rather than relying on Instantly state.\ntry {\n  var body = {};\n  try { body = $('Run').first().json.body || {}; } catch (e0) { }\n  var campaignId = body.campaignId || '';\n  var route = body.route || 'A-lite';\n  var limit = Math.min(Number(body.limit) || 250, 1000);\n  var namedOnly = body.namedOnly !== false;\n  var apply = body.apply === true;\n\n  var v = ($input.first().json || {}).values || [];\n  if (v.length < 2) { return [{ json: { error: 'Sheet read returned no rows' } }]; }\n  var H = v[0], I = {};\n  for (var h = 0; h < H.length; h++) { I[String(H[h]).trim()] = h; }\n  function c(r, n) { var i = I[n]; if (i === undefined) { return ''; } var x = r[i]; return (x === undefined || x === null) ? '' : String(x).trim(); }\n  function T(x) { var s = String(x).toLowerCase(); return s === 'true' || s === 'yes' || s === '1'; }\n  function colLetter(n) { var s = ''; var x = n + 1; while (x > 0) { var m = (x - 1) % 26; s = String.fromCharCode(65 + m) + s; x = Math.floor((x - 1) / 26); } return s; }\n\n  var GEN = ['info','sales','enquiries','enquiry','admin','contact','hello','office','accounts','mail','support','team','service','post','general','bookings','booking','reception','help','hi'];\n  function isNamedPerson(e) {\n    var s = String(e || '');\n    var a = s.indexOf('@');\n    if (a < 1) { return false; }\n    var lp = s.substring(0, a).toLowerCase();\n    for (var i = 0; i < GEN.length; i++) { if (lp === GEN[i]) { return false; } }\n    return /^[a-z]{2,14}([._-][a-z]{2,14})?$/.test(lp);\n  }\n\n  var sIdx = I['Status'];\n  if (sIdx === undefined) { return [{ json: { error: 'Status column not found' } }]; }\n\n  var rows = v.slice(1);\n  var leads = [], statusCol = [], picked = 0;\n  var skipped = { notSendReady: 0, wrongRoute: 0, alreadyQueued: 0, roleInbox: 0, overLimit: 0 };\n\n  for (var r = 0; r < rows.length; r++) {\n    var row = rows[r];\n    var status = c(row, 'Status');\n    var take = false;\n\n    if (c(row, 'Email') === '' || T(c(row, 'PECR Risk')) || !T(c(row, 'Emailable'))) { skipped.notSendReady++; }\n    else if (status !== 'new') { skipped.alreadyQueued++; }\n    else if (c(row, 'Template Route') !== route) { skipped.wrongRoute++; }\n    else if (namedOnly && !isNamedPerson(c(row, 'Email'))) { skipped.roleInbox++; }\n    else if (picked >= limit) { skipped.overLimit++; }\n    else { take = true; }\n\n    if (take) {\n      picked++;\n      var site = c(row, 'Website');\n      if (site && site.indexOf('http') !== 0) { site = 'https://' + site; }\n      leads.push({\n        email: c(row, 'Email'),\n        first_name: c(row, 'First Name'),\n        company_name: c(row, 'Company Name'),\n        website: site,\n        // Keys match the CRM headers EXACTLY - Instantly variables are case and\n        // space sensitive, per the playbook's field map.\n        custom_variables: {\n          'City': c(row, 'City'),\n          'Trade': c(row, 'Trade'),\n          'Trade Scene': c(row, 'Trade Scene'),\n          'Top Complaint': c(row, 'Top Complaint'),\n          'Best Review Quote': c(row, 'Best Review Quote'),\n          'Top Competitor': c(row, 'Top Competitor'),\n          'Competitor Reviews': c(row, 'Competitor Reviews'),\n          'Review Count': c(row, 'Review Count'),\n          'Review Gap': c(row, 'Review Gap'),\n          'Closing Time': c(row, 'Closing Time'),\n          'Template Route': c(row, 'Template Route'),\n          'Email 2 Route': c(row, 'Email 2 Route')\n        }\n      });\n      statusCol.push(['queued']);\n    } else {\n      statusCol.push([status]);\n    }\n  }\n\n  var payload = {\n    campaign_id: campaignId,\n    leads: leads,\n    skip_if_in_campaign: true,\n    skip_if_in_workspace: true,\n    verify_leads_on_import: true\n  };\n\n  return [{ json: {\n    apply: apply && campaignId !== '' && leads.length > 0,\n    mode: apply ? (campaignId ? 'APPLY' : 'BLOCKED - no campaignId supplied') : 'DRY RUN - nothing pushed, nothing written',\n    route: route,\n    namedOnly: namedOnly,\n    selected: leads.length,\n    skipped: skipped,\n    sampleLead: leads.length ? leads[0] : null,\n    _payload: payload,\n    _statusRange: \"'Outreach CRM'!\" + colLetter(sIdx) + '2:' + colLetter(sIdx) + (rows.length + 1),\n    _statusValues: statusCol\n  }}];\n} catch (e) { return [{ json: { error: 'Select Batch failed: ' + e.message } }]; }"
+      }
+    },
+    {
+      "id": "i",
+      "name": "Apply?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ap",
+              "leftValue": "={{ $json.apply === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "p",
+      "name": "Push to Instantly",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        800,
+        200
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.instantly.ai/api/v2/leads/add",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json._payload) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CREDENTIAL_ID",
+          "name": "Instantly API"
+        }
+      }
+    },
+    {
+      "id": "m",
+      "name": "Mark Queued in CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1000,
+        200
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/YOUR_SCRAPER_SHEET_ID/values/{{ encodeURIComponent($('Select Batch').first().json._statusRange) }}?valueInputOption=RAW",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: $('Select Batch').first().json._statusValues }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "rp",
+      "name": "Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "// Strips the bulky payload out of the response.\ntry {\n  var b = $('Select Batch').first().json;\n  var pushed = null, marked = null;\n  try { var p = $('Push to Instantly').first().json; if (p) { pushed = p.error ? { error: p.error } : p; } } catch (e1) { }\n  try { var m = $('Mark Queued in CRM').first().json; if (m && m.updatedCells !== undefined) { marked = { range: m.updatedRange, cells: m.updatedCells }; } else if (m && m.error) { marked = { error: m.error }; } } catch (e2) { }\n\n  return [{ json: {\n    mode: b.mode,\n    route: b.route,\n    namedOnly: b.namedOnly,\n    selected: b.selected,\n    skipped: b.skipped,\n    sampleLead: b.sampleLead,\n    instantlyResponse: pushed || 'not attempted (dry run)',\n    crmStatusWrite: marked || 'not attempted (dry run)',\n    error: b.error || null\n  }}];\n} catch (e) { return [{ json: { error: 'Report failed: ' + e.message } }]; }"
+      }
+    },
+    {
+      "id": "n",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        20
+      ],
+      "parameters": {
+        "width": 1320,
+        "height": 240,
+        "content": "## CRM -> Instantly Push (batch sending)\n\nReplaces the manual CSV export/import in the playbook with a direct API push.\n\n**Dry run (safe, default):**\n`POST /webhook/instantly-push {\"route\":\"A-lite\",\"limit\":250}`\n\n**Commit:**\n`POST /webhook/instantly-push {\"campaignId\":\"<uuid>\",\"route\":\"A-lite\",\"limit\":250,\"apply\":true}`\n\n**Batch-by-batch safety, three layers:**\n1. Only picks rows with `Status = new`, then marks them `queued` - so batch 2 never overlaps batch 1\n2. `skip_if_in_campaign` + `skip_if_in_workspace` - Instantly dedupes server-side as well\n3. Nothing is pushed and nothing is written without BOTH `apply:true` AND a `campaignId`\n\n**`verify_leads_on_import: true`** - Instantly verifies on import, which may remove the need for ZeroBounce entirely.\n\n**`namedOnly: true`** (default) restricts to contacts whose email is a real person rather than an `info@` role inbox.\n\nCustom variable keys match the CRM headers EXACTLY (spaces and case), per the playbook's field map."
+      }
+    }
+  ],
+  "connections": {
+    "Run": {
+      "main": [
+        [
+          {
+            "node": "Read Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Sheet": {
+      "main": [
+        [
+          {
+            "node": "Select Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Batch": {
+      "main": [
+        [
+          {
+            "node": "Apply?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply?": {
+      "main": [
+        [
+          {
+            "node": "Push to Instantly",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push to Instantly": {
+      "main": [
+        [
+          {
+            "node": "Mark Queued in CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Queued in CRM": {
+      "main": [
+        [
+          {
+            "node": "Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "activeVersion": null
+}

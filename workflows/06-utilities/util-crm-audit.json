@@ -1,0 +1,106 @@
+{
+  "id": "42i3MXULKqXNwwM1",
+  "name": "PlutioLabs — Utility: CRM Audit",
+  "description": null,
+  "active": false,
+  "activeVersionId": null,
+  "createdAt": "2026-08-16T19:45:37.755Z",
+  "updatedAt": "2026-08-16T19:54:55.894Z",
+  "isArchived": false,
+  "versionCounter": 1,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "trig",
+      "name": "📥 Run",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -300,
+        300
+      ],
+      "parameters": {
+        "path": "crm-audit",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "97db485e-9023-45d3-93e6-2b5f7dd26807"
+    },
+    {
+      "id": "fetch",
+      "name": "📖 Read CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -60,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true,
+      "parameters": {
+        "method": "GET",
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/YOUR_SCRAPER_SHEET_ID/values/{{ encodeURIComponent(\"'Outreach CRM'!A:BE\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "audit",
+      "name": "🔍 Audit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        180,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "// Audits the live CRM sheet and returns ONLY aggregates.\ntry {\n  var res = $input.first().json;\n  var rows = res.values || [];\n  if (!rows.length) { return [{ json: { _error: 'No rows returned', raw: res } }]; }\n\n  var header = rows[0];\n  var body = rows.slice(1);\n\n  function idx(name) { return header.indexOf(name); }\n  var iName = idx('Company Name'), iPhone = idx('Phone'), iEmail = idx('Email');\n  var iRoute = idx('Template Route'), iPrio = idx('Priority'), iSrc = idx('Source');\n  var iEmailable = idx('Emailable'), iDate = idx('Date Added'), iTrade = idx('Trade');\n  var iScene = idx('Trade Scene'), iCert = idx('MCS Cert Number'), iVer = idx('Email Verify Status');\n  var iCountry = idx('UK Country'), iComp = idx('Top Competitor'), iPecr = idx('PECR Risk');\n\n  var seenPhone = {}, seenCert = {};\n  var dupPhone = 0, dupCert = 0, dupPhoneEg = [], dupCertEg = [];\n  var blankName = 0, blankPhone = 0, blankEmail = 0, blankTrade = 0, blankScene = 0;\n  var routes = {}, prios = {}, srcs = {}, dates = {}, countries = {}, vers = {};\n  var emailableY = 0, pecrY = 0, withComp = 0, shortRows = 0, longRows = 0;\n  var genericScene = 0, genericTrade = 0;\n\n  function bump(o, k) { var key = (k === undefined || k === '') ? '(blank)' : String(k); o[key] = (o[key] || 0) + 1; }\n\n  for (var i = 0; i < body.length; i++) {\n    var r = body[i];\n    if (r.length < header.length) { shortRows++; }\n    if (r.length > header.length) { longRows++; }\n\n    var nm = r[iName] || '', ph = r[iPhone] || '', em = r[iEmail] || '';\n    if (!nm) { blankName++; }\n    if (!ph) { blankPhone++; }\n    if (!em) { blankEmail++; }\n    if (!(r[iTrade] || '')) { blankTrade++; }\n    if (!(r[iScene] || '')) { blankScene++; }\n    if ((r[iTrade] || '') === 'trades engineer') { genericTrade++; }\n    if ((r[iScene] || '') === 'out on a job') { genericScene++; }\n\n    if (ph) {\n      if (seenPhone[ph]) { dupPhone++; if (dupPhoneEg.length < 5) { dupPhoneEg.push(nm + ' / ' + ph); } }\n      else { seenPhone[ph] = true; }\n    }\n    var ct = r[iCert] || '';\n    if (ct) {\n      if (seenCert[ct]) { dupCert++; if (dupCertEg.length < 5) { dupCertEg.push(nm + ' / ' + ct); } }\n      else { seenCert[ct] = true; }\n    }\n\n    bump(routes, r[iRoute]); bump(prios, r[iPrio]); bump(srcs, r[iSrc]);\n    bump(dates, r[iDate]); bump(countries, r[iCountry]); bump(vers, r[iVer]);\n    if ((r[iEmailable] || '') === 'TRUE') { emailableY++; }\n    if ((r[iPecr] || '') === 'TRUE') { pecrY++; }\n    if ((r[iComp] || '')) { withComp++; }\n  }\n\n  return [{ json: {\n    sheetRange: res.range,\n    headerCount: header.length,\n    headerFirst5: header.slice(0, 5),\n    headerLast5: header.slice(header.length - 5),\n    dataRows: body.length,\n    uniquePhones: Object.keys(seenPhone).length,\n    duplicatePhoneRows: dupPhone,\n    duplicatePhoneExamples: dupPhoneEg,\n    uniqueCertNumbers: Object.keys(seenCert).length,\n    duplicateCertRows: dupCert,\n    duplicateCertExamples: dupCertEg,\n    blanks: { name: blankName, phone: blankPhone, email: blankEmail,\n              trade: blankTrade, tradeScene: blankScene },\n    genericFallbacks: { trade: genericTrade, tradeScene: genericScene },\n    malformedRows: { tooFewCols: shortRows, tooManyCols: longRows },\n    emailableTrue: emailableY,\n    pecrRiskTrue: pecrY,\n    rowsWithCompetitor: withComp,\n    byTemplateRoute: routes,\n    byPriority: prios,\n    bySource: srcs,\n    byDateAdded: dates,\n    byCountry: countries,\n    byVerifyStatus: vers\n  }}];\n} catch (e) {\n  return [{ json: { _error: 'Audit failed: ' + e.message } }];\n}"
+      }
+    }
+  ],
+  "connections": {
+    "📥 Run": {
+      "main": [
+        [
+          {
+            "node": "📖 Read CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📖 Read CRM": {
+      "main": [
+        [
+          {
+            "node": "🔍 Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London"
+  },
+  "tags": [],
+  "activeVersion": null
+}

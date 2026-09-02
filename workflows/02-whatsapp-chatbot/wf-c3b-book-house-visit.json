@@ -1,0 +1,2133 @@
+{
+  "id": "FafMsNpq5nWqQjzO",
+  "name": "D3-WF-C3b: Book House Visit",
+  "description": null,
+  "active": true,
+  "activeVersionId": "975d009b-8636-497a-a0ef-8cd200485fbc",
+  "createdAt": "2026-05-19T13:26:34.621Z",
+  "updatedAt": "2026-08-18T16:20:24.180Z",
+  "isArchived": false,
+  "versionCounter": 25,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "sticky-c3b",
+      "name": "📋 WF-C3b Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        280,
+        40
+      ],
+      "parameters": {
+        "content": "## WF-C3b: Book House Visit\nCalled by: WF-C2 (Claude Core) via Execute Workflow node\n\n**Input:** { toolInput: { date, time, service, address, name, email }, toolUseId, phone }\n**Output:** { toolCallId, result }\n\n1. Compute ISO start/end times (BST-aware)\n2. Read Appointment Log → check for existing confirmed booking\n3. Read Clients → detect new lead\n4. IF duplicate → return already-booked message\n5. Create Google Calendar event\n6. Append to Appointment Log (all columns incl. CalendarEventId)\n7. Update Clients core fields (always)\n8. IF new lead → write first-touch fields (Lead Source, Created At, SMS Opt-Out, Sequence Step)\n9. Return success message\n\n⚠️ Credentials: Google Sheets OAuth2 (id: 0d40kOfUWlsFuLuB), Google Calendar OAuth2 (id: Vm9SHjOljbABWWKN)",
+        "height": 220,
+        "width": 1000
+      }
+    },
+    {
+      "id": "trigger-c3b",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        300,
+        340
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "config-c3b",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        540,
+        340
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c3b-cfg-01",
+              "name": "sheetId",
+              "type": "string",
+              "value": "YOUR_CRM_SHEET_ID"
+            },
+            {
+              "id": "c3b-cfg-02",
+              "name": "clientsTab",
+              "type": "string",
+              "value": "Clients"
+            },
+            {
+              "id": "c3b-cfg-03",
+              "name": "appointmentsTab",
+              "type": "string",
+              "value": "Appointment Log"
+            },
+            {
+              "id": "c3b-cfg-04",
+              "name": "messagesTab",
+              "type": "string",
+              "value": "Messages"
+            },
+            {
+              "id": "c3b-cfg-05",
+              "name": "calendarId",
+              "type": "string",
+              "value": "owner@example.com"
+            },
+            {
+              "id": "c3b-cfg-06",
+              "name": "businessName",
+              "type": "string",
+              "value": "Solarify"
+            },
+            {
+              "id": "c3b-cfg-07",
+              "name": "timezone",
+              "type": "string",
+              "value": "Europe/London"
+            },
+            {
+              "id": "c3b-cfg-08",
+              "name": "weekdaySlots",
+              "type": "string",
+              "value": "9,10,11,12,13,14,15,16,17"
+            },
+            {
+              "id": "c3b-cfg-09",
+              "name": "saturdaySlots",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "c3b-cfg-10",
+              "name": "sundaySlots",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "c3b-cfg-11",
+              "name": "minNoticeHours",
+              "type": "string",
+              "value": "48"
+            },
+            {
+              "id": "c3b-cfg-12",
+              "name": "bankHolidays",
+              "type": "string",
+              "value": "2026-08-31,2026-12-25,2026-12-28,2027-01-01,2027-04-02,2027-04-05,2027-05-03,2027-05-31,2027-08-30,2027-12-27,2027-12-28"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "compute-c3b",
+      "name": "Compute Booking Times",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var trigger = $('Execute Workflow Trigger').first().json;\n  var cfg = $('⚙️ Client Config').first().json;\n  var toolInput = trigger.toolInput || {};\n  var toolUseId = trigger.toolUseId || '';\n  var phone = trigger.phone || '';\n  var rawDate = (toolInput.date || '').toString().toLowerCase().trim();\n  var time = (toolInput.time || '9am').toLowerCase();\n  var service = toolInput.service || '';\n  var address = toolInput.address || '';\n  var name = toolInput.name || '';\n  var email = toolInput.email || '';\n\n  var timeMap = { '9am': 9, '10am': 10, '11am': 11, '12pm': 12, '1pm': 13, '2pm': 14, '3pm': 15, '4pm': 16, '5pm': 17 };\n  // BUG-R41: an unmapped time string used to silently become 9am while the sheet\n  // recorded the customer's own wording — calendar and CRM would disagree and nobody\n  // would know. Today the model normalises \"14:00\" to \"2pm\" before calling, but the\n  // code must not depend on that. Refuse instead of guessing.\n  var localHour = timeMap[time];\n  var timeUnrecognised = false;\n  if (localHour === undefined) { localHour = 9; timeUnrecognised = true; }\n\n  var now = new Date();\n  var dateObj = null;\n\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate)) {\n    dateObj = new Date(rawDate + 'T12:00:00Z');\n  } else if (rawDate === 'today') {\n    dateObj = new Date(now.getTime());\n  } else if (rawDate === 'tomorrow') {\n    dateObj = new Date(now.getTime());\n    dateObj.setUTCDate(dateObj.getUTCDate() + 1);\n  } else if (rawDate) {\n    // BUG-R31: an explicit day+month (\"Monday, 17 August\") must beat the weekday name.\n    // Matching 'monday' first made \"Monday 24 August\" silently book the NEAREST Monday.\n    var monthWords = ['january','february','march','april','may','june','july','august','september','october','november','december'];\n    var mIdx = -1;\n    for (var mw = 0; mw < monthWords.length; mw++) {\n      if (rawDate.indexOf(monthWords[mw]) !== -1) { mIdx = mw; break; }\n    }\n    var dayNumMatch = rawDate.match(/(\\d{1,2})\\s*(?:st|nd|rd|th)?/);\n    var dayNum = dayNumMatch ? parseInt(dayNumMatch[1], 10) : 0;\n    if (mIdx !== -1 && dayNum >= 1 && dayNum <= 31) {\n      var yr = now.getUTCFullYear();\n      var cand = new Date(Date.UTC(yr, mIdx, dayNum, 12, 0, 0));\n      // A date already well past this year means they mean next year.\n      if (cand.getTime() < now.getTime() - 86400000) { cand = new Date(Date.UTC(yr + 1, mIdx, dayNum, 12, 0, 0)); }\n      dateObj = cand;\n    }\n    var dayNamesLower = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];\n    var foundIdx = -1;\n    for (var d = 0; d < dayNamesLower.length; d++) {\n      if (rawDate.indexOf(dayNamesLower[d]) !== -1) { foundIdx = d; break; }\n    }\n    if (dateObj) {\n      foundIdx = -1;\n    }\n    if (foundIdx !== -1) {\n      var currentDay = now.getUTCDay();\n      var daysUntil = (foundIdx - currentDay + 7) % 7;\n      if (daysUntil === 0) { daysUntil = 7; }\n      dateObj = new Date(now.getTime());\n      dateObj.setUTCDate(dateObj.getUTCDate() + daysUntil);\n    } else {\n      var attempt = new Date(rawDate);\n      // Must not clobber a date already resolved above.\n      if (!dateObj && !isNaN(attempt.getTime())) { dateObj = attempt; }\n    }\n  }\n\n  // V8's legacy parser defaults a yearless string like \"24 august\" to the year 2001.\n  if (dateObj && !isNaN(dateObj.getTime()) && dateObj.getUTCFullYear() < now.getUTCFullYear()) { dateObj = null; }\n\n  if (!dateObj || isNaN(dateObj.getTime())) {\n    dateObj = new Date(now.getTime());\n    dateObj.setUTCDate(dateObj.getUTCDate() + 1);\n  }\n\n  function pad(n) { return n < 10 ? '0' + n : '' + n; }\n  var resolvedDate = dateObj.getUTCFullYear() + '-' + pad(dateObj.getUTCMonth() + 1) + '-' + pad(dateObj.getUTCDate());\n\n  var month = dateObj.getUTCMonth() + 1;\n  var isBST = (month >= 3 && month <= 10);\n  var utcOffset = isBST ? 1 : 0;\n  var utcHour = localHour - utcOffset;\n\n  var startISO = resolvedDate + 'T' + pad(utcHour) + ':00:00.000Z';\n  var endISO = resolvedDate + 'T' + pad(utcHour + 1) + ':00:00.000Z';\n\n  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];\n  var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];\n  var friendlyDate = days[dateObj.getUTCDay()] + ', ' + dateObj.getUTCDate() + ' ' + months[dateObj.getUTCMonth()];\n  var slotLabel = time.charAt(0).toUpperCase() + time.slice(1);\n\n  // ---- FINDING-R30 write-side gate ----\n  // The model can call book_house_visit without ever calling check_availability,\n  // so opening hours must be enforced here too, not only on the read path.\n  function parseSlots(s) {\n    var out = [];\n    var parts = (s || '').split(',');\n    for (var i = 0; i < parts.length; i++) {\n      var v = parseInt(parts[i], 10);\n      if (!isNaN(v)) { out.push(v); }\n    }\n    return out;\n  }\n  var dow = dateObj.getUTCDay();\n  var allowed;\n  if (dow === 0) { allowed = parseSlots(cfg.sundaySlots); }\n  else if (dow === 6) { allowed = parseSlots(cfg.saturdaySlots); }\n  else { allowed = parseSlots(cfg.weekdaySlots); }\n\n  var bookable = true;\n  var rejectReason = '';\n\n  var bankHolidays = (cfg.bankHolidays || '').split(',');\n  for (var b = 0; b < bankHolidays.length; b++) {\n    if (bankHolidays[b].trim() === resolvedDate) { bookable = false; rejectReason = 'bank-holiday'; break; }\n  }\n  if (bookable && allowed.length === 0) { bookable = false; rejectReason = 'closed-day'; }\n  if (bookable) {\n    var inList = false;\n    for (var a = 0; a < allowed.length; a++) { if (allowed[a] === localHour) { inList = true; break; } }\n    if (!inList) { bookable = false; rejectReason = 'outside-hours'; }\n  }\n  if (bookable && timeUnrecognised) { bookable = false; rejectReason = 'bad-time'; }\n  if (bookable) {\n    var minNotice = parseInt(cfg.minNoticeHours, 10);\n    if (isNaN(minNotice)) { minNotice = 2; }\n    var startMs = new Date(startISO).getTime();\n    if (isNaN(startMs) || startMs < now.getTime() + (minNotice * 3600000)) { bookable = false; rejectReason = 'too-soon'; }\n  }\n\n  return [{\n    json: {\n      toolUseId: toolUseId,\n      phone: phone,\n      name: name,\n      email: email,\n      service: service,\n      address: address,\n      date: resolvedDate,\n      time: time,\n      startISO: startISO,\n      endISO: endISO,\n      friendlyDate: friendlyDate,\n      slotLabel: slotLabel,\n      bookable: bookable,\n      rejectReason: rejectReason,\n      bookedAt: new Date().toISOString()\n    }\n  }];\n} catch (e) {\n  var fb = $('Execute Workflow Trigger').first().json;\n  return [{\n    json: {\n      toolUseId: fb.toolUseId || '',\n      phone: fb.phone || '',\n      error: e.message,\n      startISO: '',\n      endISO: '',\n      friendlyDate: '',\n      slotLabel: '',\n      bookable: false,\n      rejectReason: 'error',\n      bookedAt: new Date().toISOString()\n    }\n  }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "read-apptlog-c3b",
+      "name": "Read Appointment Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1020,
+        340
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+        },
+        "range": "A:Z",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "read-clients-c3b",
+      "name": "Read Clients",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1260,
+        340
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "range": "A:Z",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "process-c3b",
+      "name": "Process Lookups",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var booking = $('Compute Booking Times').first().json;\n  var phone = booking.phone || '';\n\n  // Check appointment log for existing confirmed booking\n  var appointments = $('Read Appointment Log').all();\n  var isDuplicate = false;\n  for (var i = 0; i < appointments.length; i++) {\n    var appt = appointments[i].json;\n    if (String(appt.Phone).replace(/[^0-9]/g, '') === String(phone).replace(/[^0-9]/g, '') && appt.Status === 'confirmed') {\n      isDuplicate = true;\n      break;\n    }\n  }\n\n  // Check Clients for new lead detection\n  var clients = $input.all();\n  var isNewLead = true;\n  for (var j = 0; j < clients.length; j++) {\n    if (String(clients[j].json.Phone).replace(/[^0-9]/g, '') === String(phone).replace(/[^0-9]/g, '')) {\n      isNewLead = false;\n      break;\n    }\n  }\n\n  return [{\n    json: {\n      isDuplicate: isDuplicate,\n      isNewLead: isNewLead,\n      toolUseId: booking.toolUseId || '',\n      phone: phone,\n      name: booking.name || '',\n      email: booking.email || '',\n      service: booking.service || '',\n      address: booking.address || '',\n      date: booking.date || '',\n      time: booking.time || '',\n      startISO: booking.startISO || '',\n      endISO: booking.endISO || '',\n      friendlyDate: booking.friendlyDate || '',\n      slotLabel: booking.slotLabel || '',\n      bookedAt: booking.bookedAt || new Date().toISOString()\n    }\n  }];\n} catch (e) {\n  return [{\n    json: {\n      isDuplicate: false,\n      isNewLead: false,\n      toolUseId: $('Compute Booking Times').first().json.toolUseId || '',\n      phone: $('Compute Booking Times').first().json.phone || '',\n      error: e.message\n    }\n  }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "if-dup-c3b",
+      "name": "IF Already Booked",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1740,
+        340
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c3b-cond-dup",
+              "leftValue": "={{ $json.isDuplicate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "already-booked-c3b",
+      "name": "Build Already Booked Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        500
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  return [{\n    json: {\n      toolCallId: $json.toolUseId || '',\n      result: 'You already have a confirmed appointment with us. Would you like to reschedule or cancel it instead?'\n    }\n  }];\n} catch (e) {\n  return [{\n    json: {\n      toolCallId: '',\n      result: 'You already have an active booking with us.'\n    }\n  }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "create-cal-c3b",
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        2700,
+        180
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.calendarId }}"
+        },
+        "start": "={{ $('Process Lookups').first().json.startISO }}",
+        "end": "={{ $('Process Lookups').first().json.endISO }}",
+        "additionalFields": {
+          "summary": "={{ $('Process Lookups').first().json.service + ' — ' + $('Process Lookups').first().json.name }}",
+          "description": "={{ 'Phone: ' + $('Process Lookups').first().json.phone + '\\nEmail: ' + $('Process Lookups').first().json.email + '\\nService: ' + $('Process Lookups').first().json.service + '\\nAddress: ' + $('Process Lookups').first().json.address }}",
+          "location": "={{ $('Process Lookups').first().json.address }}"
+        },
+        "options": {
+          "useN8nTimeZone": true
+        }
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Calendar OAuth2 API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "if-cal-created-c3b",
+      "name": "Calendar Created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2830,
+        180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cal-created-check",
+              "leftValue": "={{ $json.id ? 'ok' : 'fail' }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "success-c3b",
+      "name": "Build Booking Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3960,
+        180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var data = $('Process Lookups').first().json;\n  var result = 'Your house visit for ' + data.service + ' is booked for ' + data.friendlyDate + ' at ' + data.slotLabel + '. Address: ' + data.address + '. We look forward to seeing you!';\n  return [{\n    json: {\n      toolCallId: data.toolUseId || '',\n      result: result\n    }\n  }];\n} catch (e) {\n  return [{\n    json: {\n      toolCallId: $('Process Lookups').first().json.toolUseId || '',\n      result: 'Your house visit has been successfully booked. We look forward to seeing you!'\n    }\n  }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "build-cal-fail-c3b",
+      "name": "Build Calendar Fail Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        380
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var data = $('Process Lookups').first().json;\n  return [{ json: { toolCallId: data.toolUseId || '', result: 'I was unable to book your appointment due to a calendar system error. Please try again in a moment, or call us directly to book.' } }];\n} catch(e) {\n  return [{ json: { toolCallId: '', result: 'I was unable to book your appointment due to a technical error. Please try again.' } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "bad3a16d-2e9a-4fdd-ae4c-9ac244607345",
+      "name": "Re-check Slot",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1980,
+        180
+      ],
+      "parameters": {
+        "resource": "event",
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.calendarId }}"
+        },
+        "returnAll": true,
+        "timeMin": "={{ $('Process Lookups').first().json.startISO }}",
+        "timeMax": "={{ $('Process Lookups').first().json.endISO }}",
+        "options": {
+          "useN8nTimeZone": true
+        }
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Calendar OAuth2 API"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "4977f51e-045f-48b6-96c4-77843aeb52ef",
+      "name": "Evaluate Slot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var events = $input.all();\n  var prep = $('Process Lookups').first().json || {};\n  var startISO = prep.startISO || '';\n  var endISO = prep.endISO || '';\n\n  // BUG-R4 rule: this Calendar node runs with onError=continueRegularOutput, so a\n  // failed read arrives here as DATA, not as a thrown error. Decide explicitly.\n  var readFailed = false;\n  if (events.length > 0 && events[0].json && events[0].json.error) { readFailed = true; }\n\n  if (readFailed) {\n    // Cannot verify. Availability was already checked earlier in the conversation,\n    // so proceed rather than block a converting customer on a transient blip.\n    // This is exactly the pre-existing behaviour — no new risk introduced.\n    return [{ json: { slotFree: true, verified: false, note: 'calendar re-check failed; proceeding on the earlier availability check' } }];\n  }\n\n  var newStart = new Date(startISO).getTime();\n  var newEnd = new Date(endISO).getTime();\n  if (isNaN(newStart) || isNaN(newEnd)) {\n    return [{ json: { slotFree: true, verified: false, note: 'could not parse requested slot times' } }];\n  }\n\n  var clash = false;\n  for (var i = 0; i < events.length; i++) {\n    var ev = events[i].json || {};\n    if (ev.status === 'cancelled') { continue; }\n    var s = ev.start ? (ev.start.dateTime || ev.start.date) : null;\n    var e = ev.end ? (ev.end.dateTime || ev.end.date) : null;\n    if (!s || !e) { continue; }\n    var evStart = new Date(s).getTime();\n    var evEnd = new Date(e).getTime();\n    if (isNaN(evStart) || isNaN(evEnd)) { continue; }\n    // Overlap test: existing starts before ours ends AND ends after ours starts.\n    if (evStart < newEnd && evEnd > newStart) { clash = true; break; }\n  }\n\n  return [{ json: { slotFree: !clash, verified: true } }];\n} catch (err) {\n  return [{ json: { slotFree: true, verified: false, note: 'evaluation error: ' + err.message } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "67cdad79-9845-41f2-aa4f-ebedaa973619",
+      "name": "Slot Still Free?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2420,
+        180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "slot-free-1",
+              "leftValue": "={{ $json.slotFree }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "9082671d-7e94-4147-b7cf-49c98a3196d4",
+      "name": "Build Slot Taken Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        380
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var prep = $('Process Lookups').first().json || {};\n  return [{ json: {\n    toolCallId: prep.toolUseId || '',\n    result: 'SLOT NO LONGER AVAILABLE. Someone else took that time while you were talking. Do NOT tell the customer it is booked. Apologise briefly, then call check_availability again on your next message to offer fresh times.'\n  } }];\n} catch (e) {\n  return [{ json: {\n    toolCallId: '',\n    result: 'SLOT NO LONGER AVAILABLE. Do not confirm the booking. Apologise and offer to look for other times.'\n  } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "9f3c3f8b-440c-4e3a-976c-05112539861b",
+      "name": "Slot Bookable?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        340
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c3b-bookable",
+              "leftValue": "={{ $json.bookable }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "a6178ca8-b52c-4734-a1b2-b0b595917149",
+      "name": "Build Outside Hours Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        560
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var d = $('Compute Booking Times').first().json || {};\n  var reason = d.rejectReason || 'outside-hours';\n  var when = (d.friendlyDate || 'that day') + ' at ' + (d.slotLabel || 'that time');\n  var hours = 'Survey visits run Monday to Friday 9am to 5pm only, with at least 48 hours notice. We do not survey on Saturdays, Sundays or bank holidays.';\n  var msg;\n\n  if (reason === 'bank-holiday') {\n    msg = 'NOT BOOKED. ' + when + ' falls on a bank holiday and we do not carry out surveys then. ' + hours + ' Apologise, do NOT say it is booked, and offer to check another day.';\n  } else if (reason === 'closed-day') {\n    msg = 'NOT BOOKED. We are closed on ' + (d.friendlyDate || 'that day') + '. ' + hours + ' Apologise, do NOT say it is booked, and offer to check another day.';\n  } else if (reason === 'too-soon') {\n    msg = 'NOT BOOKED. ' + when + ' is inside our 48 hour notice window, and we need at least 48 hours to arrange a surveyor. Apologise, do NOT say it is booked, and offer the next working day.';\n  } else if (reason === 'bad-time') {\n    msg = 'NOT BOOKED. That time was not recognised as one of our bookable slots. Do NOT say it is booked. Ask the customer to pick a slot on the hour between 9am and 5pm, and offer to check what is free.';\n  } else if (reason === 'error') {\n    msg = 'NOT BOOKED. A system error stopped the booking being processed. Apologise, do NOT claim it is booked, and ask them to try again shortly.';\n  } else {\n    msg = 'NOT BOOKED. ' + when + ' is outside our survey hours. ' + hours + ' Apologise, do NOT say it is booked, and offer a time inside those hours.';\n  }\n\n  return [{ json: { toolCallId: d.toolUseId || '', result: msg } }];\n} catch (e) {\n  return [{ json: { toolCallId: '', result: 'NOT BOOKED. That time is outside our survey hours. Do not confirm a booking. Offer Monday to Friday 9am to 5pm, at least 48 hours ahead, instead.' } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "950f078a-cd2a-4cbe-b8fe-0322df45ef7d",
+      "name": "Read Appt Headers",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2960,
+        60
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.appointmentsTab + '!1:1') }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "a5bd1272-4580-4e76-a2a7-c0074cc2998f",
+      "name": "Build Appt Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        60
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// BUG-R34: replaced the Sheets append node, which resolved the target row itself and\n// lost rows when two bookings landed together. Google's values:append allocates the\n// row server-side. It writes POSITIONALLY, so we map onto the LIVE header row by name.\ntry {\n  var p = $('Process Lookups').first().json || {};\n  var cal = {};\n  try { cal = $('Create Calendar Event').first().json || {}; } catch (x) {}\n  var hdrResp = $input.first() ? ($input.first().json || {}) : {};\n\n  // Documented A:Q order from GOOGLE_SHEETS_SCHEMA.md, used only if the live read failed.\n  var fallback = ['Name', 'Phone', 'Email', 'Service', 'Address', 'Date', 'Time', 'Status', 'CalendarEventId', 'Booked At', 'Notes', 'AppointmentTimeISO', 'Reminder1Sent', 'Reminder2Sent', 'ConfirmedAt', 'CancelledAt', 'Booked By'];\n\n  var headers = [];\n  if (hdrResp && hdrResp.values && hdrResp.values.length > 0 && hdrResp.values[0] && hdrResp.values[0].length > 0) {\n    for (var h = 0; h < hdrResp.values[0].length; h++) { headers.push(String(hdrResp.values[0][h]).trim()); }\n  }\n  var headersVerified = headers.length > 0;\n\n  // CalendarEventId is the update match key for every later cancel/reschedule.\n  // A row without it is unmaintainable, so treat its absence as a failed header read.\n  var criticalOk = headers.indexOf('Phone') !== -1 && headers.indexOf('CalendarEventId') !== -1;\n  var usedFallback = false;\n  if (!headersVerified || !criticalOk) { headers = fallback; usedFallback = true; }\n\n  var map = {\n    'Name': p.name || '',\n    'Phone': p.phone || '',\n    'Email': p.email || '',\n    'Service': p.service || '',\n    'Address': p.address || '',\n    'Date': p.friendlyDate || '',\n    'Time': p.slotLabel || '',\n    'Status': 'confirmed',\n    'CalendarEventId': cal.id || '',\n    'Booked At': p.bookedAt || new Date().toISOString(),\n    'Notes': '',\n    'AppointmentTimeISO': p.startISO || '',\n    'Reminder1Sent': '',\n    'Reminder2Sent': '',\n    'ConfirmedAt': '',\n    'CancelledAt': '',\n    'Booked By': 'chatbot'\n  };\n\n  var row = [];\n  for (var i = 0; i < headers.length; i++) {\n    if (Object.prototype.hasOwnProperty.call(map, headers[i])) { row.push(map[headers[i]]); }\n    else { row.push(''); }\n  }\n\n  return [{ json: { values: [row], headers: headers, headersVerified: headersVerified, usedFallback: usedFallback, calendarEventId: cal.id || '' } }];\n} catch (e) {\n  return [{ json: { values: [], buildError: e.message } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "49bc9bac-a01b-4d32-b790-e0aed5cc1ec3",
+      "name": "Append Appt Row (atomic)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3200,
+        60
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.appointmentsTab + '!A:Q') + ':append' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "RAW"
+            },
+            {
+              "name": "insertDataOption",
+              "value": "INSERT_ROWS"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: $json.values }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "57c75c46-ee5e-4876-b4f5-b832c3ce11c2",
+      "name": "Read Clients Live",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3320,
+        60
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.clientsTab + '!A:Z') }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "a8ffd412-5abb-4136-85cc-aa41656bfc2d",
+      "name": "Build Clients Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3440,
+        60
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// BUG-R36: the two appendOrUpdate writes (Core then First-Touch) raced both with each\n// other and with other customers. Observed live: customer A's Core row was overwritten\n// by customer B's Core row, then A's First-Touch appended a NEW row holding only its own\n// four fields — a hollow lead with a phone and nothing else, while the booking row was fine.\n// Now: ONE read, ONE merged row, then either a targeted row update or an atomic append.\ntry {\n  var p = $('Process Lookups').first().json || {};\n  var resp = $input.first() ? ($input.first().json || {}) : {};\n  var phone = String(p.phone || '');\n  var digits = phone.replace(/[^0-9]/g, '');\n\n  var grid = (resp && resp.values) ? resp.values : [];\n  var headers = [];\n  if (grid.length > 0 && grid[0]) {\n    for (var h = 0; h < grid[0].length; h++) { headers.push(String(grid[0][h]).trim()); }\n  }\n  if (headers.length === 0) {\n    return [{ json: { skip: true, reason: 'could not read Clients headers', exists: false, values: [] } }];\n  }\n\n  var phoneIdx = headers.indexOf('Phone');\n  if (phoneIdx === -1) {\n    return [{ json: { skip: true, reason: 'Clients sheet has no Phone column', exists: false, values: [] } }];\n  }\n\n  // Locate an existing row for this phone, comparing digits only.\n  var existingRow = null;\n  var sheetRowNumber = 0;\n  for (var r = 1; r < grid.length; r++) {\n    var cell = grid[r] && grid[r][phoneIdx] !== undefined ? String(grid[r][phoneIdx]) : '';\n    if (cell && cell.replace(/[^0-9]/g, '') === digits && digits !== '') {\n      existingRow = grid[r];\n      sheetRowNumber = r + 1;\n      break;\n    }\n  }\n  var exists = existingRow !== null;\n\n  // Start from what is already there so an update never blanks a column we do not own.\n  var row = [];\n  for (var c = 0; c < headers.length; c++) {\n    var v = (exists && existingRow[c] !== undefined) ? existingRow[c] : '';\n    row.push(v);\n  }\n\n  function put(col, val) {\n    var i = headers.indexOf(col);\n    if (i !== -1) { row[i] = val; }\n  }\n  function putIfEmpty(col, val) {\n    var i = headers.indexOf(col);\n    if (i !== -1 && (row[i] === '' || row[i] === undefined || row[i] === null)) { row[i] = val; }\n  }\n\n  // Core fields — always written on a booking.\n  put('Phone', phone);\n  put('Name', p.name || '');\n  put('Email', p.email || '');\n  put('Status', 'booked');\n  put('Last Outcome', 'booked');\n  put('Upcoming Appointment', (p.friendlyDate || '') + ' at ' + (p.slotLabel || ''));\n  put('Last Contact', new Date().toISOString());\n  put('Last Channel', 'chatbot');\n  put('Service Interest', p.service || '');\n\n  // First-touch fields — set once and never overwritten, per GOOGLE_SHEETS_SCHEMA.md.\n  putIfEmpty('Lead Source', 'WhatsApp Chat');\n  putIfEmpty('Created At', p.bookedAt || new Date().toISOString());\n  putIfEmpty('SMS Opt-Out', 'N');\n  putIfEmpty('Sequence Step', '0');\n\n  // Range for a targeted update, e.g. Clients!A5:T5\n  function colLetter(n) {\n    var s = '';\n    while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }\n    return s;\n  }\n  var lastCol = colLetter(headers.length);\n  var updateRange = exists ? ($('⚙️ Client Config').first().json.clientsTab + '!A' + sheetRowNumber + ':' + lastCol + sheetRowNumber) : '';\n\n  return [{ json: { skip: false, exists: exists, sheetRowNumber: sheetRowNumber, updateRange: updateRange, headers: headers, values: [row] } }];\n} catch (e) {\n  return [{ json: { skip: true, reason: 'build error: ' + e.message, exists: false, values: [] } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "b3e6dbd1-35ba-4730-834b-4e9311ada31b",
+      "name": "Clients Row Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3560,
+        60
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cl-exists",
+              "leftValue": "={{ $json.exists === true && $json.skip === false ? 'update' : 'append' }}",
+              "rightValue": "update",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "0553f3e6-7de4-42ff-b660-6ec601e82b1b",
+      "name": "Update Clients Row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3700,
+        -40
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($json.updateRange) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "RAW"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: $json.values }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "c73a1147-eda2-4888-ae48-6483f618b374",
+      "name": "Append Clients Row (atomic)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3700,
+        160
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.clientsTab + '!A:Z') + ':append' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "RAW"
+            },
+            {
+              "name": "insertDataOption",
+              "value": "INSERT_ROWS"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: $json.values }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1500,
+      "alwaysOutputData": true
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Compute Booking Times",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Appointment Log": {
+      "main": [
+        [
+          {
+            "node": "Read Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Clients": {
+      "main": [
+        [
+          {
+            "node": "Process Lookups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Lookups": {
+      "main": [
+        [
+          {
+            "node": "IF Already Booked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Already Booked": {
+      "main": [
+        [
+          {
+            "node": "Build Already Booked Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Re-check Slot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Calendar Created?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendar Created?": {
+      "main": [
+        [
+          {
+            "node": "Read Appt Headers",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Calendar Fail Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-check Slot": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Slot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Slot": {
+      "main": [
+        [
+          {
+            "node": "Slot Still Free?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slot Still Free?": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Slot Taken Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Booking Times": {
+      "main": [
+        [
+          {
+            "node": "Slot Bookable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slot Bookable?": {
+      "main": [
+        [
+          {
+            "node": "Read Appointment Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Outside Hours Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Appt Headers": {
+      "main": [
+        [
+          {
+            "node": "Build Appt Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Appt Row": {
+      "main": [
+        [
+          {
+            "node": "Append Appt Row (atomic)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Appt Row (atomic)": {
+      "main": [
+        [
+          {
+            "node": "Read Clients Live",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Clients Live": {
+      "main": [
+        [
+          {
+            "node": "Build Clients Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Clients Row": {
+      "main": [
+        [
+          {
+            "node": "Clients Row Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clients Row Exists?": {
+      "main": [
+        [
+          {
+            "node": "Update Clients Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append Clients Row (atomic)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Clients Row": {
+      "main": [
+        [
+          {
+            "node": "Build Booking Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Clients Row (atomic)": {
+      "main": [
+        [
+          {
+            "node": "Build Booking Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London"
+  },
+  "tags": [],
+  "activeVersion": {
+    "versionId": "975d009b-8636-497a-a0ef-8cd200485fbc",
+    "workflowId": "FafMsNpq5nWqQjzO",
+    "nodes": [
+      {
+        "id": "sticky-c3b",
+        "name": "📋 WF-C3b Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          280,
+          40
+        ],
+        "parameters": {
+          "content": "## WF-C3b: Book House Visit\nCalled by: WF-C2 (Claude Core) via Execute Workflow node\n\n**Input:** { toolInput: { date, time, service, address, name, email }, toolUseId, phone }\n**Output:** { toolCallId, result }\n\n1. Compute ISO start/end times (BST-aware)\n2. Read Appointment Log → check for existing confirmed booking\n3. Read Clients → detect new lead\n4. IF duplicate → return already-booked message\n5. Create Google Calendar event\n6. Append to Appointment Log (all columns incl. CalendarEventId)\n7. Update Clients core fields (always)\n8. IF new lead → write first-touch fields (Lead Source, Created At, SMS Opt-Out, Sequence Step)\n9. Return success message\n\n⚠️ Credentials: Google Sheets OAuth2 (id: 0d40kOfUWlsFuLuB), Google Calendar OAuth2 (id: Vm9SHjOljbABWWKN)",
+          "height": 220,
+          "width": 1000
+        }
+      },
+      {
+        "id": "trigger-c3b",
+        "name": "Execute Workflow Trigger",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          300,
+          340
+        ],
+        "parameters": {
+          "inputSource": "passthrough"
+        }
+      },
+      {
+        "id": "config-c3b",
+        "name": "⚙️ Client Config",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          540,
+          340
+        ],
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "c3b-cfg-01",
+                "name": "sheetId",
+                "type": "string",
+                "value": "YOUR_CRM_SHEET_ID"
+              },
+              {
+                "id": "c3b-cfg-02",
+                "name": "clientsTab",
+                "type": "string",
+                "value": "Clients"
+              },
+              {
+                "id": "c3b-cfg-03",
+                "name": "appointmentsTab",
+                "type": "string",
+                "value": "Appointment Log"
+              },
+              {
+                "id": "c3b-cfg-04",
+                "name": "messagesTab",
+                "type": "string",
+                "value": "Messages"
+              },
+              {
+                "id": "c3b-cfg-05",
+                "name": "calendarId",
+                "type": "string",
+                "value": "owner@example.com"
+              },
+              {
+                "id": "c3b-cfg-06",
+                "name": "businessName",
+                "type": "string",
+                "value": "Solarify"
+              },
+              {
+                "id": "c3b-cfg-07",
+                "name": "timezone",
+                "type": "string",
+                "value": "Europe/London"
+              },
+              {
+                "id": "c3b-cfg-08",
+                "name": "weekdaySlots",
+                "type": "string",
+                "value": "9,10,11,12,13,14,15,16,17"
+              },
+              {
+                "id": "c3b-cfg-09",
+                "name": "saturdaySlots",
+                "type": "string",
+                "value": ""
+              },
+              {
+                "id": "c3b-cfg-10",
+                "name": "sundaySlots",
+                "type": "string",
+                "value": ""
+              },
+              {
+                "id": "c3b-cfg-11",
+                "name": "minNoticeHours",
+                "type": "string",
+                "value": "48"
+              },
+              {
+                "id": "c3b-cfg-12",
+                "name": "bankHolidays",
+                "type": "string",
+                "value": "2026-08-31,2026-12-25,2026-12-28,2027-01-01,2027-04-02,2027-04-05,2027-05-03,2027-05-31,2027-08-30,2027-12-27,2027-12-28"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "compute-c3b",
+        "name": "Compute Booking Times",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          780,
+          340
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var trigger = $('Execute Workflow Trigger').first().json;\n  var cfg = $('⚙️ Client Config').first().json;\n  var toolInput = trigger.toolInput || {};\n  var toolUseId = trigger.toolUseId || '';\n  var phone = trigger.phone || '';\n  var rawDate = (toolInput.date || '').toString().toLowerCase().trim();\n  var time = (toolInput.time || '9am').toLowerCase();\n  var service = toolInput.service || '';\n  var address = toolInput.address || '';\n  var name = toolInput.name || '';\n  var email = toolInput.email || '';\n\n  var timeMap = { '9am': 9, '10am': 10, '11am': 11, '12pm': 12, '1pm': 13, '2pm': 14, '3pm': 15, '4pm': 16, '5pm': 17 };\n  // BUG-R41: an unmapped time string used to silently become 9am while the sheet\n  // recorded the customer's own wording — calendar and CRM would disagree and nobody\n  // would know. Today the model normalises \"14:00\" to \"2pm\" before calling, but the\n  // code must not depend on that. Refuse instead of guessing.\n  var localHour = timeMap[time];\n  var timeUnrecognised = false;\n  if (localHour === undefined) { localHour = 9; timeUnrecognised = true; }\n\n  var now = new Date();\n  var dateObj = null;\n\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate)) {\n    dateObj = new Date(rawDate + 'T12:00:00Z');\n  } else if (rawDate === 'today') {\n    dateObj = new Date(now.getTime());\n  } else if (rawDate === 'tomorrow') {\n    dateObj = new Date(now.getTime());\n    dateObj.setUTCDate(dateObj.getUTCDate() + 1);\n  } else if (rawDate) {\n    // BUG-R31: an explicit day+month (\"Monday, 17 August\") must beat the weekday name.\n    // Matching 'monday' first made \"Monday 24 August\" silently book the NEAREST Monday.\n    var monthWords = ['january','february','march','april','may','june','july','august','september','october','november','december'];\n    var mIdx = -1;\n    for (var mw = 0; mw < monthWords.length; mw++) {\n      if (rawDate.indexOf(monthWords[mw]) !== -1) { mIdx = mw; break; }\n    }\n    var dayNumMatch = rawDate.match(/(\\d{1,2})\\s*(?:st|nd|rd|th)?/);\n    var dayNum = dayNumMatch ? parseInt(dayNumMatch[1], 10) : 0;\n    if (mIdx !== -1 && dayNum >= 1 && dayNum <= 31) {\n      var yr = now.getUTCFullYear();\n      var cand = new Date(Date.UTC(yr, mIdx, dayNum, 12, 0, 0));\n      // A date already well past this year means they mean next year.\n      if (cand.getTime() < now.getTime() - 86400000) { cand = new Date(Date.UTC(yr + 1, mIdx, dayNum, 12, 0, 0)); }\n      dateObj = cand;\n    }\n    var dayNamesLower = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];\n    var foundIdx = -1;\n    for (var d = 0; d < dayNamesLower.length; d++) {\n      if (rawDate.indexOf(dayNamesLower[d]) !== -1) { foundIdx = d; break; }\n    }\n    if (dateObj) {\n      foundIdx = -1;\n    }\n    if (foundIdx !== -1) {\n      var currentDay = now.getUTCDay();\n      var daysUntil = (foundIdx - currentDay + 7) % 7;\n      if (daysUntil === 0) { daysUntil = 7; }\n      dateObj = new Date(now.getTime());\n      dateObj.setUTCDate(dateObj.getUTCDate() + daysUntil);\n    } else {\n      var attempt = new Date(rawDate);\n      // Must not clobber a date already resolved above.\n      if (!dateObj && !isNaN(attempt.getTime())) { dateObj = attempt; }\n    }\n  }\n\n  // V8's legacy parser defaults a yearless string like \"24 august\" to the year 2001.\n  if (dateObj && !isNaN(dateObj.getTime()) && dateObj.getUTCFullYear() < now.getUTCFullYear()) { dateObj = null; }\n\n  if (!dateObj || isNaN(dateObj.getTime())) {\n    dateObj = new Date(now.getTime());\n    dateObj.setUTCDate(dateObj.getUTCDate() + 1);\n  }\n\n  function pad(n) { return n < 10 ? '0' + n : '' + n; }\n  var resolvedDate = dateObj.getUTCFullYear() + '-' + pad(dateObj.getUTCMonth() + 1) + '-' + pad(dateObj.getUTCDate());\n\n  var month = dateObj.getUTCMonth() + 1;\n  var isBST = (month >= 3 && month <= 10);\n  var utcOffset = isBST ? 1 : 0;\n  var utcHour = localHour - utcOffset;\n\n  var startISO = resolvedDate + 'T' + pad(utcHour) + ':00:00.000Z';\n  var endISO = resolvedDate + 'T' + pad(utcHour + 1) + ':00:00.000Z';\n\n  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];\n  var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];\n  var friendlyDate = days[dateObj.getUTCDay()] + ', ' + dateObj.getUTCDate() + ' ' + months[dateObj.getUTCMonth()];\n  var slotLabel = time.charAt(0).toUpperCase() + time.slice(1);\n\n  // ---- FINDING-R30 write-side gate ----\n  // The model can call book_house_visit without ever calling check_availability,\n  // so opening hours must be enforced here too, not only on the read path.\n  function parseSlots(s) {\n    var out = [];\n    var parts = (s || '').split(',');\n    for (var i = 0; i < parts.length; i++) {\n      var v = parseInt(parts[i], 10);\n      if (!isNaN(v)) { out.push(v); }\n    }\n    return out;\n  }\n  var dow = dateObj.getUTCDay();\n  var allowed;\n  if (dow === 0) { allowed = parseSlots(cfg.sundaySlots); }\n  else if (dow === 6) { allowed = parseSlots(cfg.saturdaySlots); }\n  else { allowed = parseSlots(cfg.weekdaySlots); }\n\n  var bookable = true;\n  var rejectReason = '';\n\n  var bankHolidays = (cfg.bankHolidays || '').split(',');\n  for (var b = 0; b < bankHolidays.length; b++) {\n    if (bankHolidays[b].trim() === resolvedDate) { bookable = false; rejectReason = 'bank-holiday'; break; }\n  }\n  if (bookable && allowed.length === 0) { bookable = false; rejectReason = 'closed-day'; }\n  if (bookable) {\n    var inList = false;\n    for (var a = 0; a < allowed.length; a++) { if (allowed[a] === localHour) { inList = true; break; } }\n    if (!inList) { bookable = false; rejectReason = 'outside-hours'; }\n  }\n  if (bookable && timeUnrecognised) { bookable = false; rejectReason = 'bad-time'; }\n  if (bookable) {\n    var minNotice = parseInt(cfg.minNoticeHours, 10);\n    if (isNaN(minNotice)) { minNotice = 2; }\n    var startMs = new Date(startISO).getTime();\n    if (isNaN(startMs) || startMs < now.getTime() + (minNotice * 3600000)) { bookable = false; rejectReason = 'too-soon'; }\n  }\n\n  return [{\n    json: {\n      toolUseId: toolUseId,\n      phone: phone,\n      name: name,\n      email: email,\n      service: service,\n      address: address,\n      date: resolvedDate,\n      time: time,\n      startISO: startISO,\n      endISO: endISO,\n      friendlyDate: friendlyDate,\n      slotLabel: slotLabel,\n      bookable: bookable,\n      rejectReason: rejectReason,\n      bookedAt: new Date().toISOString()\n    }\n  }];\n} catch (e) {\n  var fb = $('Execute Workflow Trigger').first().json;\n  return [{\n    json: {\n      toolUseId: fb.toolUseId || '',\n      phone: fb.phone || '',\n      error: e.message,\n      startISO: '',\n      endISO: '',\n      friendlyDate: '',\n      slotLabel: '',\n      bookable: false,\n      rejectReason: 'error',\n      bookedAt: new Date().toISOString()\n    }\n  }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "read-apptlog-c3b",
+        "name": "Read Appointment Log",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.5,
+        "position": [
+          1020,
+          340
+        ],
+        "alwaysOutputData": true,
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "parameters": {
+          "operation": "read",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+          },
+          "range": "A:Z",
+          "options": {}
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "read-clients-c3b",
+        "name": "Read Clients",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.5,
+        "position": [
+          1260,
+          340
+        ],
+        "alwaysOutputData": true,
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "parameters": {
+          "operation": "read",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+          },
+          "range": "A:Z",
+          "options": {}
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "process-c3b",
+        "name": "Process Lookups",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1500,
+          340
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var booking = $('Compute Booking Times').first().json;\n  var phone = booking.phone || '';\n\n  // Check appointment log for existing confirmed booking\n  var appointments = $('Read Appointment Log').all();\n  var isDuplicate = false;\n  for (var i = 0; i < appointments.length; i++) {\n    var appt = appointments[i].json;\n    if (String(appt.Phone).replace(/[^0-9]/g, '') === String(phone).replace(/[^0-9]/g, '') && appt.Status === 'confirmed') {\n      isDuplicate = true;\n      break;\n    }\n  }\n\n  // Check Clients for new lead detection\n  var clients = $input.all();\n  var isNewLead = true;\n  for (var j = 0; j < clients.length; j++) {\n    if (String(clients[j].json.Phone).replace(/[^0-9]/g, '') === String(phone).replace(/[^0-9]/g, '')) {\n      isNewLead = false;\n      break;\n    }\n  }\n\n  return [{\n    json: {\n      isDuplicate: isDuplicate,\n      isNewLead: isNewLead,\n      toolUseId: booking.toolUseId || '',\n      phone: phone,\n      name: booking.name || '',\n      email: booking.email || '',\n      service: booking.service || '',\n      address: booking.address || '',\n      date: booking.date || '',\n      time: booking.time || '',\n      startISO: booking.startISO || '',\n      endISO: booking.endISO || '',\n      friendlyDate: booking.friendlyDate || '',\n      slotLabel: booking.slotLabel || '',\n      bookedAt: booking.bookedAt || new Date().toISOString()\n    }\n  }];\n} catch (e) {\n  return [{\n    json: {\n      isDuplicate: false,\n      isNewLead: false,\n      toolUseId: $('Compute Booking Times').first().json.toolUseId || '',\n      phone: $('Compute Booking Times').first().json.phone || '',\n      error: e.message\n    }\n  }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "if-dup-c3b",
+        "name": "IF Already Booked",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1740,
+          340
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "c3b-cond-dup",
+                "leftValue": "={{ $json.isDuplicate }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "already-booked-c3b",
+        "name": "Build Already Booked Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1980,
+          500
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  return [{\n    json: {\n      toolCallId: $json.toolUseId || '',\n      result: 'You already have a confirmed appointment with us. Would you like to reschedule or cancel it instead?'\n    }\n  }];\n} catch (e) {\n  return [{\n    json: {\n      toolCallId: '',\n      result: 'You already have an active booking with us.'\n    }\n  }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "create-cal-c3b",
+        "name": "Create Calendar Event",
+        "type": "n8n-nodes-base.googleCalendar",
+        "typeVersion": 1.3,
+        "position": [
+          2700,
+          180
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "parameters": {
+          "resource": "event",
+          "operation": "create",
+          "calendar": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.calendarId }}"
+          },
+          "start": "={{ $('Process Lookups').first().json.startISO }}",
+          "end": "={{ $('Process Lookups').first().json.endISO }}",
+          "additionalFields": {
+            "summary": "={{ $('Process Lookups').first().json.service + ' — ' + $('Process Lookups').first().json.name }}",
+            "description": "={{ 'Phone: ' + $('Process Lookups').first().json.phone + '\\nEmail: ' + $('Process Lookups').first().json.email + '\\nService: ' + $('Process Lookups').first().json.service + '\\nAddress: ' + $('Process Lookups').first().json.address }}",
+            "location": "={{ $('Process Lookups').first().json.address }}"
+          },
+          "options": {
+            "useN8nTimeZone": true
+          }
+        },
+        "credentials": {
+          "googleCalendarOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Calendar OAuth2 API"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "if-cal-created-c3b",
+        "name": "Calendar Created?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          2830,
+          180
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "cal-created-check",
+                "leftValue": "={{ $json.id ? 'ok' : 'fail' }}",
+                "rightValue": "ok",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "success-c3b",
+        "name": "Build Booking Success",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3960,
+          180
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var data = $('Process Lookups').first().json;\n  var result = 'Your house visit for ' + data.service + ' is booked for ' + data.friendlyDate + ' at ' + data.slotLabel + '. Address: ' + data.address + '. We look forward to seeing you!';\n  return [{\n    json: {\n      toolCallId: data.toolUseId || '',\n      result: result\n    }\n  }];\n} catch (e) {\n  return [{\n    json: {\n      toolCallId: $('Process Lookups').first().json.toolUseId || '',\n      result: 'Your house visit has been successfully booked. We look forward to seeing you!'\n    }\n  }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "build-cal-fail-c3b",
+        "name": "Build Calendar Fail Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3080,
+          380
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var data = $('Process Lookups').first().json;\n  return [{ json: { toolCallId: data.toolUseId || '', result: 'I was unable to book your appointment due to a calendar system error. Please try again in a moment, or call us directly to book.' } }];\n} catch(e) {\n  return [{ json: { toolCallId: '', result: 'I was unable to book your appointment due to a technical error. Please try again.' } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "bad3a16d-2e9a-4fdd-ae4c-9ac244607345",
+        "name": "Re-check Slot",
+        "type": "n8n-nodes-base.googleCalendar",
+        "typeVersion": 1.3,
+        "position": [
+          1980,
+          180
+        ],
+        "parameters": {
+          "resource": "event",
+          "operation": "getAll",
+          "calendar": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.calendarId }}"
+          },
+          "returnAll": true,
+          "timeMin": "={{ $('Process Lookups').first().json.startISO }}",
+          "timeMax": "={{ $('Process Lookups').first().json.endISO }}",
+          "options": {
+            "useN8nTimeZone": true
+          }
+        },
+        "credentials": {
+          "googleCalendarOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Calendar OAuth2 API"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "alwaysOutputData": true
+      },
+      {
+        "id": "4977f51e-045f-48b6-96c4-77843aeb52ef",
+        "name": "Evaluate Slot",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2200,
+          180
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var events = $input.all();\n  var prep = $('Process Lookups').first().json || {};\n  var startISO = prep.startISO || '';\n  var endISO = prep.endISO || '';\n\n  // BUG-R4 rule: this Calendar node runs with onError=continueRegularOutput, so a\n  // failed read arrives here as DATA, not as a thrown error. Decide explicitly.\n  var readFailed = false;\n  if (events.length > 0 && events[0].json && events[0].json.error) { readFailed = true; }\n\n  if (readFailed) {\n    // Cannot verify. Availability was already checked earlier in the conversation,\n    // so proceed rather than block a converting customer on a transient blip.\n    // This is exactly the pre-existing behaviour — no new risk introduced.\n    return [{ json: { slotFree: true, verified: false, note: 'calendar re-check failed; proceeding on the earlier availability check' } }];\n  }\n\n  var newStart = new Date(startISO).getTime();\n  var newEnd = new Date(endISO).getTime();\n  if (isNaN(newStart) || isNaN(newEnd)) {\n    return [{ json: { slotFree: true, verified: false, note: 'could not parse requested slot times' } }];\n  }\n\n  var clash = false;\n  for (var i = 0; i < events.length; i++) {\n    var ev = events[i].json || {};\n    if (ev.status === 'cancelled') { continue; }\n    var s = ev.start ? (ev.start.dateTime || ev.start.date) : null;\n    var e = ev.end ? (ev.end.dateTime || ev.end.date) : null;\n    if (!s || !e) { continue; }\n    var evStart = new Date(s).getTime();\n    var evEnd = new Date(e).getTime();\n    if (isNaN(evStart) || isNaN(evEnd)) { continue; }\n    // Overlap test: existing starts before ours ends AND ends after ours starts.\n    if (evStart < newEnd && evEnd > newStart) { clash = true; break; }\n  }\n\n  return [{ json: { slotFree: !clash, verified: true } }];\n} catch (err) {\n  return [{ json: { slotFree: true, verified: false, note: 'evaluation error: ' + err.message } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "67cdad79-9845-41f2-aa4f-ebedaa973619",
+        "name": "Slot Still Free?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          2420,
+          180
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "slot-free-1",
+                "leftValue": "={{ $json.slotFree }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "9082671d-7e94-4147-b7cf-49c98a3196d4",
+        "name": "Build Slot Taken Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2420,
+          380
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var prep = $('Process Lookups').first().json || {};\n  return [{ json: {\n    toolCallId: prep.toolUseId || '',\n    result: 'SLOT NO LONGER AVAILABLE. Someone else took that time while you were talking. Do NOT tell the customer it is booked. Apologise briefly, then call check_availability again on your next message to offer fresh times.'\n  } }];\n} catch (e) {\n  return [{ json: {\n    toolCallId: '',\n    result: 'SLOT NO LONGER AVAILABLE. Do not confirm the booking. Apologise and offer to look for other times.'\n  } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "9f3c3f8b-440c-4e3a-976c-05112539861b",
+        "name": "Slot Bookable?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          900,
+          340
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "c3b-bookable",
+                "leftValue": "={{ $json.bookable }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "a6178ca8-b52c-4734-a1b2-b0b595917149",
+        "name": "Build Outside Hours Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          900,
+          560
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var d = $('Compute Booking Times').first().json || {};\n  var reason = d.rejectReason || 'outside-hours';\n  var when = (d.friendlyDate || 'that day') + ' at ' + (d.slotLabel || 'that time');\n  var hours = 'Survey visits run Monday to Friday 9am to 5pm only, with at least 48 hours notice. We do not survey on Saturdays, Sundays or bank holidays.';\n  var msg;\n\n  if (reason === 'bank-holiday') {\n    msg = 'NOT BOOKED. ' + when + ' falls on a bank holiday and we do not carry out surveys then. ' + hours + ' Apologise, do NOT say it is booked, and offer to check another day.';\n  } else if (reason === 'closed-day') {\n    msg = 'NOT BOOKED. We are closed on ' + (d.friendlyDate || 'that day') + '. ' + hours + ' Apologise, do NOT say it is booked, and offer to check another day.';\n  } else if (reason === 'too-soon') {\n    msg = 'NOT BOOKED. ' + when + ' is inside our 48 hour notice window, and we need at least 48 hours to arrange a surveyor. Apologise, do NOT say it is booked, and offer the next working day.';\n  } else if (reason === 'bad-time') {\n    msg = 'NOT BOOKED. That time was not recognised as one of our bookable slots. Do NOT say it is booked. Ask the customer to pick a slot on the hour between 9am and 5pm, and offer to check what is free.';\n  } else if (reason === 'error') {\n    msg = 'NOT BOOKED. A system error stopped the booking being processed. Apologise, do NOT claim it is booked, and ask them to try again shortly.';\n  } else {\n    msg = 'NOT BOOKED. ' + when + ' is outside our survey hours. ' + hours + ' Apologise, do NOT say it is booked, and offer a time inside those hours.';\n  }\n\n  return [{ json: { toolCallId: d.toolUseId || '', result: msg } }];\n} catch (e) {\n  return [{ json: { toolCallId: '', result: 'NOT BOOKED. That time is outside our survey hours. Do not confirm a booking. Offer Monday to Friday 9am to 5pm, at least 48 hours ahead, instead.' } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "950f078a-cd2a-4cbe-b8fe-0322df45ef7d",
+        "name": "Read Appt Headers",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2960,
+          60
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.appointmentsTab + '!1:1') }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleSheetsOAuth2Api",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "alwaysOutputData": true
+      },
+      {
+        "id": "a5bd1272-4580-4e76-a2a7-c0074cc2998f",
+        "name": "Build Appt Row",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3080,
+          60
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "// BUG-R34: replaced the Sheets append node, which resolved the target row itself and\n// lost rows when two bookings landed together. Google's values:append allocates the\n// row server-side. It writes POSITIONALLY, so we map onto the LIVE header row by name.\ntry {\n  var p = $('Process Lookups').first().json || {};\n  var cal = {};\n  try { cal = $('Create Calendar Event').first().json || {}; } catch (x) {}\n  var hdrResp = $input.first() ? ($input.first().json || {}) : {};\n\n  // Documented A:Q order from GOOGLE_SHEETS_SCHEMA.md, used only if the live read failed.\n  var fallback = ['Name', 'Phone', 'Email', 'Service', 'Address', 'Date', 'Time', 'Status', 'CalendarEventId', 'Booked At', 'Notes', 'AppointmentTimeISO', 'Reminder1Sent', 'Reminder2Sent', 'ConfirmedAt', 'CancelledAt', 'Booked By'];\n\n  var headers = [];\n  if (hdrResp && hdrResp.values && hdrResp.values.length > 0 && hdrResp.values[0] && hdrResp.values[0].length > 0) {\n    for (var h = 0; h < hdrResp.values[0].length; h++) { headers.push(String(hdrResp.values[0][h]).trim()); }\n  }\n  var headersVerified = headers.length > 0;\n\n  // CalendarEventId is the update match key for every later cancel/reschedule.\n  // A row without it is unmaintainable, so treat its absence as a failed header read.\n  var criticalOk = headers.indexOf('Phone') !== -1 && headers.indexOf('CalendarEventId') !== -1;\n  var usedFallback = false;\n  if (!headersVerified || !criticalOk) { headers = fallback; usedFallback = true; }\n\n  var map = {\n    'Name': p.name || '',\n    'Phone': p.phone || '',\n    'Email': p.email || '',\n    'Service': p.service || '',\n    'Address': p.address || '',\n    'Date': p.friendlyDate || '',\n    'Time': p.slotLabel || '',\n    'Status': 'confirmed',\n    'CalendarEventId': cal.id || '',\n    'Booked At': p.bookedAt || new Date().toISOString(),\n    'Notes': '',\n    'AppointmentTimeISO': p.startISO || '',\n    'Reminder1Sent': '',\n    'Reminder2Sent': '',\n    'ConfirmedAt': '',\n    'CancelledAt': '',\n    'Booked By': 'chatbot'\n  };\n\n  var row = [];\n  for (var i = 0; i < headers.length; i++) {\n    if (Object.prototype.hasOwnProperty.call(map, headers[i])) { row.push(map[headers[i]]); }\n    else { row.push(''); }\n  }\n\n  return [{ json: { values: [row], headers: headers, headersVerified: headersVerified, usedFallback: usedFallback, calendarEventId: cal.id || '' } }];\n} catch (e) {\n  return [{ json: { values: [], buildError: e.message } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "49bc9bac-a01b-4d32-b790-e0aed5cc1ec3",
+        "name": "Append Appt Row (atomic)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3200,
+          60
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.appointmentsTab + '!A:Q') + ':append' }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleSheetsOAuth2Api",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "valueInputOption",
+                "value": "RAW"
+              },
+              {
+                "name": "insertDataOption",
+                "value": "INSERT_ROWS"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ values: $json.values }) }}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1500,
+        "alwaysOutputData": true
+      },
+      {
+        "id": "57c75c46-ee5e-4876-b4f5-b832c3ce11c2",
+        "name": "Read Clients Live",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3320,
+          60
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.clientsTab + '!A:Z') }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleSheetsOAuth2Api",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "alwaysOutputData": true
+      },
+      {
+        "id": "a8ffd412-5abb-4136-85cc-aa41656bfc2d",
+        "name": "Build Clients Row",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3440,
+          60
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "// BUG-R36: the two appendOrUpdate writes (Core then First-Touch) raced both with each\n// other and with other customers. Observed live: customer A's Core row was overwritten\n// by customer B's Core row, then A's First-Touch appended a NEW row holding only its own\n// four fields — a hollow lead with a phone and nothing else, while the booking row was fine.\n// Now: ONE read, ONE merged row, then either a targeted row update or an atomic append.\ntry {\n  var p = $('Process Lookups').first().json || {};\n  var resp = $input.first() ? ($input.first().json || {}) : {};\n  var phone = String(p.phone || '');\n  var digits = phone.replace(/[^0-9]/g, '');\n\n  var grid = (resp && resp.values) ? resp.values : [];\n  var headers = [];\n  if (grid.length > 0 && grid[0]) {\n    for (var h = 0; h < grid[0].length; h++) { headers.push(String(grid[0][h]).trim()); }\n  }\n  if (headers.length === 0) {\n    return [{ json: { skip: true, reason: 'could not read Clients headers', exists: false, values: [] } }];\n  }\n\n  var phoneIdx = headers.indexOf('Phone');\n  if (phoneIdx === -1) {\n    return [{ json: { skip: true, reason: 'Clients sheet has no Phone column', exists: false, values: [] } }];\n  }\n\n  // Locate an existing row for this phone, comparing digits only.\n  var existingRow = null;\n  var sheetRowNumber = 0;\n  for (var r = 1; r < grid.length; r++) {\n    var cell = grid[r] && grid[r][phoneIdx] !== undefined ? String(grid[r][phoneIdx]) : '';\n    if (cell && cell.replace(/[^0-9]/g, '') === digits && digits !== '') {\n      existingRow = grid[r];\n      sheetRowNumber = r + 1;\n      break;\n    }\n  }\n  var exists = existingRow !== null;\n\n  // Start from what is already there so an update never blanks a column we do not own.\n  var row = [];\n  for (var c = 0; c < headers.length; c++) {\n    var v = (exists && existingRow[c] !== undefined) ? existingRow[c] : '';\n    row.push(v);\n  }\n\n  function put(col, val) {\n    var i = headers.indexOf(col);\n    if (i !== -1) { row[i] = val; }\n  }\n  function putIfEmpty(col, val) {\n    var i = headers.indexOf(col);\n    if (i !== -1 && (row[i] === '' || row[i] === undefined || row[i] === null)) { row[i] = val; }\n  }\n\n  // Core fields — always written on a booking.\n  put('Phone', phone);\n  put('Name', p.name || '');\n  put('Email', p.email || '');\n  put('Status', 'booked');\n  put('Last Outcome', 'booked');\n  put('Upcoming Appointment', (p.friendlyDate || '') + ' at ' + (p.slotLabel || ''));\n  put('Last Contact', new Date().toISOString());\n  put('Last Channel', 'chatbot');\n  put('Service Interest', p.service || '');\n\n  // First-touch fields — set once and never overwritten, per GOOGLE_SHEETS_SCHEMA.md.\n  putIfEmpty('Lead Source', 'WhatsApp Chat');\n  putIfEmpty('Created At', p.bookedAt || new Date().toISOString());\n  putIfEmpty('SMS Opt-Out', 'N');\n  putIfEmpty('Sequence Step', '0');\n\n  // Range for a targeted update, e.g. Clients!A5:T5\n  function colLetter(n) {\n    var s = '';\n    while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }\n    return s;\n  }\n  var lastCol = colLetter(headers.length);\n  var updateRange = exists ? ($('⚙️ Client Config').first().json.clientsTab + '!A' + sheetRowNumber + ':' + lastCol + sheetRowNumber) : '';\n\n  return [{ json: { skip: false, exists: exists, sheetRowNumber: sheetRowNumber, updateRange: updateRange, headers: headers, values: [row] } }];\n} catch (e) {\n  return [{ json: { skip: true, reason: 'build error: ' + e.message, exists: false, values: [] } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "b3e6dbd1-35ba-4730-834b-4e9311ada31b",
+        "name": "Clients Row Exists?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          3560,
+          60
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "version": 2,
+              "leftValue": "",
+              "caseSensitive": true,
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "cl-exists",
+                "leftValue": "={{ $json.exists === true && $json.skip === false ? 'update' : 'append' }}",
+                "rightValue": "update",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "0553f3e6-7de4-42ff-b660-6ec601e82b1b",
+        "name": "Update Clients Row",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3700,
+          -40
+        ],
+        "parameters": {
+          "method": "PUT",
+          "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($json.updateRange) }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleSheetsOAuth2Api",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "valueInputOption",
+                "value": "RAW"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ values: $json.values }) }}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1500,
+        "alwaysOutputData": true
+      },
+      {
+        "id": "c73a1147-eda2-4888-ae48-6483f618b374",
+        "name": "Append Clients Row (atomic)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3700,
+          160
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ 'https://sheets.googleapis.com/v4/spreadsheets/' + $('⚙️ Client Config').first().json.sheetId + '/values/' + encodeURIComponent($('⚙️ Client Config').first().json.clientsTab + '!A:Z') + ':append' }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "googleSheetsOAuth2Api",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "valueInputOption",
+                "value": "RAW"
+              },
+              {
+                "name": "insertDataOption",
+                "value": "INSERT_ROWS"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ values: $json.values }) }}",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1500,
+        "alwaysOutputData": true
+      }
+    ],
+    "connections": {
+      "Execute Workflow Trigger": {
+        "main": [
+          [
+            {
+              "node": "⚙️ Client Config",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⚙️ Client Config": {
+        "main": [
+          [
+            {
+              "node": "Compute Booking Times",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Appointment Log": {
+        "main": [
+          [
+            {
+              "node": "Read Clients",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Clients": {
+        "main": [
+          [
+            {
+              "node": "Process Lookups",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Process Lookups": {
+        "main": [
+          [
+            {
+              "node": "IF Already Booked",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF Already Booked": {
+        "main": [
+          [
+            {
+              "node": "Build Already Booked Response",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Re-check Slot",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create Calendar Event": {
+        "main": [
+          [
+            {
+              "node": "Calendar Created?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Calendar Created?": {
+        "main": [
+          [
+            {
+              "node": "Read Appt Headers",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build Calendar Fail Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Re-check Slot": {
+        "main": [
+          [
+            {
+              "node": "Evaluate Slot",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Evaluate Slot": {
+        "main": [
+          [
+            {
+              "node": "Slot Still Free?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Slot Still Free?": {
+        "main": [
+          [
+            {
+              "node": "Create Calendar Event",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build Slot Taken Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Compute Booking Times": {
+        "main": [
+          [
+            {
+              "node": "Slot Bookable?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Slot Bookable?": {
+        "main": [
+          [
+            {
+              "node": "Read Appointment Log",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build Outside Hours Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Appt Headers": {
+        "main": [
+          [
+            {
+              "node": "Build Appt Row",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Appt Row": {
+        "main": [
+          [
+            {
+              "node": "Append Appt Row (atomic)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Append Appt Row (atomic)": {
+        "main": [
+          [
+            {
+              "node": "Read Clients Live",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Clients Live": {
+        "main": [
+          [
+            {
+              "node": "Build Clients Row",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Clients Row": {
+        "main": [
+          [
+            {
+              "node": "Clients Row Exists?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Clients Row Exists?": {
+        "main": [
+          [
+            {
+              "node": "Update Clients Row",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Append Clients Row (atomic)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Clients Row": {
+        "main": [
+          [
+            {
+              "node": "Build Booking Success",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Append Clients Row (atomic)": {
+        "main": [
+          [
+            {
+              "node": "Build Booking Success",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Muhammad Ghazwan",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-08-18T16:20:24.182Z",
+    "updatedAt": "2026-08-18T16:20:24.182Z",
+    "workflowPublishHistory": [
+      {
+        "id": 285,
+        "workflowId": "FafMsNpq5nWqQjzO",
+        "versionId": "975d009b-8636-497a-a0ef-8cd200485fbc",
+        "event": "activated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-18T16:20:24.329Z"
+      },
+      {
+        "id": 284,
+        "workflowId": "FafMsNpq5nWqQjzO",
+        "versionId": "975d009b-8636-497a-a0ef-8cd200485fbc",
+        "event": "deactivated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-18T16:20:24.328Z"
+      }
+    ]
+  }
+}

@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-30 -10 1620 694" width="1600" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect x="-30" y="-10" width="1620" height="694" fill="#f7f7f8"/>
+<defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#dcdce0"/></pattern></defs>
+<rect x="-30" y="-10" width="1620" height="694" fill="url(#g)"/>
+<rect x="60" y="80" width="680" height="260" rx="8" fill="#cfe4ff" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="72" y="104" font-size="13.5" font-weight="700" fill="#5f5930">D5-WF1 — Lead Scanner &amp; Enqueue</text>
+<text x="72" y="121" font-size="11.5" fill="#6f6840">Runs daily at 09:00 GMT/BST. Scans the Clients tab for idle leads (30+ days cold) and</text>
+<text x="72" y="135" font-size="11.5" fill="#6f6840">writes qualifying leads to the Reactivation Log with status=queued.</text>
+<text x="72" y="149" font-size="11.5" fill="#6f6840">Idle pool: Status IN (unresponsive, called, voicemail, no-answer)</text>
+<text x="72" y="163" font-size="11.5" fill="#6f6840">Excludes: do-not-contact, not-interested, booked, sequence-active, call-initiated,</text>
+<text x="72" y="177" font-size="11.5" fill="#6f6840">inbound-incomplete, SMS Opt-Out=Y, already active in Reactivation Log</text>
+<text x="72" y="191" font-size="11.5" fill="#6f6840">Dedup: Skips phones already in Reactivation Log with active/terminal status — call-failed</text>
+<text x="72" y="205" font-size="11.5" fill="#6f6840">is intentionally EXCLUDED so those leads can be re-enqueued after a VAPI fire failure</text>
+<text x="72" y="219" font-size="11.5" fill="#6f6840">Priority: Sorted by retention deadline (soonest expiry first)</text>
+<text x="72" y="233" font-size="11.5" fill="#6f6840">Downstream: D5-WF2 (Voice Engine) polls Reactivation Log for queued leads.</text>
+<g fill="none" stroke="#9aa0a6" stroke-width="2.5">
+<path d="M180,510 C234,510 246,510 293,510"/>
+<path d="M293,505 L300,510 L293,515" fill="#9aa0a6" stroke="none"/>
+<path d="M400,510 C454,510 466,510 513,510"/>
+<path d="M513,505 L520,510 L513,515" fill="#9aa0a6" stroke="none"/>
+<path d="M620,510 C674,510 686,510 733,510"/>
+<path d="M733,505 L740,510 L733,515" fill="#9aa0a6" stroke="none"/>
+<path d="M840,510 C894,510 906,510 953,510"/>
+<path d="M953,505 L960,510 L953,515" fill="#9aa0a6" stroke="none"/>
+<path d="M1060,510 C1114,510 1126,510 1173,510"/>
+<path d="M1173,505 L1180,510 L1173,515" fill="#9aa0a6" stroke="none"/>
+<path d="M1280,493 C1334,493 1346,410 1393,410"/>
+<path d="M1393,405 L1400,410 L1393,415" fill="#9aa0a6" stroke="none"/>
+</g>
+<rect x="80" y="460" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="80" y="460" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="130.0" y="506.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">schedule</text>
+<text x="130.0" y="575" font-size="11.5" text-anchor="middle" fill="#2b2f36">Daily 09:00</text>
+<rect x="300" y="460" width="100" height="100" rx="10" fill="#ffffff" stroke="#0aa8a7" stroke-width="3"/>
+<rect x="300" y="460" width="100" height="100" rx="10" fill="#0aa8a7" fill-opacity="0.10"/>
+<text x="350.0" y="506.0" font-size="11" text-anchor="middle" fill="#0aa8a7" font-weight="700">set</text>
+<text x="350.0" y="575" font-size="11.5" text-anchor="middle" fill="#2b2f36">⚙️ Client Config</text>
+<rect x="520" y="460" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="520" y="460" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="570.0" y="506.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="570.0" y="575" font-size="11.5" text-anchor="middle" fill="#2b2f36">Read Clients</text>
+<rect x="740" y="460" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="740" y="460" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="790.0" y="506.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="790.0" y="575" font-size="11.5" text-anchor="middle" fill="#2b2f36">Read Reactivation</text>
+<text x="790.0" y="588" font-size="11.5" text-anchor="middle" fill="#2b2f36">Log</text>
+<rect x="960" y="460" width="100" height="100" rx="10" fill="#ffffff" stroke="#f56b6b" stroke-width="3"/>
+<rect x="960" y="460" width="100" height="100" rx="10" fill="#f56b6b" fill-opacity="0.10"/>
+<text x="1010.0" y="506.0" font-size="11" text-anchor="middle" fill="#f56b6b" font-weight="700">code</text>
+<text x="1010.0" y="575" font-size="11.5" text-anchor="middle" fill="#2b2f36">Filter &amp; Classify</text>
+<text x="1010.0" y="588" font-size="11.5" text-anchor="middle" fill="#2b2f36">Leads</text>
+<rect x="1180" y="460" width="100" height="100" rx="10" fill="#ffffff" stroke="#408fdd" stroke-width="3"/>
+<rect x="1180" y="460" width="100" height="100" rx="10" fill="#408fdd" fill-opacity="0.10"/>
+<text x="1230.0" y="506.0" font-size="11" text-anchor="middle" fill="#408fdd" font-weight="700">if</text>
+<text x="1230.0" y="575" font-size="11.5" text-anchor="middle" fill="#2b2f36">Any Leads Found?</text>
+<rect x="1400" y="360" width="100" height="100" rx="10" fill="#ffffff" stroke="#0f9d58" stroke-width="3"/>
+<rect x="1400" y="360" width="100" height="100" rx="10" fill="#0f9d58" fill-opacity="0.10"/>
+<text x="1450.0" y="406.0" font-size="11" text-anchor="middle" fill="#0f9d58" font-weight="700">Sheets</text>
+<text x="1450.0" y="475" font-size="11.5" text-anchor="middle" fill="#2b2f36">Write to</text>
+<text x="1450.0" y="488" font-size="11.5" text-anchor="middle" fill="#2b2f36">Reactivation Log</text>
+</svg>

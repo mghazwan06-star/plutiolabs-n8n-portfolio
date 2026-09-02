@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-30 -30 860 694" width="860" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect x="-30" y="-30" width="860" height="694" fill="#f7f7f8"/>
+<defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#dcdce0"/></pattern></defs>
+<rect x="-30" y="-30" width="860" height="694" fill="url(#g)"/>
+<rect x="60" y="60" width="680" height="300" rx="8" fill="#cfe4ff" fill-opacity="0.55" stroke="#d8cf7a" stroke-opacity="0.6"/>
+<text x="72" y="84" font-size="13.5" font-weight="700" fill="#5f5930">D3 — WF-C4: Send Reply</text>
+<text x="72" y="101" font-size="11.5" fill="#6f6840">Called by WF-C2 after Claude produces a final text response.</text>
+<text x="72" y="115" font-size="11.5" fill="#6f6840">Sends the reply to the customer via Twilio WhatsApp API.</text>
+<text x="72" y="129" font-size="11.5" fill="#6f6840">Input (from WF-C2 via Execute Workflow):</text>
+<text x="72" y="143" font-size="11.5" fill="#6f6840">- phone — customer E.164 number (+447700…)</text>
+<text x="72" y="157" font-size="11.5" fill="#6f6840">- message — reply text from Claude</text>
+<text x="72" y="171" font-size="11.5" fill="#6f6840">Credentials needed before activation:</text>
+<text x="72" y="185" font-size="11.5" fill="#6f6840">- Twilio HTTP Basic Auth (Account SID as username, Auth Token as password)</text>
+<text x="72" y="199" font-size="11.5" fill="#6f6840">Set on the &#x27;Send WhatsApp via Twilio&#x27; node.</text>
+<text x="72" y="213" font-size="11.5" fill="#6f6840">Config placeholders to fill in ⚙️ Client Config:</text>
+<text x="72" y="227" font-size="11.5" fill="#6f6840">- twilioMessagesUrl — full URL:</text>
+<text x="72" y="241" font-size="11.5" fill="#6f6840">https://api.twilio.com/2010-04-01/Accounts/ACxxxxx/Messages.json</text>
+<text x="72" y="255" font-size="11.5" fill="#6f6840">- twilioFromNumber — your WhatsApp-enabled Twilio number as: whatsapp:+447xxxxxxxx</text>
+<g fill="none" stroke="#9aa0a6" stroke-width="2.5">
+<path d="M180,490 C234,490 246,490 293,490"/>
+<path d="M293,485 L300,490 L293,495" fill="#9aa0a6" stroke="none"/>
+<path d="M400,490 C454,490 466,490 513,490"/>
+<path d="M513,485 L520,490 L513,495" fill="#9aa0a6" stroke="none"/>
+</g>
+<rect x="80" y="440" width="100" height="100" rx="50" fill="#ffffff" stroke="#f0a30a" stroke-width="3"/>
+<rect x="80" y="440" width="100" height="100" rx="50" fill="#f0a30a" fill-opacity="0.10"/>
+<text x="130.0" y="486.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">sub-flow</text>
+<text x="130.0" y="500.0" font-size="11" text-anchor="middle" fill="#f0a30a" font-weight="700">in</text>
+<text x="130.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">When Called by WF-C2</text>
+<rect x="300" y="440" width="100" height="100" rx="10" fill="#ffffff" stroke="#0aa8a7" stroke-width="3"/>
+<rect x="300" y="440" width="100" height="100" rx="10" fill="#0aa8a7" fill-opacity="0.10"/>
+<text x="350.0" y="486.0" font-size="11" text-anchor="middle" fill="#0aa8a7" font-weight="700">set</text>
+<text x="350.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">⚙️ Client Config</text>
+<rect x="520" y="440" width="100" height="100" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="3"/>
+<rect x="520" y="440" width="100" height="100" rx="10" fill="#2b6cb0" fill-opacity="0.10"/>
+<text x="570.0" y="486.0" font-size="11" text-anchor="middle" fill="#2b6cb0" font-weight="700">HTTP</text>
+<text x="570.0" y="555" font-size="11.5" text-anchor="middle" fill="#2b2f36">Send WhatsApp via</text>
+<text x="570.0" y="568" font-size="11.5" text-anchor="middle" fill="#2b2f36">Twilio</text>
+</svg>

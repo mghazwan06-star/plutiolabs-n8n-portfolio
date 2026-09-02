@@ -1,0 +1,309 @@
+{
+  "id": "4s8DGFmrZxpX46Dd",
+  "name": "D3 — WF-C4: Send Reply",
+  "description": null,
+  "active": true,
+  "activeVersionId": "c0c9ca00-8a46-46f0-bc0c-bb444ea52fb1",
+  "createdAt": "2026-05-19T13:05:03.963Z",
+  "updatedAt": "2026-08-13T12:50:31.515Z",
+  "isArchived": false,
+  "versionCounter": 5,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "wfc4-sticky",
+      "name": "WF-C4 Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        60
+      ],
+      "parameters": {
+        "content": "## D3 — WF-C4: Send Reply\n\nCalled by WF-C2 after Claude produces a final text response.\nSends the reply to the customer via Twilio WhatsApp API.\n\n**Input (from WF-C2 via Execute Workflow):**\n- `phone` — customer E.164 number (+447700…)\n- `message` — reply text from Claude\n\n**Credentials needed before activation:**\n- Twilio HTTP Basic Auth (Account SID as username, Auth Token as password)\n  Set on the 'Send WhatsApp via Twilio' node.\n\n**Config placeholders to fill in ⚙️ Client Config:**\n- twilioMessagesUrl — full URL: https://api.twilio.com/2010-04-01/Accounts/ACxxxxx/Messages.json\n- twilioFromNumber — your WhatsApp-enabled Twilio number as: whatsapp:+447xxxxxxxx",
+        "color": 4,
+        "width": 680,
+        "height": 300
+      }
+    },
+    {
+      "id": "wfc4-trigger",
+      "name": "When Called by WF-C2",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        440
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "wfc4-config",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        300,
+        440
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "twilioMessagesUrl",
+              "value": "https://api.twilio.com/2010-04-01/Accounts/YOUR_TWILIO_ACCOUNT_SID/Messages.json",
+              "type": "string"
+            },
+            {
+              "id": "c2",
+              "name": "twilioFromNumber",
+              "value": "whatsapp:+14155238886",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "wfc4-send",
+      "name": "Send WhatsApp via Twilio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        440
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('⚙️ Client Config').first().json.twilioMessagesUrl }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "twilioApi",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "From",
+              "value": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}"
+            },
+            {
+              "name": "To",
+              "value": "={{ 'whatsapp:' + $('When Called by WF-C2').first().json.phone }}"
+            },
+            {
+              "name": "Body",
+              "value": "={{ $('When Called by WF-C2').first().json.message }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "onError": "stopWorkflow",
+      "retryOnFail": true,
+      "credentials": {
+        "twilioApi": {
+          "id": "CREDENTIAL_ID",
+          "name": "Twilio account"
+        }
+      },
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "connections": {
+    "When Called by WF-C2": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp via Twilio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London"
+  },
+  "tags": [],
+  "activeVersion": {
+    "versionId": "c0c9ca00-8a46-46f0-bc0c-bb444ea52fb1",
+    "workflowId": "4s8DGFmrZxpX46Dd",
+    "nodes": [
+      {
+        "id": "wfc4-sticky",
+        "name": "WF-C4 Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          60,
+          60
+        ],
+        "parameters": {
+          "content": "## D3 — WF-C4: Send Reply\n\nCalled by WF-C2 after Claude produces a final text response.\nSends the reply to the customer via Twilio WhatsApp API.\n\n**Input (from WF-C2 via Execute Workflow):**\n- `phone` — customer E.164 number (+447700…)\n- `message` — reply text from Claude\n\n**Credentials needed before activation:**\n- Twilio HTTP Basic Auth (Account SID as username, Auth Token as password)\n  Set on the 'Send WhatsApp via Twilio' node.\n\n**Config placeholders to fill in ⚙️ Client Config:**\n- twilioMessagesUrl — full URL: https://api.twilio.com/2010-04-01/Accounts/ACxxxxx/Messages.json\n- twilioFromNumber — your WhatsApp-enabled Twilio number as: whatsapp:+447xxxxxxxx",
+          "color": 4,
+          "width": 680,
+          "height": 300
+        }
+      },
+      {
+        "id": "wfc4-trigger",
+        "name": "When Called by WF-C2",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          80,
+          440
+        ],
+        "parameters": {
+          "inputSource": "passthrough"
+        }
+      },
+      {
+        "id": "wfc4-config",
+        "name": "⚙️ Client Config",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          300,
+          440
+        ],
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "c1",
+                "name": "twilioMessagesUrl",
+                "value": "https://api.twilio.com/2010-04-01/Accounts/YOUR_TWILIO_ACCOUNT_SID/Messages.json",
+                "type": "string"
+              },
+              {
+                "id": "c2",
+                "name": "twilioFromNumber",
+                "value": "whatsapp:+14155238886",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "wfc4-send",
+        "name": "Send WhatsApp via Twilio",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          520,
+          440
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $('⚙️ Client Config').first().json.twilioMessagesUrl }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "twilioApi",
+          "sendBody": true,
+          "contentType": "form-urlencoded",
+          "bodyParameters": {
+            "parameters": [
+              {
+                "name": "From",
+                "value": "={{ $('⚙️ Client Config').first().json.twilioFromNumber }}"
+              },
+              {
+                "name": "To",
+                "value": "={{ 'whatsapp:' + $('When Called by WF-C2').first().json.phone }}"
+              },
+              {
+                "name": "Body",
+                "value": "={{ $('When Called by WF-C2').first().json.message }}"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "onError": "stopWorkflow",
+        "retryOnFail": true,
+        "credentials": {
+          "twilioApi": {
+            "id": "CREDENTIAL_ID",
+            "name": "Twilio account"
+          }
+        },
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      }
+    ],
+    "connections": {
+      "When Called by WF-C2": {
+        "main": [
+          [
+            {
+              "node": "⚙️ Client Config",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⚙️ Client Config": {
+        "main": [
+          [
+            {
+              "node": "Send WhatsApp via Twilio",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Muhammad Ghazwan",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-08-13T12:50:31.515Z",
+    "updatedAt": "2026-08-13T12:50:31.515Z",
+    "workflowPublishHistory": [
+      {
+        "id": 79,
+        "workflowId": "4s8DGFmrZxpX46Dd",
+        "versionId": "c0c9ca00-8a46-46f0-bc0c-bb444ea52fb1",
+        "event": "activated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-13T12:50:31.600Z"
+      },
+      {
+        "id": 78,
+        "workflowId": "4s8DGFmrZxpX46Dd",
+        "versionId": "c0c9ca00-8a46-46f0-bc0c-bb444ea52fb1",
+        "event": "deactivated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-13T12:50:31.599Z"
+      }
+    ]
+  }
+}

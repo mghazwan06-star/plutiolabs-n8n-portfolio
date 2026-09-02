@@ -1,0 +1,591 @@
+{
+  "id": "qkZNif0vzsZLaA0k",
+  "name": "D3-WF-C3a: Check Availability",
+  "description": null,
+  "active": true,
+  "activeVersionId": "30e543ad-fb30-467c-9e1d-8ea0b61ca979",
+  "createdAt": "2026-05-19T13:15:13.848Z",
+  "updatedAt": "2026-08-17T17:46:01.503Z",
+  "isArchived": false,
+  "versionCounter": 16,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "sticky-c3a",
+      "name": "📋 WF-C3a Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        280,
+        40
+      ],
+      "parameters": {
+        "content": "## WF-C3a: Check Availability\nCalled by: WF-C2 (Claude Core) via Execute Workflow node\n\n**Input:** { toolInput: { preferredDate: 'YYYY-MM-DD' }, toolUseId, phone, sessionId }\n**Output:** { toolCallId, result } — human-readable slot availability message\n\nQueries Google Calendar for the requested date. Returns available slots at 9am, 11am, 1pm, 3pm UK time (BST-aware). Does NOT write to Google Sheets.",
+        "height": 140,
+        "width": 760
+      }
+    },
+    {
+      "id": "trigger-c3a",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        300,
+        260
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "config-c3a",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        540,
+        260
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c3a-cfg-01",
+              "name": "sheetId",
+              "type": "string",
+              "value": "YOUR_CRM_SHEET_ID"
+            },
+            {
+              "id": "c3a-cfg-02",
+              "name": "clientsTab",
+              "type": "string",
+              "value": "Clients"
+            },
+            {
+              "id": "c3a-cfg-03",
+              "name": "appointmentsTab",
+              "type": "string",
+              "value": "Appointment Log"
+            },
+            {
+              "id": "c3a-cfg-04",
+              "name": "calendarId",
+              "type": "string",
+              "value": "owner@example.com"
+            },
+            {
+              "id": "c3a-cfg-05",
+              "name": "businessName",
+              "type": "string",
+              "value": "Solarify"
+            },
+            {
+              "id": "c3a-cfg-06",
+              "name": "timezone",
+              "type": "string",
+              "value": "Europe/London"
+            },
+            {
+              "id": "c3a-cfg-07",
+              "name": "weekdaySlots",
+              "type": "string",
+              "value": "9,10,11,12,13,14,15,16,17"
+            },
+            {
+              "id": "c3a-cfg-08",
+              "name": "saturdaySlots",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "c3a-cfg-09",
+              "name": "sundaySlots",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "c3a-cfg-10",
+              "name": "minNoticeHours",
+              "type": "string",
+              "value": "48"
+            },
+            {
+              "id": "c3a-cfg-11",
+              "name": "bankHolidays",
+              "type": "string",
+              "value": "2026-08-31,2026-12-25,2026-12-28,2027-01-01,2027-04-02,2027-04-05,2027-05-03,2027-05-31,2027-08-30,2027-12-27,2027-12-28"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "parse-c3a",
+      "name": "Parse Availability Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        260
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var input = $('Execute Workflow Trigger').first().json;\n  var cfg = $('⚙️ Client Config').first().json;\n  var toolInput = input.toolInput || {};\n  var toolUseId = input.toolUseId || '';\n  var phone = input.phone || '';\n  var raw = (toolInput.preferredDate || '').toString().toLowerCase().trim();\n\n  var now = new Date();\n  var curMonth = now.getUTCMonth() + 1;\n  var isBST = (curMonth >= 3 && curMonth <= 10);\n  var utcOffset = isBST ? 1 : 0;\n\n  function pad(n) { return n < 10 ? '0' + n : '' + n; }\n\n  var dateObj = null;\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(raw)) {\n    dateObj = new Date(raw + 'T12:00:00Z');\n  } else if (raw === 'today') {\n    dateObj = new Date(now.getTime());\n  } else if (raw === 'tomorrow') {\n    dateObj = new Date(now.getTime());\n    dateObj.setUTCDate(dateObj.getUTCDate() + 1);\n  } else if (raw) {\n    // BUG-R31: an explicit day+month (\"Monday, 17 August\") must beat the weekday name.\n    var monthWords = ['january','february','march','april','may','june','july','august','september','october','november','december'];\n    var mIdx = -1;\n    for (var mw = 0; mw < monthWords.length; mw++) {\n      if (raw.indexOf(monthWords[mw]) !== -1) { mIdx = mw; break; }\n    }\n    var dayNumMatch = raw.match(/(\\d{1,2})\\s*(?:st|nd|rd|th)?/);\n    var dayNum = dayNumMatch ? parseInt(dayNumMatch[1], 10) : 0;\n    if (mIdx !== -1 && dayNum >= 1 && dayNum <= 31) {\n      var yr = now.getUTCFullYear();\n      var cand = new Date(Date.UTC(yr, mIdx, dayNum, 12, 0, 0));\n      if (cand.getTime() < now.getTime() - 86400000) { cand = new Date(Date.UTC(yr + 1, mIdx, dayNum, 12, 0, 0)); }\n      dateObj = cand;\n    }\n    var dayNamesLower = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];\n    var foundIdx = -1;\n    for (var d = 0; d < dayNamesLower.length; d++) {\n      if (raw.indexOf(dayNamesLower[d]) !== -1) { foundIdx = d; break; }\n    }\n    if (dateObj) {\n      foundIdx = -1;\n    }\n    if (foundIdx !== -1) {\n      var currentDay = now.getUTCDay();\n      var daysUntil = (foundIdx - currentDay + 7) % 7;\n      if (daysUntil === 0) { daysUntil = 7; }\n      dateObj = new Date(now.getTime());\n      dateObj.setUTCDate(dateObj.getUTCDate() + daysUntil);\n    } else {\n      var attempt = new Date(raw);\n      // Must not clobber a date already resolved above.\n      if (!dateObj && !isNaN(attempt.getTime())) { dateObj = attempt; }\n    }\n  }\n  // V8's legacy parser defaults a yearless string like \"24 august\" to the year 2001.\n  // Any date before this year is a parse artefact, never a real request.\n  if (dateObj && !isNaN(dateObj.getTime()) && dateObj.getUTCFullYear() < now.getUTCFullYear()) { dateObj = null; }\n\n  if (!dateObj || isNaN(dateObj.getTime())) {\n    dateObj = new Date(now.getTime());\n    dateObj.setUTCDate(dateObj.getUTCDate() + 1);\n  }\n\n  var year = dateObj.getUTCFullYear();\n  var month = dateObj.getUTCMonth() + 1;\n  var day = dateObj.getUTCDate();\n  var dateStr = year + '-' + pad(month) + '-' + pad(day);\n  var dow = dateObj.getUTCDay();\n\n  var dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];\n  var monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];\n  var friendlyDate = dayNames[dow] + ', ' + day + ' ' + monthNames[dateObj.getUTCMonth()];\n\n  // ---- FINDING-R30: opening hours are policy, and they live in Client Config ----\n  function parseSlots(s) {\n    var out = [];\n    var parts = (s || '').split(',');\n    for (var i = 0; i < parts.length; i++) {\n      var v = parseInt(parts[i], 10);\n      if (!isNaN(v)) { out.push(v); }\n    }\n    return out;\n  }\n  var localSlotHours;\n  if (dow === 0) { localSlotHours = parseSlots(cfg.sundaySlots); }\n  else if (dow === 6) { localSlotHours = parseSlots(cfg.saturdaySlots); }\n  else { localSlotHours = parseSlots(cfg.weekdaySlots); }\n\n  var closedReason = '';\n  if (localSlotHours.length === 0) { closedReason = 'closed-day'; }\n\n  var bankHolidays = (cfg.bankHolidays || '').split(',');\n  for (var b = 0; b < bankHolidays.length; b++) {\n    if (bankHolidays[b].trim() === dateStr) { closedReason = 'bank-holiday'; localSlotHours = []; break; }\n  }\n\n  // Never offer a slot in the past, or inside the minimum-notice window.\n  var minNotice = parseInt(cfg.minNoticeHours, 10);\n  if (isNaN(minNotice)) { minNotice = 2; }\n  var earliestMs = now.getTime() + (minNotice * 3600000);\n\n  var labelFor = ['12am','1am','2am','3am','4am','5am','6am','7am','8am','9am','10am','11am','12pm','1pm','2pm','3pm','4pm','5pm','6pm','7pm','8pm','9pm','10pm','11pm'];\n  var slotHoursUTC = [];\n  var slotLabels = [];\n  var droppedForNotice = 0;\n  for (var s = 0; s < localSlotHours.length; s++) {\n    var utcHour = localSlotHours[s] - utcOffset;\n    var slotMs = new Date(dateStr + 'T' + pad(utcHour) + ':00:00.000Z').getTime();\n    if (isNaN(slotMs)) { continue; }\n    if (slotMs < earliestMs) { droppedForNotice++; continue; }\n    slotHoursUTC.push(utcHour);\n    slotLabels.push(labelFor[localSlotHours[s]]);\n  }\n\n  if (!closedReason && slotHoursUTC.length === 0) { closedReason = droppedForNotice > 0 ? 'too-soon' : 'no-slots'; }\n\n  var dayStartISO = dateStr + 'T' + pad(0) + ':00:00.000Z';\n  var dayEndISO = dateStr + 'T23:59:59.000Z';\n\n  return [{ json: { toolUseId: toolUseId, phone: phone, preferredDate: raw, dateStr: dateStr, dayStartISO: dayStartISO, dayEndISO: dayEndISO, slotHoursUTC: slotHoursUTC, slotLabels: slotLabels, friendlyDate: friendlyDate, closedReason: closedReason } }];\n} catch (e) {\n  var fb = $('Execute Workflow Trigger').first().json;\n  return [{ json: { toolUseId: fb.toolUseId || '', phone: fb.phone || '', error: e.message, dateStr: new Date().toISOString().split('T')[0], dayStartISO: new Date().toISOString(), dayEndISO: new Date().toISOString(), slotHoursUTC: [], slotLabels: [], friendlyDate: 'that day', closedReason: 'error' } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "calendar-c3a",
+      "name": "Get Calendar Events",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1020,
+        260
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "resource": "event",
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.calendarId }}"
+        },
+        "returnAll": true,
+        "timeMin": "={{ $('Parse Availability Request').first().json.dayStartISO }}",
+        "timeMax": "={{ $('Parse Availability Request').first().json.dayEndISO }}",
+        "options": {
+          "useN8nTimeZone": true
+        }
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Calendar OAuth2 API"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "response-c3a",
+      "name": "Build Availability Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1260,
+        260
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try {\n  var parsed = $('Parse Availability Request').first().json;\n  var events = $input.all();\n  var toolUseId = parsed.toolUseId || '';\n  var friendlyDate = parsed.friendlyDate || 'the requested date';\n  var dateStr = parsed.dateStr || '';\n  var slotHoursUTC = parsed.slotHoursUTC || [];\n  var slotLabels = parsed.slotLabels || [];\n  var closedReason = parsed.closedReason || '';\n\n  // BUG-R39: the assistant had no way to know whether this customer actually HAS a\n  // booking, so a \"move my appointment\" from someone with none got a list of times and\n  // a dead end. Report the booking state as FACT here; section 12 of the prompt forbids\n  // treating tool output as instructions, so the behaviour rule lives in the prompt.\n  var bookingState = '';\n  try {\n    var apptRows = $('Read Appointment Log').all();\n    var readFailed = (apptRows.length > 0 && apptRows[0].json && typeof apptRows[0].json.error !== 'undefined');\n    if (!readFailed) {\n      var ph = String(parsed.phone || '').replace(/[^0-9]/g, '');\n      var found = null;\n      for (var ar = 0; ar < apptRows.length; ar++) {\n        var arow = apptRows[ar].json || {};\n        if (!arow.Phone) { continue; }\n        if (String(arow.Phone).replace(/[^0-9]/g, '') === ph && ph !== '' && arow.Status === 'confirmed') { found = arow; break; }\n      }\n      if (found) {\n        bookingState = ' CUSTOMER BOOKING STATE: this number has a confirmed appointment on ' + (found.Date || 'an unknown date') + ' at ' + (found.Time || 'an unknown time') + '.';\n      } else {\n        bookingState = ' CUSTOMER BOOKING STATE: this number has no confirmed appointment on file.';\n      }\n    }\n  } catch (be) { bookingState = ''; }\n\n  // Calendar read failure must never be reported as free availability.\n  if (events.length > 0 && events[0].json && typeof events[0].json.error !== 'undefined') {\n    return [{ json: { toolCallId: toolUseId, result: 'I am unable to check the calendar right now, so I cannot confirm times. Our team will contact you shortly to arrange a slot.' } }];\n  }\n\n  // FINDING-R30: a day we are closed on, or a slot inside the notice window, is not\n  // an availability question at all — answer it before touching the calendar data.\n  if (closedReason === 'closed-day' || closedReason === 'bank-holiday') {\n    var why = closedReason === 'bank-holiday' ? 'a bank holiday' : 'a day we are closed';\n    return [{ json: { toolCallId: toolUseId, result: 'CONFIRMED DATE IS ' + friendlyDate + '. We do not carry out surveys on ' + friendlyDate + ' because it is ' + why + '. Survey visits run Monday to Friday 9am to 5pm only, and need at least 48 hours notice. Refer to this date exactly as \"' + friendlyDate + '\" and offer to check another day.' + bookingState } }];\n  }\n  if (closedReason === 'too-soon') {\n    return [{ json: { toolCallId: toolUseId, result: 'CONFIRMED DATE IS ' + friendlyDate + '. Every remaining slot on ' + friendlyDate + ' is too soon — we need at least 48 hours notice to arrange a surveyor. Refer to this date exactly as \"' + friendlyDate + '\" and offer the next working day instead.' + bookingState } }];\n  }\n  if (slotHoursUTC.length === 0) {\n    return [{ json: { toolCallId: toolUseId, result: 'CONFIRMED DATE IS ' + friendlyDate + '. There are no bookable times on ' + friendlyDate + '. Refer to this date exactly as \"' + friendlyDate + '\" and ask if they would like to try another day.' } }];\n  }\n\n  var bookedRanges = [];\n  for (var i = 0; i < events.length; i++) {\n    var ev = events[i].json;\n    if (ev && ev.status === 'cancelled') { continue; }\n    if (ev && ev.start && ev.start.dateTime) {\n      var evStart = new Date(ev.start.dateTime).getTime();\n      var evEnd = ev.end && ev.end.dateTime ? new Date(ev.end.dateTime).getTime() : evStart + 3600000;\n      bookedRanges.push({ start: evStart, end: evEnd });\n    }\n  }\n\n  function pad(n) { return n < 10 ? '0' + n : '' + n; }\n\n  var available = [];\n  for (var j = 0; j < slotHoursUTC.length; j++) {\n    var slotStart = new Date(dateStr + 'T' + pad(slotHoursUTC[j]) + ':00:00.000Z').getTime();\n    var slotEnd = slotStart + 3600000;\n    var conflict = false;\n    for (var k = 0; k < bookedRanges.length; k++) {\n      if (slotStart < bookedRanges[k].end && slotEnd > bookedRanges[k].start) { conflict = true; break; }\n    }\n    if (!conflict) { available.push(slotLabels[j]); }\n  }\n\n  var result;\n  if (available.length === 0) {\n    result = 'CONFIRMED DATE IS ' + friendlyDate + '. There are no free slots on ' + friendlyDate + '. Refer to this date exactly as \"' + friendlyDate + '\" and ask if they would like to try another day.' + bookingState;\n  } else {\n    // BUG-R33: returning only the first three made the model treat every OTHER slot as\n    // taken — a customer asking for 2pm on a totally free day was told it was unavailable.\n    // Send the FULL list; let the assistant choose how many to surface.\n    var shown = available.slice(0, 3);\n    result = 'CONFIRMED DATE IS ' + friendlyDate + '. In your reply you must call this date exactly \"' + friendlyDate + '\" and no other day or date. ALL free times on ' + friendlyDate + ' are: ' + available.join(', ') + '. Any time in that list IS available — if the customer named one of them, confirm it rather than offering alternatives. If they have not named a time, suggest these three: ' + shown.join(', ') + '.' + bookingState;\n  }\n\n  return [{ json: { toolCallId: toolUseId, result: result } }];\n} catch (e) {\n  return [{ json: { toolCallId: $('Parse Availability Request').first().json.toolUseId || '', result: 'I could not check availability right now. Please call us directly or try again shortly.' } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "f4ca3c9d-5836-44a6-9eae-7268840560ee",
+      "name": "Read Appointment Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        660,
+        260
+      ],
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+        },
+        "range": "A:Z",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Availability Request": {
+      "main": [
+        [
+          {
+            "node": "Get Calendar Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Calendar Events": {
+      "main": [
+        [
+          {
+            "node": "Build Availability Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Read Appointment Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Appointment Log": {
+      "main": [
+        [
+          {
+            "node": "Parse Availability Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London"
+  },
+  "tags": [],
+  "activeVersion": {
+    "versionId": "30e543ad-fb30-467c-9e1d-8ea0b61ca979",
+    "workflowId": "qkZNif0vzsZLaA0k",
+    "nodes": [
+      {
+        "id": "sticky-c3a",
+        "name": "📋 WF-C3a Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          280,
+          40
+        ],
+        "parameters": {
+          "content": "## WF-C3a: Check Availability\nCalled by: WF-C2 (Claude Core) via Execute Workflow node\n\n**Input:** { toolInput: { preferredDate: 'YYYY-MM-DD' }, toolUseId, phone, sessionId }\n**Output:** { toolCallId, result } — human-readable slot availability message\n\nQueries Google Calendar for the requested date. Returns available slots at 9am, 11am, 1pm, 3pm UK time (BST-aware). Does NOT write to Google Sheets.",
+          "height": 140,
+          "width": 760
+        }
+      },
+      {
+        "id": "trigger-c3a",
+        "name": "Execute Workflow Trigger",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          300,
+          260
+        ],
+        "parameters": {
+          "inputSource": "passthrough"
+        }
+      },
+      {
+        "id": "config-c3a",
+        "name": "⚙️ Client Config",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          540,
+          260
+        ],
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "c3a-cfg-01",
+                "name": "sheetId",
+                "type": "string",
+                "value": "YOUR_CRM_SHEET_ID"
+              },
+              {
+                "id": "c3a-cfg-02",
+                "name": "clientsTab",
+                "type": "string",
+                "value": "Clients"
+              },
+              {
+                "id": "c3a-cfg-03",
+                "name": "appointmentsTab",
+                "type": "string",
+                "value": "Appointment Log"
+              },
+              {
+                "id": "c3a-cfg-04",
+                "name": "calendarId",
+                "type": "string",
+                "value": "owner@example.com"
+              },
+              {
+                "id": "c3a-cfg-05",
+                "name": "businessName",
+                "type": "string",
+                "value": "Solarify"
+              },
+              {
+                "id": "c3a-cfg-06",
+                "name": "timezone",
+                "type": "string",
+                "value": "Europe/London"
+              },
+              {
+                "id": "c3a-cfg-07",
+                "name": "weekdaySlots",
+                "type": "string",
+                "value": "9,10,11,12,13,14,15,16,17"
+              },
+              {
+                "id": "c3a-cfg-08",
+                "name": "saturdaySlots",
+                "type": "string",
+                "value": ""
+              },
+              {
+                "id": "c3a-cfg-09",
+                "name": "sundaySlots",
+                "type": "string",
+                "value": ""
+              },
+              {
+                "id": "c3a-cfg-10",
+                "name": "minNoticeHours",
+                "type": "string",
+                "value": "48"
+              },
+              {
+                "id": "c3a-cfg-11",
+                "name": "bankHolidays",
+                "type": "string",
+                "value": "2026-08-31,2026-12-25,2026-12-28,2027-01-01,2027-04-02,2027-04-05,2027-05-03,2027-05-31,2027-08-30,2027-12-27,2027-12-28"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "parse-c3a",
+        "name": "Parse Availability Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          780,
+          260
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var input = $('Execute Workflow Trigger').first().json;\n  var cfg = $('⚙️ Client Config').first().json;\n  var toolInput = input.toolInput || {};\n  var toolUseId = input.toolUseId || '';\n  var phone = input.phone || '';\n  var raw = (toolInput.preferredDate || '').toString().toLowerCase().trim();\n\n  var now = new Date();\n  var curMonth = now.getUTCMonth() + 1;\n  var isBST = (curMonth >= 3 && curMonth <= 10);\n  var utcOffset = isBST ? 1 : 0;\n\n  function pad(n) { return n < 10 ? '0' + n : '' + n; }\n\n  var dateObj = null;\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(raw)) {\n    dateObj = new Date(raw + 'T12:00:00Z');\n  } else if (raw === 'today') {\n    dateObj = new Date(now.getTime());\n  } else if (raw === 'tomorrow') {\n    dateObj = new Date(now.getTime());\n    dateObj.setUTCDate(dateObj.getUTCDate() + 1);\n  } else if (raw) {\n    // BUG-R31: an explicit day+month (\"Monday, 17 August\") must beat the weekday name.\n    var monthWords = ['january','february','march','april','may','june','july','august','september','october','november','december'];\n    var mIdx = -1;\n    for (var mw = 0; mw < monthWords.length; mw++) {\n      if (raw.indexOf(monthWords[mw]) !== -1) { mIdx = mw; break; }\n    }\n    var dayNumMatch = raw.match(/(\\d{1,2})\\s*(?:st|nd|rd|th)?/);\n    var dayNum = dayNumMatch ? parseInt(dayNumMatch[1], 10) : 0;\n    if (mIdx !== -1 && dayNum >= 1 && dayNum <= 31) {\n      var yr = now.getUTCFullYear();\n      var cand = new Date(Date.UTC(yr, mIdx, dayNum, 12, 0, 0));\n      if (cand.getTime() < now.getTime() - 86400000) { cand = new Date(Date.UTC(yr + 1, mIdx, dayNum, 12, 0, 0)); }\n      dateObj = cand;\n    }\n    var dayNamesLower = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];\n    var foundIdx = -1;\n    for (var d = 0; d < dayNamesLower.length; d++) {\n      if (raw.indexOf(dayNamesLower[d]) !== -1) { foundIdx = d; break; }\n    }\n    if (dateObj) {\n      foundIdx = -1;\n    }\n    if (foundIdx !== -1) {\n      var currentDay = now.getUTCDay();\n      var daysUntil = (foundIdx - currentDay + 7) % 7;\n      if (daysUntil === 0) { daysUntil = 7; }\n      dateObj = new Date(now.getTime());\n      dateObj.setUTCDate(dateObj.getUTCDate() + daysUntil);\n    } else {\n      var attempt = new Date(raw);\n      // Must not clobber a date already resolved above.\n      if (!dateObj && !isNaN(attempt.getTime())) { dateObj = attempt; }\n    }\n  }\n  // V8's legacy parser defaults a yearless string like \"24 august\" to the year 2001.\n  // Any date before this year is a parse artefact, never a real request.\n  if (dateObj && !isNaN(dateObj.getTime()) && dateObj.getUTCFullYear() < now.getUTCFullYear()) { dateObj = null; }\n\n  if (!dateObj || isNaN(dateObj.getTime())) {\n    dateObj = new Date(now.getTime());\n    dateObj.setUTCDate(dateObj.getUTCDate() + 1);\n  }\n\n  var year = dateObj.getUTCFullYear();\n  var month = dateObj.getUTCMonth() + 1;\n  var day = dateObj.getUTCDate();\n  var dateStr = year + '-' + pad(month) + '-' + pad(day);\n  var dow = dateObj.getUTCDay();\n\n  var dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];\n  var monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];\n  var friendlyDate = dayNames[dow] + ', ' + day + ' ' + monthNames[dateObj.getUTCMonth()];\n\n  // ---- FINDING-R30: opening hours are policy, and they live in Client Config ----\n  function parseSlots(s) {\n    var out = [];\n    var parts = (s || '').split(',');\n    for (var i = 0; i < parts.length; i++) {\n      var v = parseInt(parts[i], 10);\n      if (!isNaN(v)) { out.push(v); }\n    }\n    return out;\n  }\n  var localSlotHours;\n  if (dow === 0) { localSlotHours = parseSlots(cfg.sundaySlots); }\n  else if (dow === 6) { localSlotHours = parseSlots(cfg.saturdaySlots); }\n  else { localSlotHours = parseSlots(cfg.weekdaySlots); }\n\n  var closedReason = '';\n  if (localSlotHours.length === 0) { closedReason = 'closed-day'; }\n\n  var bankHolidays = (cfg.bankHolidays || '').split(',');\n  for (var b = 0; b < bankHolidays.length; b++) {\n    if (bankHolidays[b].trim() === dateStr) { closedReason = 'bank-holiday'; localSlotHours = []; break; }\n  }\n\n  // Never offer a slot in the past, or inside the minimum-notice window.\n  var minNotice = parseInt(cfg.minNoticeHours, 10);\n  if (isNaN(minNotice)) { minNotice = 2; }\n  var earliestMs = now.getTime() + (minNotice * 3600000);\n\n  var labelFor = ['12am','1am','2am','3am','4am','5am','6am','7am','8am','9am','10am','11am','12pm','1pm','2pm','3pm','4pm','5pm','6pm','7pm','8pm','9pm','10pm','11pm'];\n  var slotHoursUTC = [];\n  var slotLabels = [];\n  var droppedForNotice = 0;\n  for (var s = 0; s < localSlotHours.length; s++) {\n    var utcHour = localSlotHours[s] - utcOffset;\n    var slotMs = new Date(dateStr + 'T' + pad(utcHour) + ':00:00.000Z').getTime();\n    if (isNaN(slotMs)) { continue; }\n    if (slotMs < earliestMs) { droppedForNotice++; continue; }\n    slotHoursUTC.push(utcHour);\n    slotLabels.push(labelFor[localSlotHours[s]]);\n  }\n\n  if (!closedReason && slotHoursUTC.length === 0) { closedReason = droppedForNotice > 0 ? 'too-soon' : 'no-slots'; }\n\n  var dayStartISO = dateStr + 'T' + pad(0) + ':00:00.000Z';\n  var dayEndISO = dateStr + 'T23:59:59.000Z';\n\n  return [{ json: { toolUseId: toolUseId, phone: phone, preferredDate: raw, dateStr: dateStr, dayStartISO: dayStartISO, dayEndISO: dayEndISO, slotHoursUTC: slotHoursUTC, slotLabels: slotLabels, friendlyDate: friendlyDate, closedReason: closedReason } }];\n} catch (e) {\n  var fb = $('Execute Workflow Trigger').first().json;\n  return [{ json: { toolUseId: fb.toolUseId || '', phone: fb.phone || '', error: e.message, dateStr: new Date().toISOString().split('T')[0], dayStartISO: new Date().toISOString(), dayEndISO: new Date().toISOString(), slotHoursUTC: [], slotLabels: [], friendlyDate: 'that day', closedReason: 'error' } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "calendar-c3a",
+        "name": "Get Calendar Events",
+        "type": "n8n-nodes-base.googleCalendar",
+        "typeVersion": 1.3,
+        "position": [
+          1020,
+          260
+        ],
+        "alwaysOutputData": true,
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "parameters": {
+          "resource": "event",
+          "operation": "getAll",
+          "calendar": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.calendarId }}"
+          },
+          "returnAll": true,
+          "timeMin": "={{ $('Parse Availability Request').first().json.dayStartISO }}",
+          "timeMax": "={{ $('Parse Availability Request').first().json.dayEndISO }}",
+          "options": {
+            "useN8nTimeZone": true
+          }
+        },
+        "credentials": {
+          "googleCalendarOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Calendar OAuth2 API"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "response-c3a",
+        "name": "Build Availability Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1260,
+          260
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "try {\n  var parsed = $('Parse Availability Request').first().json;\n  var events = $input.all();\n  var toolUseId = parsed.toolUseId || '';\n  var friendlyDate = parsed.friendlyDate || 'the requested date';\n  var dateStr = parsed.dateStr || '';\n  var slotHoursUTC = parsed.slotHoursUTC || [];\n  var slotLabels = parsed.slotLabels || [];\n  var closedReason = parsed.closedReason || '';\n\n  // BUG-R39: the assistant had no way to know whether this customer actually HAS a\n  // booking, so a \"move my appointment\" from someone with none got a list of times and\n  // a dead end. Report the booking state as FACT here; section 12 of the prompt forbids\n  // treating tool output as instructions, so the behaviour rule lives in the prompt.\n  var bookingState = '';\n  try {\n    var apptRows = $('Read Appointment Log').all();\n    var readFailed = (apptRows.length > 0 && apptRows[0].json && typeof apptRows[0].json.error !== 'undefined');\n    if (!readFailed) {\n      var ph = String(parsed.phone || '').replace(/[^0-9]/g, '');\n      var found = null;\n      for (var ar = 0; ar < apptRows.length; ar++) {\n        var arow = apptRows[ar].json || {};\n        if (!arow.Phone) { continue; }\n        if (String(arow.Phone).replace(/[^0-9]/g, '') === ph && ph !== '' && arow.Status === 'confirmed') { found = arow; break; }\n      }\n      if (found) {\n        bookingState = ' CUSTOMER BOOKING STATE: this number has a confirmed appointment on ' + (found.Date || 'an unknown date') + ' at ' + (found.Time || 'an unknown time') + '.';\n      } else {\n        bookingState = ' CUSTOMER BOOKING STATE: this number has no confirmed appointment on file.';\n      }\n    }\n  } catch (be) { bookingState = ''; }\n\n  // Calendar read failure must never be reported as free availability.\n  if (events.length > 0 && events[0].json && typeof events[0].json.error !== 'undefined') {\n    return [{ json: { toolCallId: toolUseId, result: 'I am unable to check the calendar right now, so I cannot confirm times. Our team will contact you shortly to arrange a slot.' } }];\n  }\n\n  // FINDING-R30: a day we are closed on, or a slot inside the notice window, is not\n  // an availability question at all — answer it before touching the calendar data.\n  if (closedReason === 'closed-day' || closedReason === 'bank-holiday') {\n    var why = closedReason === 'bank-holiday' ? 'a bank holiday' : 'a day we are closed';\n    return [{ json: { toolCallId: toolUseId, result: 'CONFIRMED DATE IS ' + friendlyDate + '. We do not carry out surveys on ' + friendlyDate + ' because it is ' + why + '. Survey visits run Monday to Friday 9am to 5pm only, and need at least 48 hours notice. Refer to this date exactly as \"' + friendlyDate + '\" and offer to check another day.' + bookingState } }];\n  }\n  if (closedReason === 'too-soon') {\n    return [{ json: { toolCallId: toolUseId, result: 'CONFIRMED DATE IS ' + friendlyDate + '. Every remaining slot on ' + friendlyDate + ' is too soon — we need at least 48 hours notice to arrange a surveyor. Refer to this date exactly as \"' + friendlyDate + '\" and offer the next working day instead.' + bookingState } }];\n  }\n  if (slotHoursUTC.length === 0) {\n    return [{ json: { toolCallId: toolUseId, result: 'CONFIRMED DATE IS ' + friendlyDate + '. There are no bookable times on ' + friendlyDate + '. Refer to this date exactly as \"' + friendlyDate + '\" and ask if they would like to try another day.' } }];\n  }\n\n  var bookedRanges = [];\n  for (var i = 0; i < events.length; i++) {\n    var ev = events[i].json;\n    if (ev && ev.status === 'cancelled') { continue; }\n    if (ev && ev.start && ev.start.dateTime) {\n      var evStart = new Date(ev.start.dateTime).getTime();\n      var evEnd = ev.end && ev.end.dateTime ? new Date(ev.end.dateTime).getTime() : evStart + 3600000;\n      bookedRanges.push({ start: evStart, end: evEnd });\n    }\n  }\n\n  function pad(n) { return n < 10 ? '0' + n : '' + n; }\n\n  var available = [];\n  for (var j = 0; j < slotHoursUTC.length; j++) {\n    var slotStart = new Date(dateStr + 'T' + pad(slotHoursUTC[j]) + ':00:00.000Z').getTime();\n    var slotEnd = slotStart + 3600000;\n    var conflict = false;\n    for (var k = 0; k < bookedRanges.length; k++) {\n      if (slotStart < bookedRanges[k].end && slotEnd > bookedRanges[k].start) { conflict = true; break; }\n    }\n    if (!conflict) { available.push(slotLabels[j]); }\n  }\n\n  var result;\n  if (available.length === 0) {\n    result = 'CONFIRMED DATE IS ' + friendlyDate + '. There are no free slots on ' + friendlyDate + '. Refer to this date exactly as \"' + friendlyDate + '\" and ask if they would like to try another day.' + bookingState;\n  } else {\n    // BUG-R33: returning only the first three made the model treat every OTHER slot as\n    // taken — a customer asking for 2pm on a totally free day was told it was unavailable.\n    // Send the FULL list; let the assistant choose how many to surface.\n    var shown = available.slice(0, 3);\n    result = 'CONFIRMED DATE IS ' + friendlyDate + '. In your reply you must call this date exactly \"' + friendlyDate + '\" and no other day or date. ALL free times on ' + friendlyDate + ' are: ' + available.join(', ') + '. Any time in that list IS available — if the customer named one of them, confirm it rather than offering alternatives. If they have not named a time, suggest these three: ' + shown.join(', ') + '.' + bookingState;\n  }\n\n  return [{ json: { toolCallId: toolUseId, result: result } }];\n} catch (e) {\n  return [{ json: { toolCallId: $('Parse Availability Request').first().json.toolUseId || '', result: 'I could not check availability right now. Please call us directly or try again shortly.' } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "id": "f4ca3c9d-5836-44a6-9eae-7268840560ee",
+        "name": "Read Appointment Log",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.5,
+        "position": [
+          660,
+          260
+        ],
+        "parameters": {
+          "operation": "read",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.appointmentsTab }}"
+          },
+          "range": "A:Z",
+          "options": {}
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "alwaysOutputData": true
+      }
+    ],
+    "connections": {
+      "Execute Workflow Trigger": {
+        "main": [
+          [
+            {
+              "node": "⚙️ Client Config",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Availability Request": {
+        "main": [
+          [
+            {
+              "node": "Get Calendar Events",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Calendar Events": {
+        "main": [
+          [
+            {
+              "node": "Build Availability Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⚙️ Client Config": {
+        "main": [
+          [
+            {
+              "node": "Read Appointment Log",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Read Appointment Log": {
+        "main": [
+          [
+            {
+              "node": "Parse Availability Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Muhammad Ghazwan",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-08-17T17:46:01.504Z",
+    "updatedAt": "2026-08-17T17:46:01.504Z",
+    "workflowPublishHistory": [
+      {
+        "id": 218,
+        "workflowId": "qkZNif0vzsZLaA0k",
+        "versionId": "30e543ad-fb30-467c-9e1d-8ea0b61ca979",
+        "event": "activated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-17T17:46:01.624Z"
+      },
+      {
+        "id": 217,
+        "workflowId": "qkZNif0vzsZLaA0k",
+        "versionId": "30e543ad-fb30-467c-9e1d-8ea0b61ca979",
+        "event": "deactivated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-17T17:46:01.623Z"
+      }
+    ]
+  }
+}

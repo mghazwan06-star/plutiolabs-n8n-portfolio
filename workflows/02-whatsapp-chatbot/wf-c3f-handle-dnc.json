@@ -1,0 +1,443 @@
+{
+  "id": "r01GFv98cL1fC7G8",
+  "name": "D3 — WF-C3f: Tool: handle_dnc",
+  "description": null,
+  "active": true,
+  "activeVersionId": "61912a97-2903-4318-998e-88f9470e8a17",
+  "createdAt": "2026-05-19T13:09:16.190Z",
+  "updatedAt": "2026-08-18T16:18:10.491Z",
+  "isArchived": false,
+  "versionCounter": 7,
+  "sourceWorkflowId": null,
+  "nodes": [
+    {
+      "id": "wfc3f-sticky",
+      "name": "WF-C3f Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        60
+      ],
+      "parameters": {
+        "content": "## D3 — WF-C3f: Tool — handle_dnc\n\nCalled when customer explicitly opts out of all contact.\nSets Status=do-not-contact and SMS Opt-Out=Y in Clients tab.\n\n**CRM writes (Clients tab):**\n- Status = do-not-contact\n- SMS Opt-Out = Y\n- Last Outcome = do-not-contact\n- Last Channel = chatbot\n- Last Contact = now\n\nMatched by Phone. Pattern from D5 Update Clients - DNC.\nLast Channel=chatbot (D3 pattern vs voice in D2/D5).\n\n**UK GDPR / PECR compliance node — must not be bypassed.**",
+        "color": 7,
+        "width": 600,
+        "height": 260
+      }
+    },
+    {
+      "id": "wfc3f-trigger",
+      "name": "When Called by WF-C2",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        420
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "wfc3f-config",
+      "name": "⚙️ Client Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        300,
+        420
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "sheetId",
+              "value": "YOUR_CRM_SHEET_ID",
+              "type": "string"
+            },
+            {
+              "id": "c2",
+              "name": "clientsTab",
+              "value": "Clients",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "wfc3f-sheets",
+      "name": "Update Clients - DNC",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        520,
+        420
+      ],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Phone": "={{ $('When Called by WF-C2').first().json.phone }}",
+            "Status": "do-not-contact",
+            "SMS Opt-Out": "Y",
+            "Last Contact": "={{ new Date().toISOString() }}",
+            "Last Channel": "chatbot",
+            "Last Outcome": "do-not-contact",
+            "Upcoming Appointment": ""
+          },
+          "schema": [
+            {
+              "id": "Phone",
+              "defaultMatch": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "SMS Opt-Out",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Contact",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Channel",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Last Outcome",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Upcoming Appointment",
+              "defaultMatch": false,
+              "canBeUsedToMatch": false
+            }
+          ],
+          "matchingColumns": [
+            "Phone"
+          ]
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "wfc3f-response",
+      "name": "Return DNC Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        740,
+        420
+      ],
+      "parameters": {
+        "jsCode": "try {\n  var res = $input.first() ? ($input.first().json || {}) : {};\n  var toolUseId = $('When Called by WF-C2').first().json.toolUseId || '';\n\n  // BUG-R4 / R18 rule: the Sheets node runs with onError=continueRegularOutput, so a\n  // failed write arrives here as DATA. Never confirm an opt-out that was not recorded —\n  // this is the UK GDPR / PECR node and a false confirmation is a compliance failure.\n  if (res.error) {\n    return [{ json: { toolCallId: toolUseId, result: 'OPT-OUT NOT RECORDED. A system error stopped the opt-out being saved. Apologise, tell the customer you could not complete it automatically, and ask them to reply STOP or call the office so it is actioned by a person. Do NOT tell them they have been removed from the list.' } }];\n  }\n\n  return [{ json: { toolCallId: toolUseId, result: 'OPT-OUT RECORDED. You have been removed from our contact list. We will not send you any further messages or calls. If you ever change your mind, you are always welcome to reach out. Have a great day!' } }];\n} catch (e) {\n  var fallbackId = '';\n  try { fallbackId = $('When Called by WF-C2').first().json.toolUseId; } catch(x) {}\n  return [{ json: { toolCallId: fallbackId || 'unknown', result: 'OPT-OUT NOT RECORDED. A system error occurred. Ask the customer to reply STOP or call the office so a person can action it. Do NOT claim they have been removed.' } }];\n}"
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "When Called by WF-C2": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Client Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Client Config": {
+      "main": [
+        [
+          {
+            "node": "Update Clients - DNC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Clients - DNC": {
+      "main": [
+        [
+          {
+            "node": "Return DNC Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [],
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/London"
+  },
+  "tags": [],
+  "activeVersion": {
+    "versionId": "61912a97-2903-4318-998e-88f9470e8a17",
+    "workflowId": "r01GFv98cL1fC7G8",
+    "nodes": [
+      {
+        "id": "wfc3f-sticky",
+        "name": "WF-C3f Overview",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          60,
+          60
+        ],
+        "parameters": {
+          "content": "## D3 — WF-C3f: Tool — handle_dnc\n\nCalled when customer explicitly opts out of all contact.\nSets Status=do-not-contact and SMS Opt-Out=Y in Clients tab.\n\n**CRM writes (Clients tab):**\n- Status = do-not-contact\n- SMS Opt-Out = Y\n- Last Outcome = do-not-contact\n- Last Channel = chatbot\n- Last Contact = now\n\nMatched by Phone. Pattern from D5 Update Clients - DNC.\nLast Channel=chatbot (D3 pattern vs voice in D2/D5).\n\n**UK GDPR / PECR compliance node — must not be bypassed.**",
+          "color": 7,
+          "width": 600,
+          "height": 260
+        }
+      },
+      {
+        "id": "wfc3f-trigger",
+        "name": "When Called by WF-C2",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [
+          80,
+          420
+        ],
+        "parameters": {
+          "inputSource": "passthrough"
+        }
+      },
+      {
+        "id": "wfc3f-config",
+        "name": "⚙️ Client Config",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          300,
+          420
+        ],
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "c1",
+                "name": "sheetId",
+                "value": "YOUR_CRM_SHEET_ID",
+                "type": "string"
+              },
+              {
+                "id": "c2",
+                "name": "clientsTab",
+                "value": "Clients",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "wfc3f-sheets",
+        "name": "Update Clients - DNC",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          520,
+          420
+        ],
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('⚙️ Client Config').first().json.sheetId }}"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "name",
+            "value": "={{ $('⚙️ Client Config').first().json.clientsTab }}"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "Phone": "={{ $('When Called by WF-C2').first().json.phone }}",
+              "Status": "do-not-contact",
+              "SMS Opt-Out": "Y",
+              "Last Contact": "={{ new Date().toISOString() }}",
+              "Last Channel": "chatbot",
+              "Last Outcome": "do-not-contact",
+              "Upcoming Appointment": ""
+            },
+            "schema": [
+              {
+                "id": "Phone",
+                "defaultMatch": true,
+                "canBeUsedToMatch": true
+              },
+              {
+                "id": "Status",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "SMS Opt-Out",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Last Contact",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Last Channel",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Last Outcome",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              },
+              {
+                "id": "Upcoming Appointment",
+                "defaultMatch": false,
+                "canBeUsedToMatch": false
+              }
+            ],
+            "matchingColumns": [
+              "Phone"
+            ]
+          },
+          "options": {
+            "cellFormat": "RAW"
+          }
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "CREDENTIAL_ID",
+            "name": "Google Sheets account"
+          }
+        },
+        "onError": "continueRegularOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 1000,
+        "alwaysOutputData": true
+      },
+      {
+        "id": "wfc3f-response",
+        "name": "Return DNC Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          740,
+          420
+        ],
+        "parameters": {
+          "jsCode": "try {\n  var res = $input.first() ? ($input.first().json || {}) : {};\n  var toolUseId = $('When Called by WF-C2').first().json.toolUseId || '';\n\n  // BUG-R4 / R18 rule: the Sheets node runs with onError=continueRegularOutput, so a\n  // failed write arrives here as DATA. Never confirm an opt-out that was not recorded —\n  // this is the UK GDPR / PECR node and a false confirmation is a compliance failure.\n  if (res.error) {\n    return [{ json: { toolCallId: toolUseId, result: 'OPT-OUT NOT RECORDED. A system error stopped the opt-out being saved. Apologise, tell the customer you could not complete it automatically, and ask them to reply STOP or call the office so it is actioned by a person. Do NOT tell them they have been removed from the list.' } }];\n  }\n\n  return [{ json: { toolCallId: toolUseId, result: 'OPT-OUT RECORDED. You have been removed from our contact list. We will not send you any further messages or calls. If you ever change your mind, you are always welcome to reach out. Have a great day!' } }];\n} catch (e) {\n  var fallbackId = '';\n  try { fallbackId = $('When Called by WF-C2').first().json.toolUseId; } catch(x) {}\n  return [{ json: { toolCallId: fallbackId || 'unknown', result: 'OPT-OUT NOT RECORDED. A system error occurred. Ask the customer to reply STOP or call the office so a person can action it. Do NOT claim they have been removed.' } }];\n}"
+        },
+        "onError": "continueRegularOutput"
+      }
+    ],
+    "connections": {
+      "When Called by WF-C2": {
+        "main": [
+          [
+            {
+              "node": "⚙️ Client Config",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "⚙️ Client Config": {
+        "main": [
+          [
+            {
+              "node": "Update Clients - DNC",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Clients - DNC": {
+        "main": [
+          [
+            {
+              "node": "Return DNC Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Muhammad Ghazwan",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-08-18T16:18:10.493Z",
+    "updatedAt": "2026-08-18T16:18:10.493Z",
+    "workflowPublishHistory": [
+      {
+        "id": 281,
+        "workflowId": "r01GFv98cL1fC7G8",
+        "versionId": "61912a97-2903-4318-998e-88f9470e8a17",
+        "event": "activated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-18T16:18:10.630Z"
+      },
+      {
+        "id": 280,
+        "workflowId": "r01GFv98cL1fC7G8",
+        "versionId": "61912a97-2903-4318-998e-88f9470e8a17",
+        "event": "deactivated",
+        "userId": "facae549-169e-4f17-acb8-1d6fdb17fbe1",
+        "createdAt": "2026-08-18T16:18:10.629Z"
+      }
+    ]
+  }
+}
