@@ -2,7 +2,7 @@
 
 **7 workflows. 94 nodes. ~543 lines of JavaScript.**
 
-Every installer is sitting on hundreds of dead leads: quoted once, never closed, never followed up. This system scans that database on a schedule and runs AI voice campaigns against it, with cadence control per attempt and strict opt-out handling.
+Every installer I have spoken to is sitting on hundreds of dead leads: quoted once, never closed, never followed up. This system scans that database on a schedule and runs AI voice campaigns against it, with cadence control per attempt and strict opt-out handling.
 
 It reuses the voice agent's booking dispatcher instead of reimplementing it, so a reactivated lead books into the same calendar through the same code path as a fresh one.
 
@@ -33,7 +33,7 @@ classDef v fill:#ffe9e9,stroke:#e02d3c,color:#4d0b12
 classDef t fill:#eef2f7,stroke:#5c6370,color:#20242b
 ```
 
-The loop closes through the CRM. The scanner reads dormant leads, the engine calls them, the post-call processors write the outcomes back, and tomorrow's scan reads those outcomes to work out who is still eligible. Cadence lives in the CRM, not in workflow state.
+The loop closes through the CRM. The scanner reads dormant leads, the engine calls them, the post-call processors write the outcomes back, and tomorrow's scan reads those outcomes to work out who is still eligible. I keep cadence in the CRM rather than in workflow state.
 
 The edge worth noticing is the bottom one. Reactivation bookings get tagged `Booked By = d5-reactivation` and land in the same appointment log as voice agent bookings, so the voice agent's reminder workflow picks them up without knowing this system exists.
 
@@ -57,7 +57,7 @@ The edge worth noticing is the bottom one. Reactivation bookings get tagged `Boo
 
 Runs daily, reads the CRM, and works out who is eligible for contact based on how long they have been dormant, how many attempts have already been made, and whether they have opted out.
 
-Everything downstream depends on this filter being conservative. A false positive here means phoning someone who asked not to be contacted.
+Everything downstream depends on this filter being conservative. A false positive here means phoning someone who asked not to be contacted, so I would rather it under-selects.
 
 ![WF1 · Lead Scanner & Enqueue](../assets/diagrams/d5-wf01-lead-scanner.svg)
 
@@ -85,7 +85,7 @@ Downstream: D5-WF2 (Voice Engine) polls Reactivation Log for queued leads.
 
 ### WF2 · Voice Reactivation Engine
 
-Places the call, passing per-attempt variables into the assistant so a third attempt doesn't open with the same script as the first. Campaign type (a promotion, a seasonal offer, a subsidy update) is passed the same way, which is how one assistant covers many campaigns.
+Places the call, passing per-attempt variables into the assistant so a third attempt doesn't open with the same script as the first. Campaign type (a promotion, a seasonal offer, a subsidy update) goes in the same way, which is how one assistant covers many campaigns.
 
 ![WF2 · Voice Reactivation Engine](../assets/diagrams/d5-wf02-voice-reactivation-engine.svg)
 
@@ -153,7 +153,7 @@ VAPI always receives a valid { results: [{ toolCallId, result }] } response — 
 
 ### WF2c-avail · checkAvailability
 
-The availability tool for this assistant. Structurally the same idea as the voice agent's and the chatbot's versions. It is the third implementation of one concept, which is the honest cost of running three assistants that need slightly different context.
+The availability tool for this assistant. Structurally the same idea as the voice agent's and the chatbot's versions. It is my third implementation of one concept, which is the honest cost of running three assistants that need slightly different context.
 
 ![WF2c-avail · checkAvailability](../assets/diagrams/d5-wf02c-avail-check-availability.svg)
 
@@ -181,7 +181,7 @@ Queries Google Calendar 09:00–17:00 BST. Returns up to 3 open slots as a singl
 
 ### WF2c-book · bookAppointment
 
-Books against a composite key of phone number and campaign ID, so the same lead can be booked across different campaigns without colliding, and writes `Booked By = d5-reactivation` for attribution.
+Books against a composite key of phone number and campaign ID, so the same lead can be booked across different campaigns without colliding, and writes `Booked By = d5-reactivation` so I can attribute it later.
 
 ![WF2c-book · bookAppointment](../assets/diagrams/d5-wf02c-book-appointment.svg)
 
@@ -272,11 +272,11 @@ Called **asynchronously** by D5-WF2b on VAPI call-failed events. No VAPI respons
 
 **Consent is the hard constraint.** UK PECR governs unsolicited marketing calls. Opting out sets do-not-contact across the CRM and every campaign checks it before dialling.
 
-That is why a formatting bug counted as a compliance problem. The opt-out check is an exact phone-string match, and 36 Sheets writes were using `cellFormat: RAW`, which can turn a phone number into a numeric value and drop the leading `+`. A reformatted number stops matching its own opt-out record.
+That is why I treated a formatting bug as a compliance problem. The opt-out check is an exact phone-string match, and 36 Sheets writes were using `cellFormat: RAW`, which can turn a phone number into a numeric value and drop the leading `+`. A reformatted number stops matching its own opt-out record.
 
-**Four critical bugs came out of one audit pass**, all with the same root cause: Code nodes reading `$input` after a config Set node, and config nodes missing `includeOtherFields`. Before the fix, both booking tools returned validation errors permanently, post-call processing ran on empty fields, and the call-failed handler wrote garbage rows. Nothing in this system worked, and it validated clean. See [Class 5](../engineering/bug-taxonomy.md).
+**Four critical bugs came out of one audit pass**, all with the same root cause: Code nodes reading `$input` after a config Set node, and config nodes missing `includeOtherFields`. Before I fixed it, both booking tools returned validation errors permanently, post-call processing ran on empty fields, and the call-failed handler wrote garbage rows. Nothing in this system worked, and it validated clean. See [Class 5](../engineering/bug-taxonomy.md).
 
-**Reuse across systems is deliberate.** Because bookings land in the shared appointment log, reminders, cancellation and rescheduling all work for reactivation bookings without a line of reactivation-specific code.
+**The reuse is deliberate.** Because bookings land in the shared appointment log, reminders, cancellation and rescheduling all work for reactivation bookings without a line of reactivation-specific code.
 
 ---
 

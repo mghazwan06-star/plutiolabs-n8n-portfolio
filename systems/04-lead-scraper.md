@@ -29,7 +29,7 @@ classDef v fill:#ffe9e9,stroke:#e02d3c,color:#4d0b12
 classDef t fill:#eef2f7,stroke:#5c6370,color:#20242b
 ```
 
-Parent and child are split for memory and recoverability. A single-workflow version held every prospect in memory and fell over on large runs. Batching bounds the memory, and a failed batch can be retried on its own instead of restarting everything.
+I split parent and child for memory and recoverability. My single-workflow version held every prospect in memory and fell over on large runs. Batching bounds the memory, and a failed batch can be retried on its own instead of restarting everything.
 
 The Apify runner is factored out and shared because actor runs are asynchronous and can take minutes. It starts the run and polls for completion rather than holding a blocking HTTP request open past the gateway timeout.
 
@@ -56,7 +56,7 @@ Takes a run request, splits it into batches, and calls the child once per batch.
 **Code:** 656 lines of ES5 JavaScript  
 **Export:** [`scraper-v4-parent-orchestrator.json`](../workflows/04-lead-scraper/scraper-v4-parent-orchestrator.json)
 
-> This webhook is unauthenticated. It triggers paid Apify runs, so an unauthenticated caller can spend money. Less severe than the voice agent endpoint because it cannot contact customers, but still a gap.
+> This webhook is unauthenticated. It triggers paid Apify runs, so an unauthenticated caller can spend my money. Less severe than the voice agent endpoint because it cannot contact customers, but it is still on my list.
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -81,7 +81,7 @@ The child (`dpgZ964TabmgSJ0k`) returns **counts only**. Returning records would 
 
 ### Scraper v4 · CHILD
 
-The core of the pipeline and the largest workflow outside the voice agent's dispatcher. For each batch it enriches raw scrape results, verifies contact details, scores every prospect against the ICP definition, decides a routing outcome and writes to the CRM.
+The core of the pipeline and the largest workflow I built outside the voice agent's dispatcher. For each batch it enriches raw scrape results, verifies contact details, scores every prospect against the ICP definition, decides a routing outcome and writes to the CRM.
 
 With 34 columns, positional writes are fragile: insert one column and every value after it shifts. Writes read the live header row and map by column name.
 
@@ -121,7 +121,7 @@ Neither alone can fill the CRM. MCS-only routes 100% to Template D.
 
 ### Apify Runner (shared)
 
-A small shared workflow that starts an Apify actor run and polls until it finishes. Factored out because both discovery paths need it, and because async polling is the sort of logic worth writing exactly once.
+A small shared workflow that starts an Apify actor run and polls until it finishes. I factored it out because both discovery paths need it, and because async polling is the sort of logic worth writing exactly once.
 
 ![Apify Runner (shared)](../assets/diagrams/apify-runner-shared.svg)
 
@@ -153,9 +153,9 @@ Poll loop: start with `waitForFinish=60`, then Wait 20s → status → repeat. B
 
 ## Engineering notes
 
-**This is the busiest system operationally**, which is why it has ten maintenance workflows hanging off it. That is the real shape of a spreadsheet-backed CRM being written to by five systems at once: the automation needs its own maintenance automation.
+**This is the busiest system operationally**, which is why it has ten maintenance workflows hanging off it. That is the real shape of a spreadsheet-backed CRM being written to by four systems at once: the automation needs its own maintenance automation.
 
-A proper database would remove most of them. That trade-off was made on purpose, in favour of a store the client can open and read.
+A proper database would remove most of them. I made that trade-off on purpose, in favour of a store the client can open and read.
 
 ### CRM utilities
 
@@ -172,7 +172,7 @@ A proper database would remove most of them. That trade-off was made on purpose,
 | Write CRM Headers | Repairs the header row |
 | CRM to Instantly Push | Pushes qualified leads to outreach |
 
-Several of these exist because something went wrong earlier. The header repair, the deduper and the route backfill are all cleaning up after a bug. All ten webhooks are unauthenticated. They are internal tools on an obscure host, which is an explanation rather than a defence.
+Several of these exist because something went wrong earlier. The header repair, the deduper and the route backfill are all cleaning up after a bug of mine. All ten webhooks are unauthenticated. They are internal tools on an obscure host, which is an explanation rather than a defence.
 
 Exports: [`workflows/06-utilities/`](../workflows/06-utilities/)
 

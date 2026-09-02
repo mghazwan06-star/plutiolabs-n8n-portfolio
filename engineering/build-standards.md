@@ -1,7 +1,7 @@
 # Build Standards
 
-The conventions used across all 41 workflows. Each one exists because something broke, and the bug
-class is cited so the rule can be re-examined rather than copied blindly.
+The conventions I use across all 40 workflows. Each one exists because something broke, and I cite
+the bug class so the rule can be re-examined rather than copied blindly.
 
 ## Structure
 
@@ -13,15 +13,14 @@ between clients, because deploying for a new one means editing a single node.
 **`includeOtherFields: true` on every config Set node.** Without it, a Set node emits only its own
 fields and silently drops the trigger payload. (Class 5)
 
-**Sticky notes are required.** One overview note per workflow, plus one per major section, 57 in
+**Sticky notes are required.** One overview note per workflow, plus one per major section, 56 in
 total. Documentation next to the nodes it describes cannot drift the way an external document does,
 and it survives export, which is why the diagrams in this repo can render it.
 
 ## Code nodes
 
 **ES5 only.** `var` and `function()`. No `const`, `let`, arrow functions or optional chaining. Some
-n8n Code node runtimes reject newer syntax and the failure is confusing. 157 Code nodes, roughly
-7,500 lines, all ES5.
+n8n Code node runtimes reject newer syntax and the failure is confusing. 140 Code nodes, roughly 7,200 lines, all ES5.
 
 **`try/catch` in every Code node**, with `onError` set on the node. The catch returns a readable
 message, never a raw stack trace, and above all never one to a voice agent that will read it aloud
@@ -58,7 +57,7 @@ month 3 to 10 gives +1, otherwise +0. (Class 2)
 
 ## Data integrity
 
-**Column names come from one schema document,** and every Sheets write is diffed against it. (Class 1)
+**Column names come from one schema document,** and I diff every Sheets write against it. (Class 1)
 
 **Match rows on a stable key, not a phone number.** `CalendarEventId` for appointments. Phone
 matching updates the wrong row as soon as a customer has two records.

@@ -39,7 +39,7 @@ classDef t fill:#eef2f7,stroke:#5c6370,color:#20242b
 
 The loop is the whole design. C1 accepts the message and replies to Twilio immediately so the webhook never times out. C2 loads the session, asks Claude, and either answers directly or calls one tool, feeds the result back, and asks Claude again. C4 sends whatever comes out.
 
-Each of the seven tools is a separate workflow rather than a branch. That is what makes them testable and importable on their own, and it is a direct reaction to the first version, which put everything in one workflow, reached 75 nodes, and became impossible to work on.
+I made each of the seven tools a separate workflow rather than a branch. That is what makes them testable and importable on their own, and it came directly out of my first attempt, which put everything in one workflow, reached 75 nodes, and became impossible to work on.
 
 ---
 
@@ -64,7 +64,7 @@ Each of the seven tools is a separate workflow rather than a branch. That is wha
 
 The entry point. It strips Twilio's `whatsapp:` prefix off the phone number, normalises the payload, fires an async HTTP call to C2 and returns straight away.
 
-That async handoff is the whole reason it exists. Generating a reply takes 5 to 16 seconds and Twilio's webhook times out well before that.
+That async handoff is the whole reason it exists as a separate workflow. Generating a reply takes 5 to 16 seconds and Twilio's webhook times out well before that.
 
 ![C1 · WhatsApp Receiver](../assets/diagrams/wf-c1-whatsapp-receiver.svg)
 
@@ -73,7 +73,7 @@ That async handoff is the whole reason it exists. Generating a reply takes 5 to 
 **Code:** 27 lines of ES5 JavaScript  
 **Export:** [`wf-c1-whatsapp-receiver.json`](../workflows/02-whatsapp-chatbot/wf-c1-whatsapp-receiver.json)
 
-> Still unauthenticated. It is the last open webhook in the messaging system, and a known gap rather than an oversight. Anyone who found the URL could forge a message as any customer.
+> Still unauthenticated. It is the last open webhook in this system and I know about it. Anyone who found the URL could forge a message as any customer.
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -101,7 +101,7 @@ Receives inbound WhatsApp messages from Twilio, responds 200 immediately (onRece
 
 The orchestrator. It loads session history from Supabase, builds the Claude payload, calls Claude, and looks at what comes back. A plain answer goes straight to the reply. A `tool_use` response gets dispatched to one of seven tool workflows, the result is appended to the conversation, and Claude is called a second time to word the answer.
 
-Measured round trip: 4.6 to 9.6 seconds for a direct reply, 7.8 to 15.8 seconds when a tool runs.
+I measured the round trip at 4.6 to 9.6 seconds for a direct reply, 7.8 to 15.8 seconds when a tool runs.
 
 ![C2 · Claude Core](../assets/diagrams/wf-c2-claude-core.svg)
 
@@ -110,7 +110,7 @@ Measured round trip: 4.6 to 9.6 seconds for a direct reply, 7.8 to 15.8 seconds 
 **Code:** 315 lines of ES5 JavaScript  
 **Export:** [`wf-c2-claude-core.json`](../workflows/02-whatsapp-chatbot/wf-c2-claude-core.json)
 
-> That measured window is also the session race window. Three messages a second apart lost the first two every single time, because each reply was saving session state built from a stale read. That is exactly how people open a chat: "hi", "how are you", then the actual question. Fixed by reloading and merging right before each save. See [Class 6](../engineering/bug-taxonomy.md).
+> That measured window is also the session race window, which I had wrong for weeks. Three messages a second apart lost the first two every single time, because each reply was saving session state built from a stale read. That is exactly how people open a chat: "hi", "how are you", then the actual question. Fixed by reloading and merging right before each save. See [Class 6](../engineering/bug-taxonomy.md).
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -133,7 +133,7 @@ Called by: WF-C1 (WhatsApp Receiver) via async HTTP POST
 
 ### C3a · check_availability
 
-Reads Google Calendar and the appointment log and returns slots that are genuinely free inside business hours. Offering enough options matters more than it sounds: an earlier version returned only three, so times that were actually free came back to the customer as unavailable.
+Reads Google Calendar and the appointment log and returns slots that are genuinely free inside business hours. Offering enough options matters more than it sounds. An earlier version of mine returned only three, so times that were actually free came back to the customer as unavailable.
 
 ![C3a · check_availability](../assets/diagrams/wf-c3a-check-availability.svg)
 
@@ -160,7 +160,7 @@ Queries Google Calendar for the requested date. Returns available slots at 9am, 
 
 Re-checks for a duplicate booking and whether the lead is new, creates the calendar event, then writes the customer record.
 
-The write is the hard part. It POSTs to Google's `values:append` so the row gets allocated server side, and it reads the live header row to map fields by column name, so reordering a column cannot push a value into the wrong field. Tested under load: two simultaneous bookings produced two complete rows.
+The write is the hard part. It POSTs to Google's `values:append` so the row gets allocated server side, and it reads the live header row to map fields by column name, so reordering a column cannot push a value into the wrong field. I tested it under load: two simultaneous bookings produced two complete rows.
 
 ![C3b · book_house_visit](../assets/diagrams/wf-c3b-book-house-visit.svg)
 
@@ -169,7 +169,7 @@ The write is the hard part. It POSTs to Google's `values:append` so the row gets
 **Code:** 479 lines of ES5 JavaScript  
 **Export:** [`wf-c3b-book-house-visit.json`](../workflows/02-whatsapp-chatbot/wf-c3b-book-house-visit.json)
 
-> Fixing the append race uncovered something worse. Writing in two steps (core fields, then first-touch fields) produced a half-empty row when two new leads booked at the same time: phone number present, no name, no email, no status. That is worse than losing the row, because it looks like a real record. Collapsed into one read, one merge, one write.
+> Fixing the append race uncovered something worse. Writing in two steps (core fields, then first-touch fields) produced a half-empty row when two new leads booked at the same time: phone number present, no name, no email, no status. That is worse than losing the row, because it looks like a real record. I collapsed it into one read, one merge, one write.
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -197,7 +197,7 @@ Called by: WF-C2 (Claude Core) via Execute Workflow node
 
 ### C3c · cancel_booking
 
-Reads the appointment log, deletes the calendar event, updates the CRM. Rows are matched on calendar event ID rather than phone number, because matching on phone updates the wrong row as soon as a customer has more than one record.
+Reads the appointment log, deletes the calendar event, updates the CRM. I match rows on calendar event ID rather than phone number, because matching on phone updates the wrong row as soon as a customer has more than one record.
 
 ![C3c · cancel_booking](../assets/diagrams/wf-c3c-cancel-booking.svg)
 
@@ -227,7 +227,7 @@ Called by: WF-C2 (Claude Core) via Execute Workflow node
 
 ### C3d · reschedule_booking
 
-Moves an existing appointment, and re-checks that the new slot is still free before moving anything. The first version trusted whatever slot the customer named, which meant a reschedule could double-book a time that had been taken since the options were offered.
+Moves an existing appointment, and re-checks that the new slot is still free before moving anything. My first version trusted whatever slot the customer named, which meant a reschedule could double-book a time that had been taken since the options were offered.
 
 ![C3d · reschedule_booking](../assets/diagrams/wf-c3d-reschedule-booking.svg)
 
@@ -260,7 +260,7 @@ Called by: WF-C2 (Claude Core) via Execute Workflow node
 
 A small static knowledge base for questions about pricing, service area, warranty and finance. It is meant to be a rare fallback. The system prompt is the source of truth and this tool covers the long tail.
 
-It once disagreed with the prompt on four separate facts. That reads like a two-competing-knowledge-bases problem but wasn't: the prompt was always the designated truth and the tool had simply drifted. Rewritten to match.
+It once disagreed with the prompt on four separate facts. I logged that as a two-competing-knowledge-bases design problem, then realised I was wrong: the prompt was always the designated truth and the tool had simply drifted. Rewritten to match.
 
 ![C3e · get_business_info](../assets/diagrams/wf-c3e-get-business-info.svg)
 
@@ -295,7 +295,7 @@ Upgrade to Supabase RAG post-MVP by replacing the Code node.
 
 ### C3f · handle_dnc
 
-Sets do-not-contact across the CRM when a customer opts out. This is a compliance node, not a convenience one. It must never report success it hasn't verified, because telling someone they have been opted out when they haven't is a UK GDPR and PECR failure.
+Sets do-not-contact across the CRM when a customer opts out. A compliance node, not a convenience one. It must never report success it hasn't verified, because telling someone they have been opted out when they haven't is a UK GDPR and PECR failure.
 
 ![C3f · handle_dnc](../assets/diagrams/wf-c3f-handle-dnc.svg)
 
@@ -329,7 +329,7 @@ Last Channel=chatbot (D3 pattern vs voice in D2/D5).
 
 ### C3g · take_message
 
-The escape hatch. When the bot can't or shouldn't answer, it takes a message and writes a row for the owner. Uses the same atomic append as C3b, tested with eight simultaneous escalations producing eight rows.
+The escape hatch. When the bot can't or shouldn't answer, it takes a message and writes a row for the owner. Uses the same atomic append as C3b. I tested it with eight simultaneous escalations and got eight rows.
 
 ![C3g · take_message](../assets/diagrams/wf-c3g-take-message.svg)
 
@@ -360,7 +360,7 @@ Called by WF-C2 when the customer needs a human: complaint, technical fault, com
 
 Sends through Twilio, splitting long replies at paragraph boundaries under 1,500 characters and stopping at three messages.
 
-The cap exists because Twilio rejects anything over 1,600 characters outright with error `21617`, and the customer gets nothing at all. Not a truncated message. Nothing. A long answer meant total silence.
+The cap exists because Twilio rejects anything over 1,600 characters outright with error `21617`, and the customer gets nothing at all. Not a truncated message. Nothing. A long answer meant total silence, and it took me a while to work out why.
 
 ![C4 · Send Reply](../assets/diagrams/wf-c4-send-reply.svg)
 
@@ -395,11 +395,11 @@ Sends the reply to the customer via Twilio WhatsApp API.
 
 ## Engineering notes
 
-**Seven tools, seven workflows.** Each one can be tested, imported and debugged on its own. The monolithic first version is still on the instance, archived at 75 nodes, and it is the reason for the split.
+**Seven tools, seven workflows.** Each one can be tested, imported and debugged on its own. My monolithic first version is still on the instance, archived at 75 nodes, and it is the reason for the split.
 
-**Every concurrency bug in this project was found here**, and none of them by sequential testing. They needed deliberately simultaneous load. The session race needed something more specific than that: simulating how a person actually opens a conversation rather than how a test script does.
+**Every concurrency bug I found in this project came from here**, and none of them from sequential testing. They needed deliberately simultaneous load. The session race needed something more specific: simulating how a person actually opens a conversation rather than how a test script does.
 
-**Nine adversarial test phases** were run against the live system with evidence saved for each one: opening hours, general Q&A, vague and contradictory input, booking, reschedule, cancel, message taking, prompt injection attempts, and opt-out. Five new bugs came out of that run.
+**I ran nine adversarial test phases** against the live system and saved evidence for each: opening hours, general Q&A, vague and contradictory input, booking, reschedule, cancel, message taking, prompt injection attempts, and opt-out. Five new bugs came out of that run.
 
 **The prompt is the source of truth, not the tool.** Worth stating because it is a real architectural choice in a system shaped like RAG. The knowledge tool is a fallback, and when the two disagreed the tool was wrong by definition.
 

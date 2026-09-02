@@ -1,13 +1,13 @@
 # Bug Taxonomy
 
-111 bug IDs were logged across the three largest systems between April and August 2026. This page
-groups them into the patterns that kept recurring.
+I logged 111 bug IDs across my three largest systems between April and August 2026. This page groups
+them into the patterns that kept recurring.
 
 One finding sits behind all of it:
 
 > **Static validation caught none of them.**
 
-n8n's validator ran in `strict` profile on every workflow, repeatedly, and kept reporting 0 errors.
+I ran n8n's validator in `strict` profile on every workflow, repeatedly, and it kept reporting 0 errors.
 It checks structure: node types exist, required parameters are present, connections point at real
 nodes, expressions parse. Everything below is structurally valid and behaviourally wrong.
 
@@ -18,20 +18,21 @@ The most dangerous group, because the workflow reports success.
 **`Cancelled At` versus `CancelledAt`.** Three workflows wrote a cancellation timestamp to a column
 with a space in the name. The live sheet's column has no space. Google Sheets does not error on an
 unmatched column name in an `appendOrUpdate`, it just doesn't write that field. Every cancellation
-in the voice agent recorded successfully and lost its timestamp. Found by diffing every column name
-in every Sheets node against the schema file, not by testing.
+in the voice agent recorded successfully and lost its timestamp. I found it by diffing every column name in
+every Sheets node against my schema file, not by testing.
 
 **Luxon objects where strings were expected.** `{{ $now }}` resolves to a Luxon `DateTime` object,
-not a string. Written into a cell it produces unusable output. Found in five separate nodes. In four
-of those cases, three sibling nodes had already been fixed and one was missed, a pattern common
-enough that it got its own audit rule.
+not a string. Written into a cell it produces unusable output. I found it in five separate nodes. In four of
+those cases I had already fixed three sibling nodes and missed one, which happens often enough that
+it now has its own audit rule.
 
 **`cellFormat: RAW`.** 36 Sheets writes stored values raw, which can coerce a phone number into a
 number and lose the leading `+`. That matters for compliance, not just tidiness: the opt-out check
 downstream is an exact phone-string match, so a reformatted number stops matching its own opt-out
 record.
 
-The lesson: an external system accepting your write is not confirmation it stored what you meant.
+What I take from this class: an external system accepting a write is not confirmation it stored what
+I meant.
 
 ## Class 2: timezone and date arithmetic
 
@@ -48,13 +49,13 @@ parsed value.
 **Explicit day and month discarded.** A related parser preferred a relative reading and threw away
 the date the customer had actually given.
 
-Timezone bugs are seasonal. A build tested in February is not tested for BST.
+Timezone bugs are seasonal. A build I tested in February was not tested for BST.
 
 ## Class 3: phantom success
 
 Branches that report success without checking whether anything succeeded.
 
-Five places returned a success message unconditionally. Two mattered a lot: the do-not-contact
+I found five places returning a success message unconditionally. Two mattered a lot: the do-not-contact
 confirmation was spoken aloud to a caller before the opt-out had been verified as written. Under UK
 GDPR and PECR, telling someone they have been opted out when they haven't is a compliance failure,
 not a cosmetic one.
@@ -67,9 +68,8 @@ it destroys the evidence.
 
 ## Class 4: unreachable error handling
 
-Three IF nodes existed to catch calendar failures. Under n8n's strict `typeValidation` the
-comparison they used could never be true, so the error branch was dead code. The workflow looked
-carefully defensive and had no defence at all.
+I had three IF nodes catching calendar failures. Under n8n's strict `typeValidation` the
+comparison they used could never be true, so the error branch was dead code. It looked carefully defensive and had no defence at all.
 
 Related: a Code node that didn't set `skip: false` on a field a downstream strict IF then compared.
 Strict validation throws on `undefined` rather than treating it as falsy.
@@ -82,8 +82,8 @@ A structural pattern that broke four workflows at once, twice.
 
 **Config Set nodes dropping the payload.** Every workflow starts with a `⚙️ Client Config` Set node.
 Without `includeOtherFields: true` a Set node emits only its own fields and silently discards the
-webhook body. Eight config nodes had this. Downstream, availability checks defaulted to today and
-bookings were built from empty data.
+webhook body. Eight of my config nodes had this. Downstream, availability checks
+defaulted to today and bookings were built from empty data.
 
 **`$input.first()` after a config node.** Code nodes reading the trigger payload through `$input`
 get whatever the previous node emitted, not the original trigger. The fix is to name the source:
@@ -96,9 +96,9 @@ In n8n, "the data" is always relative to the node asking for it.
 Only found under deliberate simultaneous load. Sequential testing passes every time.
 
 **Positional append race.** Sheets appends allocated row positions client side, so two simultaneous
-bookings could target the same row. Fixed by POSTing to Google's `values:append`, which allocates
-server side, and by reading the live header row and mapping by column name so reordering a column
-can't misalign a write. Verified with eight simultaneous escalations (eight rows) and two
+bookings could target the same row. I fixed it by POSTing to Google's `values:append`, which
+allocates server side, and by reading the live header row and mapping by column name so reordering a
+column can't misalign a write. Verified with eight simultaneous escalations (eight rows) and two
 simultaneous bookings (two complete rows).
 
 **Half-empty rows.** Fixing that exposed something worse. A two-step write (core fields, then
@@ -106,35 +106,35 @@ first-touch fields) produced a partial record when two new leads arrived togethe
 first-touch data, no name, no email, no status. Worse than losing the row, because it looks real.
 Collapsed into one read, one merge, one write.
 
-**A race measured in seconds, not milliseconds.** Chatbot session state was assumed to have a
-millisecond-wide window. Measuring it showed the window is the entire reply time: 4.6 to 9.6 seconds
+**A race measured in seconds, not milliseconds.** I assumed chatbot session state had a
+millisecond-wide race window. Measuring it showed the window is the entire reply time: 4.6 to 9.6 seconds
 for a direct reply, 7.8 to 15.8 with a tool. Three messages a second apart lost the first two every
-time, which is the standard human opening of "hi", "how are you", then the real question. Fixed by
-reloading and merging session state right before each save. Verified three out of three at one
-second gaps, up from one out of three.
+time, which is the standard human opening of "hi", "how are you", then the real question. I fixed it by reloading and
+merging session state right before each save, and verified three out of three at one-second gaps, up
+from one out of three.
 
 The race window is however long your slowest path takes, and people type faster than an LLM answers.
 
 ## Class 7: third-party limits
 
 **Twilio's 1,600 character cap.** Longer replies were rejected outright with error `21617` and the
-customer received nothing. Not a truncated message, nothing. Fixed by chunking at paragraph
-boundaries under 1,500 characters, capped at three messages.
+customer received nothing. Not a truncated message, nothing. I chunk at paragraph boundaries under 1,500
+characters now, capped at three messages.
 
 **Retry on a non-idempotent endpoint.** VAPI's `POST /call` places a real phone call. `retryOnFail`
 there means a transient network error calls the customer twice. Those nodes are deliberately
 `retryOnFail: false`, documented so a later consistency sweep doesn't "fix" it.
 
-**A documented constant nobody had checked.** The build rules asserted a 5-second VAPI tool timeout
-for two months. It had never been checked against VAPI's documentation. The real setting is
+**A constant I made up and never checked.** My build rules asserted a 5-second VAPI tool timeout for
+two months. I had never checked it against VAPI's documentation. The real setting is
 `server.timeoutSeconds`, defaulting to 20. The invented number drove real architecture decisions,
-including deferring a fix that didn't need deferring. Corrected, with the mistake left in the record.
+including deferring a fix that didn't need deferring. I corrected it and left the mistake in the record.
 
-Write down where each external constraint came from. An unsourced number turns into a fact.
+I now write down where each external constraint came from. An unsourced number turns into a fact.
 
 ## Class 8: reference integrity
 
-The worst single bug in the project, and the best argument against trusting static validation.
+The worst bug I hit, and my best argument against trusting static validation.
 
 Five nodes referenced the config node as an escaped literal:
 
@@ -153,21 +153,21 @@ was dead across the entire product.
 
 The strict validator reported 0 errors and passed all 115 expressions, correctly. `$('anything')` is
 valid syntax. It surfaced only because the validator quoted the raw string inside a
-`cachedResultName` warning I had dismissed as a false positive for three days.
+`cachedResultName` warning I had been dismissing as a false positive for three days.
 
 Likely cause: an MCP `updateNode` call passing a double-escaped `"\\u2699"`. The rule that came out
 of it is that after any update writing an expression containing the config node name, re-read the
 node and confirm the literal `⚙️` came back. An API `success` response proves nothing about what got
 stored.
 
-Verify writes by reading them back, especially through an API and especially with non-ASCII
+I verify writes by reading them back now, especially through an API and especially with non-ASCII
 identifiers.
 
 ## Class 9: security
 
-Found in a dedicated pass, after the systems were otherwise considered finished.
+I found these in a dedicated pass, after I considered the systems otherwise finished.
 
-All four voice agent webhooks were publicly unauthenticated, as were the chatbot's. The worst was
+All four of my voice agent webhooks were publicly unauthenticated, as were the chatbot's. The worst was
 `/lead-intake`, an open endpoint that places real outbound phone calls. Anyone who found the URL
 could make the system dial arbitrary numbers, at the owner's expense, from the client's caller ID.
 
@@ -197,5 +197,5 @@ was "spend the client's money making calls in their name".
 | 8 Reference integrity | String-exact node lookup | No, it is valid syntax |
 | 9 Security | Missing auth, plaintext secrets | No |
 
-Nine classes, one conclusion. The validator tells you a workflow is well formed. It does not tell
-you it does what you meant. What actually found these is in [`audit-methodology.md`](audit-methodology.md).
+Nine classes, one conclusion. The validator tells me a workflow is well formed. It does not tell me
+it does what I meant. What actually found these is in [`audit-methodology.md`](audit-methodology.md).

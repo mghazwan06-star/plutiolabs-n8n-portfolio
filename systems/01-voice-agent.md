@@ -2,9 +2,9 @@
 
 **10 workflows. 262 nodes. ~1542 lines of JavaScript.**
 
-An AI phone agent that answers inbound calls around the clock and rings new leads back within minutes of a form submission. VAPI handles the speech. n8n makes every business decision: qualification, calendar availability, booking, SMS follow-up, missed-call recovery and reminders.
+I built an AI phone agent that answers inbound calls around the clock and rings new leads back within minutes of a form submission. VAPI handles the speech. n8n makes every business decision: qualification, calendar availability, booking, SMS follow-up, missed-call recovery and reminders.
 
-One constraint drove the architecture. A form submitted at 11pm still gets a call, and someone who rings at 3am still gets a real conversation. Nothing routine waits for a human.
+One constraint drove the architecture. A form submitted at 11pm still gets a call, and someone who rings at 3am still gets a real conversation. I wanted nothing routine waiting on a human.
 
 ---
 
@@ -38,13 +38,13 @@ classDef t fill:#fdeaec,stroke:#e02d3c,color:#4d0b12
 
 There are three loops here.
 
-The **call loop** runs left to right: WF1 or WF-IN2 starts a call, VAPI talks to the customer, WF3 answers any tool requests mid-call, WF2 and WF-IN2 catch the lifecycle events, and WF4 or WF-IN4 records what happened.
+The **call loop** runs left to right. WF1 or WF-IN2 starts a call, VAPI talks to the customer, WF3 answers any tool requests mid-call, WF2 and WF-IN2 catch the lifecycle events, and WF4 or WF-IN4 records what happened.
 
 The **recovery loop** runs on a schedule. WF5 retries leads nobody reached. WF7 reminds the ones who booked.
 
 The **reply loop** is WF6, which handles anything the customer texts back.
 
-Pay attention to the dotted edges. Those are live HTTP calls made during a phone conversation, with a person waiting on the line. That latency budget is what makes WF3 the tightest workflow in the project.
+The dotted edges are the ones I'd point at. Those are live HTTP calls made during a phone conversation, with a person waiting on the line. That latency budget is what makes WF3 the tightest workflow I built.
 
 ---
 
@@ -69,7 +69,7 @@ Pay attention to the dotted edges. Those are live HTTP calls made during a phone
 
 The front door for outbound calling. A form submission arrives, gets normalised, and is checked against the CRM before anything else happens. Without that duplicate guard, a customer who submits the form twice gets phoned twice.
 
-Submissions outside business hours are queued instead of dialled, and WF5 picks them up on its next sweep. If VAPI refuses the call, a separate branch records why. That branch matters more than it looks: a call that never connected but got logged as connected is a lead that quietly vanishes.
+Submissions outside business hours are queued rather than dialled, and WF5 picks them up on its next sweep. If VAPI refuses the call, a separate branch records why. I added that branch after realising a call that never connected but got logged as connected is a lead that quietly disappears.
 
 ![WF1 · Lead Intake & Outbound Trigger](../assets/diagrams/wf01-lead-intake.svg)
 
@@ -78,12 +78,12 @@ Submissions outside business hours are queued instead of dialled, and WF5 picks 
 **Code:** 38 lines of ES5 JavaScript  
 **Export:** [`wf01-lead-intake.json`](../workflows/01-voice-agent/wf01-lead-intake.json)
 
-> This webhook had no authentication until a late security pass. It places real phone calls, so anyone with the URL could have made the system dial arbitrary numbers on the client's account and caller ID. It now requires a header secret. See [Class 9](../engineering/bug-taxonomy.md).
+> I left this webhook unauthenticated for months. It places real phone calls, so anyone with the URL could have made the system dial arbitrary numbers on the client's account and caller ID. It takes a header secret now. See [Class 9](../engineering/bug-taxonomy.md).
 
 
 ### WF2 · VAPI Event Router
 
-A thin router by design. VAPI fires events across a call's life (started, ended, failed) and this workflow only decides which one arrived and who should handle it. Keeping it thin means the routing stays readable and the processing stays testable on its own.
+Thin on purpose. VAPI fires events across a call's life (started, ended, failed) and this workflow only works out which one arrived and who should handle it. Keeping it thin means the routing stays readable and the processing stays testable on its own.
 
 ![WF2 · VAPI Event Router](../assets/diagrams/wf02-vapi-event-router.svg)
 
@@ -117,9 +117,9 @@ Single webhook URL given to VAPI. Receives ALL events and routes them.
 
 ### WF3 · Tool Dispatcher
 
-The most important workflow here, and the most constrained. Every tool the voice agent can reach runs through it: check availability, book, reschedule, cancel, look up a customer, log a message, handle an opt-out.
+The most important workflow I built, and the most constrained. Every tool the voice agent can reach runs through it: check availability, book, reschedule, cancel, look up a customer, log a message, handle an opt-out.
 
-Three systems share it. The outbound agent, the inbound agent and the reactivation engine all book through this one dispatcher instead of each carrying its own calendar code. There is one implementation of "is this slot free", one of "write the appointment", one of "cancel it".
+Three systems share it. The outbound agent, the inbound agent and the reactivation engine all book through this one dispatcher instead of each carrying its own calendar code. One implementation of "is this slot free", one of "write the appointment", one of "cancel it".
 
 All of it runs while someone waits on the phone, so every branch has to return a sentence the agent can say out loud. No raw errors, no stack traces, no silence.
 
@@ -130,7 +130,7 @@ All of it runs while someone waits on the phone, so every branch has to return a
 **Code:** 637 lines of ES5 JavaScript  
 **Export:** [`wf03-tool-dispatcher.json`](../workflows/01-voice-agent/wf03-tool-dispatcher.json)
 
-> Sharing cuts both ways. One reference bug in here, five nodes storing the config node's name as an escaped literal, killed booking in all three systems at once while the strict validator reported zero errors. It is the clearest example in the project of valid structure hiding broken behaviour: [Class 8](../engineering/bug-taxonomy.md).
+> Sharing cuts both ways. One reference bug in here, five nodes storing the config node's name as an escaped literal, killed booking in all three systems at once while the strict validator reported zero errors. It is the clearest case I have of valid structure hiding broken behaviour: [Class 8](../engineering/bug-taxonomy.md).
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -160,9 +160,9 @@ Must respond within 5 seconds.
 
 ### WF4 · Post-Call Processing
 
-Where a finished call turns into data. VAPI returns a structured summary, and this workflow reads it into an outcome (booked, not interested, opted out, voicemail), writes that to the CRM, and sends whatever follow-up SMS fits.
+Where a finished call turns into data. VAPI returns a structured summary, and this reads it into an outcome (booked, not interested, opted out, voicemail), writes that to the CRM, and sends whatever follow-up SMS fits.
 
-The outcome schema is not shared between the inbound and outbound assistants. Each one matches the parser that reads it. Unifying the field names without changing both parsers would break outcome recording silently, which is why they stay separate and documented.
+I deliberately did not share the outcome schema between the inbound and outbound assistants. Each matches the parser that reads it. Unifying the field names without changing both parsers would break outcome recording silently, so they stay separate and documented.
 
 ![WF4 · Post-Call Processing](../assets/diagrams/wf04-post-call-processing.svg)
 
@@ -209,7 +209,7 @@ No response required — fire and forget.
 
 Runs on a schedule and retries leads nobody reached, using the attempt count to space things out so a lead gets chased properly without being harassed.
 
-It also collects the out-of-hours leads WF1 parked rather than dialling at midnight. Read WF1 on its own and that queue looks like a dead end. It isn't. The two workflows are one loop.
+It also collects the out-of-hours leads WF1 parked rather than dialling at midnight. Reading WF1 on its own, that queue looks like a dead end. It isn't. The two workflows are one loop, and I have caught myself re-investigating it twice.
 
 ![WF5 · Missed Call Recovery](../assets/diagrams/wf05-missed-call-recovery.svg)
 
@@ -253,7 +253,7 @@ Opt-out gets the most defensive treatment. Under UK PECR it is a legal obligatio
 **Code:** 94 lines of ES5 JavaScript  
 **Export:** [`wf06-inbound-sms-handler.json`](../workflows/01-voice-agent/wf06-inbound-sms-handler.json)
 
-> Five places here told the customer an action had succeeded without checking whether it had. Two of them were the opt-out and do-not-contact paths.
+> I found five places here that told the customer an action had succeeded without checking whether it had. Two of them were the opt-out and do-not-contact paths.
 
 <details><summary>Its on-canvas documentation</summary>
 
@@ -283,7 +283,7 @@ Handles all inbound SMS replies on the Twilio business number.
 
 Scans upcoming appointments on a schedule and sends reminders. It covers bookings from the voice agent and from the reactivation system without knowing the difference, because both write to the same appointment log in the same shape. That is the payoff from committing to one schema across systems.
 
-A reminder that fails to send gets retried. Obvious in hindsight, but the first version marked it sent regardless, so any failed reminder was never retried and the customer simply never heard from us.
+A reminder that fails to send gets retried. Obvious in hindsight, but my first version marked it sent regardless, so any failed reminder was never retried and the customer never heard from us.
 
 ![WF7 · Appointment Reminders](../assets/diagrams/wf07-appointment-reminders.svg)
 
@@ -321,7 +321,7 @@ AppointmentTimeISO | Reminder1Sent | Reminder2Sent | ConfirmedAt | CancelledAt
 
 ### WF8 · Inbound Lead Lookup
 
-The assistant calls this at the start of an inbound call to find the caller in the CRM, so it can greet a known customer by name and skip questions it already has answers to. It also returns the last channel they used, which lets the agent refer back to an earlier WhatsApp or SMS thread. This is where the voice and messaging systems meet.
+The assistant calls this at the start of an inbound call to find the caller in the CRM, so it can greet a known customer by name and skip questions it already has answers to. It also returns the last channel they used, which lets the agent refer back to an earlier WhatsApp or SMS thread. This is where my voice and messaging systems meet.
 
 ![WF8 · Inbound Lead Lookup](../assets/diagrams/wf08-inbound-lead-lookup.svg)
 
@@ -357,7 +357,7 @@ VAPI injects these into the AI system prompt before first speech.
 
 ### WF-IN2 · Inbound Event Router
 
-The inbound version of WF2. It stayed separate rather than merging because the two cases know different things at the start: an outbound call knows exactly who it is ringing, an inbound call only has a phone number. Merging them produced branching that was harder to follow than the duplication.
+The inbound version of WF2. I kept it separate rather than merging because the two cases know different things at the start: an outbound call knows exactly who it is ringing, an inbound call only has a phone number. When I tried merging them the branching was harder to follow than the duplication.
 
 ![WF-IN2 · Inbound Event Router](../assets/diagrams/wf-in2-inbound-event-router.svg)
 
@@ -393,7 +393,7 @@ Mirrors WF2 but adds assistant-request routing and calls WF8.
 
 ### WF-IN4 · Inbound Post-Call Processing
 
-Records inbound call outcomes and tags the call direction so inbound and outbound performance can be separated later. Same shape as WF4, different outcome schema, matching what the inbound assistant produces.
+Records inbound call outcomes and tags the call direction so I can separate inbound and outbound performance later. Same shape as WF4, different outcome schema, matching what the inbound assistant produces.
 
 ![WF-IN4 · Inbound Post-Call Processing](../assets/diagrams/wf-in4-inbound-post-call.svg)
 
@@ -437,11 +437,11 @@ No time constraint — fire and forget.
 
 ## Engineering notes
 
-**One dispatcher, three consumers.** The biggest design decision in this system. It removed three copies of calendar logic and gave every booking path identical behaviour. It also concentrated the risk, which showed up once and badly.
+**One dispatcher, three consumers.** My biggest design decision in this system. It removed three copies of calendar logic and gave every booking path identical behaviour. It also concentrated the risk, which showed up once and badly.
 
-**Retry is switched off on call placement, on purpose.** VAPI's `POST /call` is not idempotent, so a retry means a second real phone call to the customer. This is the only place in the codebase where `retryOnFail: false` is the correct setting, and it is documented at the node so a later consistency sweep doesn't helpfully turn it back on.
+**I switched retry off on call placement on purpose.** VAPI's `POST /call` is not idempotent, so a retry means a second real phone call to the customer. It is the only place in the codebase where `retryOnFail: false` is correct, and I documented it at the node so a later consistency sweep doesn't helpfully turn it back on.
 
-**Timezone handling is explicit everywhere.** The n8n instance runs on UTC and the business runs on Europe/London. A `setHours()` call in the booking path put every appointment an hour late for a whole summer before anyone noticed. Every date is now built with an explicit BST offset. See [Class 2](../engineering/bug-taxonomy.md).
+**Timezone handling is explicit everywhere.** The n8n instance runs on UTC and the business runs on Europe/London. A `setHours()` call in the booking path put every appointment an hour late for a whole summer before I noticed. Every date is now built with an explicit BST offset. See [Class 2](../engineering/bug-taxonomy.md).
 
 **All four webhooks are authenticated now.** They weren't for months. The worst was `/lead-intake`, an open endpoint that places outbound calls.
 
