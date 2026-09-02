@@ -159,22 +159,20 @@ A proper database would remove most of them. I made that trade-off on purpose, i
 
 ### CRM utilities
 
-| Utility | Purpose |
-|---|---|
-| CRM Audit | Full sweep of record health |
-| CRM Integrity Check | Schema and referential integrity |
-| Dedupe CRM | Duplicate detection and merge |
-| CRM Status | Status distribution snapshot |
-| Routing Audit | Checks routing against ICP rules |
-| Route Recompute | Backfills routing after a rule change |
-| Contact Quality | Scores completeness and deliverability |
-| Add Row Key + Size Tier | Backfills keys and size tiers |
-| Write CRM Headers | Repairs the header row |
-| CRM to Instantly Push | Pushes qualified leads to outreach |
+| Utility | Purpose | Files |
+|---|---|---|
+| CRM Audit | Full sweep of record health | [json](../workflows/06-utilities/util-crm-audit.json) · [diagram](../assets/diagrams/util-crm-audit.svg) |
+| CRM Integrity Check | Schema and referential integrity | [json](../workflows/06-utilities/util-crm-integrity-check.json) · [diagram](../assets/diagrams/util-crm-integrity-check.svg) |
+| Dedupe CRM | Duplicate detection and merge | [json](../workflows/06-utilities/util-dedupe-crm.json) · [diagram](../assets/diagrams/util-dedupe-crm.svg) |
+| CRM Status | Status distribution snapshot | [json](../workflows/06-utilities/util-crm-status.json) · [diagram](../assets/diagrams/util-crm-status.svg) |
+| Routing Audit | Checks routing against ICP rules | [json](../workflows/06-utilities/util-routing-audit.json) · [diagram](../assets/diagrams/util-routing-audit.svg) |
+| Route Recompute | Backfills routing after a rule change | [json](../workflows/06-utilities/util-route-recompute.json) · [diagram](../assets/diagrams/util-route-recompute.svg) |
+| Contact Quality | Scores completeness and deliverability | [json](../workflows/06-utilities/util-contact-quality.json) · [diagram](../assets/diagrams/util-contact-quality.svg) |
+| Add Row Key + Size Tier | Backfills keys and size tiers | [json](../workflows/06-utilities/util-add-row-key-size-tier.json) · [diagram](../assets/diagrams/util-add-row-key-size-tier.svg) |
+| Write CRM Headers | Repairs the header row | [json](../workflows/06-utilities/util-write-crm-headers.json) · [diagram](../assets/diagrams/util-write-crm-headers.svg) |
+| CRM to Instantly Push | Pushes qualified leads to outreach | [json](../workflows/06-utilities/util-crm-to-instantly-push.json) · [diagram](../assets/diagrams/util-crm-to-instantly-push.svg) |
 
 Several of these exist because something went wrong earlier. The header repair, the deduper and the route backfill are all cleaning up after a bug of mine. All ten webhooks are unauthenticated. They are internal tools on an obscure host, which is an explanation rather than a defence.
-
-Exports: [`workflows/06-utilities/`](../workflows/06-utilities/)
 
 ---
 
